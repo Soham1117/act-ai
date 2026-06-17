@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build output / caches
+.next/
+dist/
+build/
+*.tsbuildinfo
+
+# Env / secrets (templates like .env.example stay tracked)
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store

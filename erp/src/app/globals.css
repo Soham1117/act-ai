@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* Primary / accent — carried over from the old admin dashboard */
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 221.2 83.2% 53.3%;
+
+    /* Chart palette — first 5 carried over from the old admin dashboard */
+    --chart-1: 12 76% 61%;    /* coral */
+    --chart-2: 173 58% 39%;   /* teal */
+    --chart-3: 197 37% 24%;   /* deep slate-blue */
+    --chart-4: 43 74% 66%;    /* gold */
+    --chart-5: 27 87% 67%;    /* warm orange */
+    --chart-6: 25 95% 53%;    /* orange */
+    --chart-7: 234 89% 65%;   /* indigo */
+    --chart-8: 38 92% 50%;    /* amber */
+  }
+
+  .dark {
+    /* Dark theme — neutral, ChatGPT-style (no blue tint) */
+    --background: 0 0% 12.5%;          /* #202020 */
+    --foreground: 0 0% 92%;
+
+    --card: 0 0% 16%;                  /* #292929 */
+    --card-foreground: 0 0% 92%;
+
+    --popover: 0 0% 14%;
+    --popover-foreground: 0 0% 92%;
+
+    /* Primary / accent — carried over from the old admin dashboard (dark) */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 92%;
+
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 22%;
+    --input: 0 0% 22%;
+    --ring: 224.3 76.3% 48%;
+
+    --sidebar-background: 0 0% 10.5%;  /* slightly darker than canvas */
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 18%;
+    --sidebar-accent-foreground: 0 0% 92%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Chart palette — first 5 carried over from the old admin dashboard */
+    --chart-1: 220 70% 50%;   /* blue */
+    --chart-2: 160 60% 45%;   /* green */
+    --chart-3: 30 80% 55%;    /* orange */
+    --chart-4: 280 65% 60%;   /* purple */
+    --chart-5: 340 75% 55%;   /* pink */
+    --chart-6: 25 95% 65%;    /* orange */
+    --chart-7: 234 89% 75%;   /* indigo */
+    --chart-8: 38 92% 60%;    /* amber */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="time"] {
+    min-width: 9rem;
+  }
+
+  /* Schedule-X uses --sx-z-index-week-header: 100, which renders the
+     week-view date strip ABOVE Radix Dialog (z-50). Lower it so modals,
+     popovers, and our own UI sit on top. */
+  .sx-react-calendar-wrapper {
+    --sx-z-index-week-header: 1;
+    --sx-z-index-event-modal: 2;
+    --sx-calendar-header-popup-z-index: 3;
+  }
+}
+
+/* Print: white background, black ink, no shadows. */
+@media print {
+  :root, .dark {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 30%;
+    --border: 0 0% 80%;
+  }
+  body { background: white !important; color: black !important; }
+  /* Hide app chrome on print pages. */
+  header, nav, aside, [role="banner"], [data-sidebar], [data-sidebar-trigger] {
+    display: none !important;
+  }
+}

@@ -1,0 +1,814 @@
+// =====================================================================
+// ACT ERP — Prisma schema (Phases 0–7)
+// Includes pgvector embeddings + audit log infrastructure.
+// =====================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions", "fullTextSearchPostgres"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pgvector(map: "vector"), pg_trgm]
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Identity / RBAC
+// ──────────────────────────────────────────────────────────────────────
+
+/// Mirror of Supabase `auth.users`. We store the public profile + the
+/// link to our `Employee` record. `id` matches `auth.users.id` (uuid).
+///
+/// Two roles only: ADMIN and EMPLOYEE. Admins implicitly have employee
+/// access — `requireAdmin` gates admin-only routes; `requireUser` lets
+/// either role through, so admins can use the employee dashboard too.
+model User {
+  id           String     @id @db.Uuid
+  email        String     @unique
+  name         String
+  profileImage String?
+  role         Role       @default(EMPLOYEE)
+  employee     Employee?
+  auditLogs    AuditLog[] @relation("ActorAuditLogs")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([email])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Org structure
+// ──────────────────────────────────────────────────────────────────────
+
+model Department {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  code        String?    @unique // optional short code, e.g. 'ENG' for Engineering
+  description String?
+  employees   Employee[]
+  jobCodes    JobCode[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model JobCode {
+  id           String              @id @default(cuid())
+  code         String              @unique // uppercase
+  title        String
+  description  String?
+  /// Stored as string ("NA" allowed) to mirror legacy semantics.
+  rate         String              @default("NA")
+  isActive     Boolean             @default(true)
+  isDefault    Boolean             @default(false)
+  /// Optional department this code belongs to. Used as a hint for
+  /// suggesting codes when assigning employees from the same dept.
+  departmentId String?
+  department   Department?         @relation(fields: [departmentId], references: [id])
+  assignments  JobCodeAssignment[]
+  primaryFor   Employee[]          @relation("PrimaryJobCode")
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([departmentId])
+}
+
+model JobCodeAssignment {
+  id           String   @id @default(cuid())
+  jobCodeId    String
+  jobCode      JobCode  @relation(fields: [jobCodeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assignedRate String   @default("NA")
+  isPrimary    Boolean  @default(false)
+  notes        String?  @db.Text
+  assignedAt   DateTime @default(now())
+
+  @@unique([jobCodeId, employeeId])
+  @@index([employeeId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Employee
+// ──────────────────────────────────────────────────────────────────────
+
+model Employee {
+  id         String @id @default(cuid())
+  /// Business ID like EMP-2026-0007.
+  employeeId String @unique
+  userId     String @unique @db.Uuid
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Identity
+  name          String
+  gender        Gender
+  maritalStatus MaritalStatus?
+  profilePic    String?
+  phoneNumber   String?
+  dateOfBirth   DateTime?
+  email         String         @unique
+
+  // Personal
+  address        String?
+  city           String?
+  state          String?
+  zipCode        String?
+  /// Stored encrypted at rest by Postgres pgcrypto in production.
+  ssn            String   @unique
+  nationality    String?
+  educationLevel String?
+  certifications String[] @default([])
+  emergencyName  String?
+  emergencyPhone String?
+
+  // Work
+  departmentId      String?
+  department        Department?      @relation(fields: [departmentId], references: [id])
+  position          String?
+  jobTitle          String?
+  jobDescription    String?          @db.Text
+  dateOfHire        DateTime?
+  supervisorId      String?
+  supervisor        Employee?        @relation("Supervisor", fields: [supervisorId], references: [id])
+  reports           Employee[]       @relation("Supervisor")
+  employmentType    EmploymentType   @default(FULL_PART_TIME)
+  employmentStatus  EmploymentStatus @default(ACTIVE)
+  terminationDate   DateTime?
+  terminationReason String?
+  exportCode        String?
+  workEmail         String?
+  workPhoneNumber   String?
+
+  // Compensation
+  compensationType  CompensationType
+  compensationValue Decimal?         @db.Decimal(12, 2)
+  primaryJobCodeId  String?
+  primaryJobCode    JobCode?         @relation("PrimaryJobCode", fields: [primaryJobCodeId], references: [id])
+  defaultHourlyRate Decimal          @default(25.00) @db.Decimal(10, 2)
+
+  /// Vector embedding for semantic search + future AI features.
+  /// 1536 dims = OpenAI / Anthropic default. Backfilled by scripts/embed.ts.
+  embedding Unsupported("vector(1536)")?
+
+  // Leave summary cached for fast dashboard reads
+  totalLeaves     Int @default(20)
+  leavesTaken     Int @default(0)
+  leavesApproved  Int @default(0)
+  leavesRejected  Int @default(0)
+  leavesRemaining Int @default(20)
+
+  // Relations
+  jobCodes               JobCodeAssignment[]
+  timeEntries            TimeEntry[]
+  schedules              Schedule[]
+  scheduledWork          ScheduledWork[]
+  approvedEntries        TimeEntry[]             @relation("ApprovedBy")
+  leaveRequests          LeaveRequest[]
+  reviewedLeaves         LeaveRequest[]          @relation("LeaveReviewer")
+  requests               Request[]
+  reviewedRequests       Request[]               @relation("RequestReviewer")
+  reimbursements         Reimbursement[]
+  reviewedReimbursements Reimbursement[]         @relation("ReimbursementReviewer")
+  documents              Document[]
+  uploadedDocuments      Document[]              @relation("DocumentUploader")
+  payrollDocs            Payroll[]
+  uploadedPayroll        Payroll[]               @relation("PayrollUploader")
+  notifications          NotificationRecipient[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId, employmentStatus])
+  @@index([employmentType])
+  @@index([supervisorId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Time tracking
+// ──────────────────────────────────────────────────────────────────────
+
+model TimeEntry {
+  id              String          @id @default(cuid())
+  employeeId      String
+  employee        Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date            DateTime        @db.Date
+  clockIn         DateTime
+  clockOut        DateTime?
+  totalBreakMin   Int             @default(0)
+  totalWorkMin    Int             @default(0)
+  status          TimeEntryStatus @default(ACTIVE)
+  jobCode         String          @default("ACT001")
+  rate            Decimal?        @db.Decimal(10, 2)
+  timesheetNotes  String?         @db.Text
+  source          TimeEntrySource @default(WEB)
+  /// When source = KIOSK, the slug + label of the kiosk that recorded
+  /// this entry. Stored denormalised so reports survive kiosk deletion.
+  kioskSlug       String?
+  kioskLabel      String?
+  // Manager approval
+  approvalStatus  ApprovalStatus  @default(PENDING)
+  approvedById    String?
+  approvedBy      Employee?       @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvalDate    DateTime?
+  approvalNotes   String?         @db.Text
+  // Children
+  breaks          TimeBreak[]
+  // From scheduled work?
+  scheduledWorkId String?         @unique
+  scheduledWork   ScheduledWork?  @relation(fields: [scheduledWorkId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, date])
+  @@index([status])
+  @@index([approvalStatus])
+  @@index([date])
+}
+
+model TimeBreak {
+  id          String    @id @default(cuid())
+  timeEntryId String
+  timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  startTime   DateTime
+  endTime     DateTime?
+  durationMin Int       @default(0)
+  type        BreakType @default(BREAK)
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Scheduling (single-day)
+// ──────────────────────────────────────────────────────────────────────
+
+model Schedule {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date        DateTime @db.Date
+  jobCode     String
+  startTime   String // "HH:MM"
+  endTime     String // "HH:MM"
+  notes       String?  @db.Text
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId, date])
+  @@index([date])
+  @@index([employeeId, date, startTime, endTime])
+}
+
+model ScheduleTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  jobCode     String?
+  // 7-day pattern (Mon..Sun)
+  monday      Boolean  @default(true)
+  tuesday     Boolean  @default(true)
+  wednesday   Boolean  @default(true)
+  thursday    Boolean  @default(true)
+  friday      Boolean  @default(true)
+  saturday    Boolean  @default(false)
+  sunday      Boolean  @default(false)
+  hoursPerDay Float
+  startTime   String
+  endTime     String
+  isActive    Boolean  @default(true)
+  notes       String?  @db.Text
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Scheduled work (auto-timesheet source for FT/PT employees)
+// ──────────────────────────────────────────────────────────────────────
+
+model ScheduledWork {
+  id                  String              @id @default(cuid())
+  employeeId          String
+  employee            Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date                DateTime            @db.Date
+  startTime           DateTime
+  endTime             DateTime
+  status              ScheduledWorkStatus @default(SCHEDULED)
+  timesheetGenerated  Boolean             @default(false)
+  jobCode             String
+  rate                Decimal             @db.Decimal(10, 2)
+  notes               String?             @db.Text
+  totalBreakMin       Int                 @default(0)
+  netWorkHours        Float               @default(0)
+  // Recurring (optional)
+  recurringEnabled    Boolean             @default(false)
+  recurringPattern    RecurringPattern?
+  recurringDaysOfWeek Int[]               @default([])
+  recurringEndDate    DateTime?           @db.Date
+  // Generated timesheet
+  generatedEntry      TimeEntry?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, date])
+  @@index([status])
+  @@index([date, status])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Leave management
+// ──────────────────────────────────────────────────────────────────────
+
+model LeaveRequest {
+  id          String      @id @default(cuid())
+  employeeId  String
+  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType   LeaveType
+  startDate   DateTime    @db.Date
+  endDate     DateTime    @db.Date
+  totalDays   Int
+  noticeDays  Int         @default(0)
+  description String?     @db.Text
+  status      LeaveStatus @default(PENDING)
+  // Review
+  reviewerId  String?
+  reviewer    Employee?   @relation("LeaveReviewer", fields: [reviewerId], references: [id])
+  reviewedAt  DateTime?
+  reviewNotes String?     @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, status])
+  @@index([status, createdAt])
+  @@index([startDate, endDate])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// General requests (12 types) + status history
+// ──────────────────────────────────────────────────────────────────────
+
+model Request {
+  id          String        @id @default(cuid())
+  employeeId  String
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type        RequestType
+  title       String
+  description String        @db.Text
+  status      RequestStatus @default(PENDING)
+  adminNotes  String?       @db.Text
+  reviewerId  String?
+  reviewer    Employee?     @relation("RequestReviewer", fields: [reviewerId], references: [id])
+
+  history RequestStatusHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, status])
+  @@index([status, createdAt])
+  @@index([type])
+}
+
+model RequestStatusHistory {
+  id          String        @id @default(cuid())
+  requestId   String
+  request     Request       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  status      RequestStatus
+  note        String?       @db.Text
+  updatedById String?
+  updatedAt   DateTime      @default(now())
+
+  @@index([requestId, updatedAt])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Reimbursements + receipts + status history
+// ──────────────────────────────────────────────────────────────────────
+
+model Reimbursement {
+  id                 String                @id @default(cuid())
+  employeeId         String
+  employee           Employee              @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title              String
+  category           ReimbursementCategory
+  amount             Decimal               @db.Decimal(12, 2)
+  currency           String                @default("USD")
+  description        String                @db.Text
+  expenseDate        DateTime              @db.Date
+  status             ReimbursementStatus   @default(PENDING)
+  priority           Priority              @default(MEDIUM)
+  isRecurring        Boolean               @default(false)
+  recurringFrequency RecurringFrequency?
+  tags               String[]              @default([])
+
+  reviewerId   String?
+  reviewer     Employee? @relation("ReimbursementReviewer", fields: [reviewerId], references: [id])
+  reviewedAt   DateTime?
+  reviewNotes  String?   @db.Text
+  approvalDate DateTime?
+  paidDate     DateTime?
+  paidAmount   Decimal?  @db.Decimal(12, 2)
+
+  receipts ReimbursementReceipt[]
+  history  ReimbursementStatusHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, status])
+  @@index([status, createdAt])
+  @@index([category])
+  @@index([expenseDate])
+}
+
+model ReimbursementReceipt {
+  id              String        @id @default(cuid())
+  reimbursementId String
+  reimbursement   Reimbursement @relation(fields: [reimbursementId], references: [id], onDelete: Cascade)
+  fileName        String
+  originalName    String
+  fileUrl         String
+  fileSize        Int
+  mimeType        String
+  uploadedAt      DateTime      @default(now())
+}
+
+model ReimbursementStatusHistory {
+  id              String              @id @default(cuid())
+  reimbursementId String
+  reimbursement   Reimbursement       @relation(fields: [reimbursementId], references: [id], onDelete: Cascade)
+  status          ReimbursementStatus
+  note            String?             @db.Text
+  updatedById     String?
+  updatedAt       DateTime            @default(now())
+
+  @@index([reimbursementId, updatedAt])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Notifications (broadcast w/ per-recipient read state)
+// ──────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String                       @id @default(cuid())
+  type       NotificationType
+  title      String
+  message    String                       @db.Text
+  priority   Priority                     @default(MEDIUM)
+  link       String?
+  metadata   Json?
+  senderId   String?                      @db.Uuid
+  recipients NotificationRecipient[]
+  createdAt  DateTime                     @default(now())
+  /// Embedding of (title + message) for similarity search.
+  embedding  Unsupported("vector(1536)")?
+
+  @@index([createdAt])
+  @@index([type, createdAt])
+}
+
+model NotificationRecipient {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  read           Boolean      @default(false)
+  readAt         DateTime?
+
+  @@unique([notificationId, employeeId])
+  @@index([employeeId, read])
+  @@index([employeeId, notificationId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Documents + Payroll
+// ──────────────────────────────────────────────────────────────────────
+
+model Document {
+  id                 String                       @id @default(cuid())
+  title              String
+  description        String?                      @db.Text
+  fileName           String
+  fileType           String
+  fileUrl            String
+  documentType       DocumentType
+  /// Owner of the document — for personal docs, scopes the read.
+  employeeId         String
+  employee           Employee                     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uploadedById       String?                      @db.Uuid
+  uploaderEmployeeId String?
+  uploader           Employee?                    @relation("DocumentUploader", fields: [uploaderEmployeeId], references: [id])
+  uploadedAt         DateTime                     @default(now())
+  /// Document body embedding for semantic search.
+  embedding          Unsupported("vector(1536)")?
+
+  @@index([documentType])
+  @@index([employeeId, documentType])
+}
+
+model Payroll {
+  id                 String    @id @default(cuid())
+  employeeId         String
+  employee           Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title              String
+  description        String?
+  category           String    @default("General")
+  fileName           String
+  fileType           String
+  fileUrl            String
+  payPeriodStart     DateTime  @db.Date
+  payPeriodEnd       DateTime  @db.Date
+  uploadedById       String?   @db.Uuid
+  uploaderEmployeeId String?
+  uploader           Employee? @relation("PayrollUploader", fields: [uploaderEmployeeId], references: [id])
+  uploadedAt         DateTime  @default(now())
+
+  @@index([employeeId, payPeriodEnd])
+  @@index([payPeriodStart])
+  @@index([category])
+}
+
+model PayrollCalendar {
+  id             String              @id @default(cuid())
+  title          String
+  payPeriodStart DateTime            @db.Date
+  payPeriodEnd   DateTime            @db.Date
+  payDate        DateTime            @db.Date
+  status         PayrollPeriodStatus @default(UPCOMING)
+  notes          String?             @db.Text
+  createdById    String              @db.Uuid
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([payDate])
+  @@index([status])
+}
+
+model CompanyDefault {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  hoursPerDay     Float
+  startTime       String
+  endTime         String
+  includeWeekends Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  isDefault       Boolean  @default(false)
+  createdById     String   @db.Uuid
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Kiosk + Onboarding
+// ──────────────────────────────────────────────────────────────────────
+
+model KioskSession {
+  id            String    @id @default(cuid())
+  /// URL slug used in /kiosk/[slug] — lowercase alphanumeric + hyphens.
+  /// Persistent across deployments so the same physical terminal keeps
+  /// the same URL even after re-provisioning. Nullable for legacy rows
+  /// pre-dating the slug column; new rows are always populated.
+  slug          String?   @unique
+  cookieHash    String?   @unique
+  provisionedBy String    @db.Uuid // admin user id
+  label         String?
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  lastUsedAt    DateTime?
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([revokedAt])
+  @@index([expiresAt])
+  @@index([slug])
+}
+
+model OnboardingInvite {
+  id                    String       @id @default(cuid())
+  token                 String       @unique
+  email                 String?
+  status                InviteStatus @default(PENDING)
+  expiresAt             DateTime
+  createdById           String       @db.Uuid
+  completedAt           DateTime?
+  completedByEmployeeId String?
+  createdAt             DateTime     @default(now())
+
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Audit log (every write + sensitive read)
+// ──────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?  @db.Uuid
+  actor      User?    @relation("ActorAuditLogs", fields: [actorId], references: [id])
+  actorEmail String?
+  action     String // e.g. 'employee.create', 'leave.approve', 'ssn.view'
+  resource   String // e.g. 'Employee:cm123abc'
+  /// Old → new diff for write operations; null for reads.
+  diff       Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([resource, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Enums
+// ──────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  SEPARATED
+  OTHER
+}
+
+enum EmploymentType {
+  FULL_PART_TIME
+  CONTRACT_HOURLY
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum CompensationType {
+  MONTHLY_SALARY
+  HOURLY_RATE
+  TOTAL_COMPENSATION
+}
+
+enum TimeEntryStatus {
+  ACTIVE
+  ON_BREAK
+  COMPLETED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum TimeEntrySource {
+  WEB
+  KIOSK
+  AUTO
+  MANUAL
+}
+
+enum BreakType {
+  LUNCH
+  BREAK
+  CUSTOM
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ScheduledWorkStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum RecurringPattern {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum InviteStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  PERSONAL
+  EMERGENCY
+  MATERNITY
+  PATERNITY
+  VACATION
+  FAMILY
+  BEREAVEMENT
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum RequestType {
+  DOCUMENT_REQUEST
+  DETAILS_CHANGE
+  LEAVE_REQUEST
+  PAYROLL_INQUIRY
+  SCHEDULE_CHANGE
+  ACCESS_REQUEST
+  TRAINING_REQUEST
+  EQUIPMENT_REQUEST
+  LOCATION_CHANGE
+  TEAM_REQUEST
+  PROJECT_REQUEST
+  OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+enum ReimbursementCategory {
+  TRAVEL
+  MEALS
+  OFFICE_SUPPLIES
+  TRAINING
+  EQUIPMENT
+  MEDICAL
+  FUEL
+  ACCOMMODATION
+  OTHER
+}
+
+enum ReimbursementStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RecurringFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+}
+
+enum NotificationType {
+  PAYROLL
+  COMPANY
+  ANNOUNCEMENT
+  POLICY
+  OTHER
+}
+
+enum DocumentType {
+  PERSONAL
+  COMPANY
+  ONBOARDING
+  BENEFITS
+  TRAINING
+}
+
+enum PayrollPeriodStatus {
+  UPCOMING
+  CURRENT
+  COMPLETED
+}
