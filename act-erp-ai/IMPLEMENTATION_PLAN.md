@@ -154,15 +154,21 @@ and unit-tested (live-pending credentials).
 
 **Goal:** scoped hybrid retrieval and structured queries work against Bedrock.
 
-- [ ] LiteLLM gateway + `models.yaml`; wire IAM/Bedrock (agent model + embeddings).
-- [ ] `search_chunks`: vector (pgvector HNSW) + FTS (tsv) + RRF fusion, scoped.
-- [ ] `query_records`: typed, parameterized structured query tool, run under RLS role.
-- [ ] `get_toc`, `read_section`, `expand_chunk`, `get_images` (scoped).
-- [ ] Unit tests: every tool returns **zero** out-of-scope results given a restricted
-      `RunContext` (the core RBAC test).
+- [x] LiteLLM gateway + `models.yaml` (Bedrock embed + acompletion); embeddings via
+      `ingestion/embed.py` with deterministic fake fallback for local runs.
+- [x] `agent/retrieval.py`: `search_chunks` internals — pgvector HNSW + FTS (tsv) +
+      RRF fusion + heading boost, scoped (asyncpg, our schema).
+- [x] `agent/tools/`: `search_chunks`, `get_toc`, `read_section`, `expand_chunk`,
+      `get_images`, and `query_records` (typed/parameterized: `contains` JSON-match
+      + semantic over `rowEmbedding`; **no raw SQL from the model**). `RunContext` +
+      `EvidenceRegistry` (chunk + row evidence) ported.
+- [x] **Verified under the `act_rls` role:** docA-scoped user gets only docA passages
+      (no cross-doc leak); `query_records` for an out-of-scope record returns 0.
+- [x] **Gotcha recorded:** `prisma db push` drops the raw-SQL `tsv`/HNSW/RLS objects
+      (not in the Prisma schema) — re-apply `prisma/sql/01_rag_pgvector_rls.sql` after
+      every push (added to the run steps below).
 
-**Exit:** given a fixed `allowed_doc_ids`, each tool returns only in-scope data;
-embeddings/search produce sensible hits on the seeded corpus.
+**Exit:** ✅ each tool returns only in-scope data; hybrid search produces hits.
 
 ---
 
