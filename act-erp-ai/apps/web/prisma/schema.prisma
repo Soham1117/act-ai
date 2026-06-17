@@ -33,6 +33,11 @@ model User {
   role         Role       @default(EMPLOYEE)
   employee     Employee?
   auditLogs    AuditLog[] @relation("ActorAuditLogs")
+  // Agentic RAG relations (act-erp-ai)
+  knowledgeUploads KnowledgeDocument[] @relation("KnowledgeUploads")
+  knowledgeOwned   KnowledgeDocument[] @relation("KnowledgeOwned")
+  documentGrants   DocumentGrant[]     @relation("KnowledgeGrants")
+  agentRuns        AgentRun[]          @relation("AgentRuns")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -468,7 +473,7 @@ model Notification {
   recipients NotificationRecipient[]
   createdAt  DateTime                     @default(now())
   /// Embedding of (title + message) for similarity search.
-  embedding  Unsupported("vector(1536)")?
+  embedding  Unsupported("vector(1024)")?
 
   @@index([createdAt])
   @@index([type, createdAt])
@@ -508,7 +513,7 @@ model Document {
   uploader           Employee?                    @relation("DocumentUploader", fields: [uploaderEmployeeId], references: [id])
   uploadedAt         DateTime                     @default(now())
   /// Document body embedding for semantic search.
-  embedding          Unsupported("vector(1536)")?
+  embedding          Unsupported("vector(1024)")?
 
   @@index([documentType])
   @@index([employeeId, documentType])
@@ -630,8 +635,217 @@ model AuditLog {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Knowledge base + Agentic RAG (act-erp-ai)
+//
+// Prisma owns these tables; the Python `ai` service reads/writes them via raw
+// SQL. Embeddings are vector(1024) (Bedrock Titan Text Embeddings v2). The tsv
+// full-text column, pgvector (HNSW) indexes, and RLS policies are added by the
+// raw-SQL migration in prisma/sql/01_rag_pgvector_rls.sql (Prisma can't express
+// them on Unsupported columns). RLS hard-scopes reads by app.allowed_docs as
+// defense-in-depth behind the app-layer WHERE filters. See ARCHITECTURE.md §6.
+// ──────────────────────────────────────────────────────────────────────
+
+/// A document in the knowledge base (separate from the HR `Document` model).
+/// Tool records, BOMs, operational docs, spreadsheets.
+model KnowledgeDocument {
+  id             String          @id @default(cuid())
+  title          String
+  sourceFilename String
+  mimeType       String
+  fileKind       FileKind
+  s3Key          String
+  /// sha256 of the file bytes — global dedup; identical re-upload short-circuits.
+  checksum       String          @unique
+  uploadedById   String          @db.Uuid
+  uploadedBy     User            @relation("KnowledgeUploads", fields: [uploadedById], references: [id])
+  /// Set for employee self-uploads; with visibility = PRIVATE scopes to the owner.
+  ownerUserId    String?         @db.Uuid
+  owner          User?           @relation("KnowledgeOwned", fields: [ownerUserId], references: [id])
+  visibility     DocVisibility   @default(PRIVATE)
+  status         IngestStatus    @default(QUEUED)
+  failureReason  String?         @db.Text
+  pageDimensions Json?
+  grants         DocumentGrant[]
+  structureNodes StructureNode[]
+  chunks         Chunk[]
+  images         DocImage[]
+  recordTables   RecordTable[]
+  recordRows     RecordRow[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([status])
+  @@index([ownerUserId])
+  @@index([visibility])
+}
+
+/// Per-user read grant. visibility = ORG bypasses this; admins see all in app code.
+/// Department assignment is expanded to per-user rows in the frontend.
+model DocumentGrant {
+  id          String            @id @default(cuid())
+  documentId  String
+  document    KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId      String            @db.Uuid
+  user        User              @relation("KnowledgeGrants", fields: [userId], references: [id], onDelete: Cascade)
+  grantedById String?           @db.Uuid
+  createdAt   DateTime          @default(now())
+
+  @@unique([documentId, userId])
+  @@index([userId])
+}
+
+/// Heading tree for PDF/DOCX (powers get_toc / read_section).
+model StructureNode {
+  id          String            @id @default(cuid())
+  documentId  String
+  document    KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      StructureNode?    @relation("NodeChildren", fields: [parentId], references: [id])
+  children    StructureNode[]   @relation("NodeChildren")
+  depth       Int
+  headingText String?
+  breadcrumb  String?           @db.Text
+  pageStart   Int?
+  pageEnd     Int?
+  chunks      Chunk[]
+
+  @@index([documentId])
+  @@index([parentId])
+}
+
+/// Text passage for hybrid retrieval. `tsv` (tsvector) + the HNSW/GIN indexes
+/// are added by the raw-SQL migration.
+model Chunk {
+  id              String                       @id @default(cuid())
+  documentId      String
+  document        KnowledgeDocument            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  structureNodeId String?
+  structureNode   StructureNode?               @relation(fields: [structureNodeId], references: [id])
+  content         String                       @db.Text
+  contentHtml     String?                      @db.Text
+  pageNumber      Int?
+  bbox            Json?
+  polygon         Json?
+  tokenCount      Int?
+  embedding       Unsupported("vector(1024)")?
+  createdAt       DateTime                     @default(now())
+
+  @@index([documentId])
+  @@index([structureNodeId])
+}
+
+/// Figures/tables for the visualizer.
+model DocImage {
+  id            String            @id @default(cuid())
+  documentId    String
+  document      KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  pageNumber    Int?
+  bbox          Json?
+  caption       String?           @db.Text
+  figureRefNorm String?
+  s3Key         String
+
+  @@unique([documentId, figureRefNorm])
+  @@index([documentId])
+}
+
+/// One extracted/ingested structured table (BOM, tool-record sheet, CSV/XLSX).
+model RecordTable {
+  id         String            @id @default(cuid())
+  documentId String
+  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  name       String
+  /// Column names/types inferred at ingestion.
+  schemaJson Json
+  rows       RecordRow[]
+  createdAt  DateTime          @default(now())
+
+  @@index([documentId])
+}
+
+/// Generic, scope-safe row store. The query_records tool reads dataJson with
+/// JSON operators; documentId carries the RLS scope.
+model RecordRow {
+  id            String                       @id @default(cuid())
+  recordTableId String
+  recordTable   RecordTable                  @relation(fields: [recordTableId], references: [id], onDelete: Cascade)
+  documentId    String
+  document      KnowledgeDocument            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  dataJson      Json
+  rowEmbedding  Unsupported("vector(1024)")?
+
+  @@index([recordTableId])
+  @@index([documentId])
+}
+
+/// One agent turn — provenance + suspend/resume + SSE replay.
+model AgentRun {
+  id          String          @id @default(cuid())
+  userId      String          @db.Uuid
+  user        User            @relation("AgentRuns", fields: [userId], references: [id])
+  status      String          @default("running")
+  /// Snapshot of the allowed_doc_ids the run was scoped to.
+  scopeDocIds Json
+  /// Suspend/resume checkpoint (HITL).
+  stateJson   Json?
+  events      AgentRunEvent[]
+  evidence    EvidenceLog[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+/// Append-only SSE event log (seq enables reconnect-replay).
+model AgentRunEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  seq       Int
+  type      String
+  dataJson  Json
+  createdAt DateTime @default(now())
+
+  @@unique([runId, seq])
+  @@index([runId, seq])
+}
+
+/// Citation [E#] → source mapping. sourceKind spans both retrieval modes.
+model EvidenceLog {
+  id         String   @id @default(cuid())
+  runId      String
+  run        AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  eid        String
+  sourceKind String // 'chunk' | 'row'
+  sourceId   String
+  createdAt  DateTime @default(now())
+
+  @@index([runId])
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Enums
 // ──────────────────────────────────────────────────────────────────────
+
+enum FileKind {
+  PDF
+  DOCX
+  CSV
+  XLSX
+}
+
+enum DocVisibility {
+  PRIVATE
+  ORG
+}
+
+enum IngestStatus {
+  QUEUED
+  PARSING
+  EMBEDDING
+  READY
+  FAILED
+}
 
 enum Role {
   ADMIN
