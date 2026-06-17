@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # --- Agent loop ---
     max_agent_steps: int = 15
 
+    # --- Ingestion ---
+    parse_cache_prefix: str = "parses"  # S3 prefix for cached Marker payloads
+    embed_batch_size: int = 64
+    # Use deterministic local embeddings instead of Bedrock (dev/tests without AWS).
+    embed_fake: bool = False
+
     @property
     def db_dsn(self) -> str:
         """DSN the agent/worker use for scoped reads (RLS role if provided)."""

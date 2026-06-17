@@ -14,7 +14,8 @@ import signal
 import boto3
 
 from act_ai.config import get_settings
-from act_ai.db import close_pool, init_pool
+from act_ai.db import close_pool, init_owner_pool
+from act_ai.ingestion.pipeline import ingest_document
 
 _stop = asyncio.Event()
 
@@ -25,14 +26,17 @@ def _sqs_client():
 
 
 async def handle_job(job: dict) -> None:
-    """Dispatch one ingestion job. Implemented in Phase 4 (ingestion.pipeline)."""
-    # from act_ai.ingestion.pipeline import ingest_document
-    # await ingest_document(job["document_id"])
-    print(f"[worker] received job (stub): {job}")
+    """Dispatch one ingestion job from SQS."""
+    doc_id = job.get("document_id")
+    if not doc_id:
+        print(f"[worker] skipping job without document_id: {job}")
+        return
+    stats = await ingest_document(doc_id)
+    print(f"[worker] ingested {doc_id}: {stats}")
 
 
 async def run() -> None:
-    await init_pool()
+    await init_owner_pool()
     sqs = _sqs_client()
     queue_url = get_settings().sqs_queue_url
     print(f"[worker] polling {queue_url}")

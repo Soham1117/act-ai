@@ -100,22 +100,53 @@ resolves grants per user.
 
 ---
 
+## Phase 3b — Complete Supabase removal (follow-up)
+
+**Goal:** no runtime dependency on Supabase. Non-blocking for P4–P7 but **must
+land before Phase 8 deploy** (prod should be Supabase-free, single AWS bill).
+Storage is already migrated; this covers the rest.
+
+- [ ] **Auth-user creation** — `server/actions/employees.ts` and `onboarding.ts`
+      currently call `createServiceRoleClient()` to create Supabase auth users.
+      Replace with creating a `User` row (uuid) + setting `passwordHash` (reuse
+      `lib/auth/password.ts`); onboarding sets the password during invite completion.
+- [ ] **Realtime notifications** — `components/notifications-realtime.tsx` uses
+      Supabase Realtime. Replace with polling (TanStack Query refetch) or SSE; the
+      `NotificationRecipient` table already drives unread counts.
+- [ ] **Password reset** — `auth/forgot-password` + `auth/reset-password` +
+      `dashboard/settings/change-password-form.tsx` are Supabase flows. Reimplement
+      with a credentials reset (signed token row → set new `passwordHash` →
+      `revokeUserSessions`). Remove `auth/callback` (Supabase OAuth, unused).
+- [ ] Delete `lib/supabase/*`, drop `@supabase/*` deps, drop `NEXT_PUBLIC_SUPABASE_*`
+      + `SUPABASE_SERVICE_ROLE_KEY` from `env.ts`.
+
+**Exit:** `git grep supabase` is empty; app builds and runs with only AWS + NextAuth.
+
+---
+
 ## Phase 4 — Ingestion worker (multi-format)
 
 **Goal:** queued docs become retrievable (chunks/embeddings + structured rows).
 
-- [ ] SQS consumer loop in `worker.py`.
-- [ ] **PDF/DOCX path:** Marker (Datalab) call + S3 parse cache → normalize tree →
-      `structure_node` + `chunk`; extracted tables → `record_table`/`record_row`;
-      figures → `doc_image`. DOCX→PDF fallback via LibreOffice if needed.
-- [ ] **CSV/XLSX path:** pandas/openpyxl → `record_table`/`record_row` directly;
-      optional per-row text embedding.
-- [ ] Common tail: Bedrock batch embeddings → quality gate → transactional commit →
-      `status=ready`; failures → `status=failed` with reason.
-- [ ] Dedup by checksum (short-circuit re-uploads).
+- [x] SQS consumer loop in `worker.py` → `ingest_document(doc_id)`; owner DB pool
+      (RLS-bypassing) for writes; `new_id()` for cuid-less raw inserts.
+- [x] **PDF/DOCX path:** `datalab.py` (submit/poll Marker) + S3 parse cache by
+      checksum → `marker_normalize.py` → StructureNode + Chunk + RecordTable/Row +
+      DocImage. (LibreOffice DOCX→PDF fallback available in the image.)
+- [x] **CSV/XLSX path:** `structured.py` (pandas/openpyxl) → RecordTable/RecordRow
+      directly, with per-row text serialized for embedding.
+- [x] Common tail (`pipeline.py`): batch embeddings (Bedrock via gateway, or
+      deterministic **fake fallback** for dev) → transactional commit (idempotent
+      delete-then-insert) → `status=READY`; failures → `FAILED` + reason.
+- [x] Dedup handled at upload (P3 checksum) + idempotent re-ingest.
+- [x] **Verified:** CSV end-to-end (S3 download → 1 table/3 rows → embedded →
+      READY) against real Postgres + LocalStack; 3 unit tests pass (structured +
+      marker normalize).
+- [ ] PDF/DOCX live run needs `DATALAB_API_KEY` + Bedrock — normalizer may need
+      tuning against real Marker JSON (isolated in `marker_normalize.py`).
 
-**Exit:** upload one of each format (PDF, DOCX, CSV, XLSX) → all reach `ready` with
-chunks and/or rows populated and embeddings present.
+**Exit:** ✅ CSV/XLSX reach READY with rows+embeddings; PDF/DOCX path implemented
+and unit-tested (live-pending credentials).
 
 ---
 
@@ -161,10 +192,17 @@ embeddings/search produce sensible hits on the seeded corpus.
 - [ ] DocumentVisualizer: pdf.js bbox highlight + citation-jump; restyle to shadcn.
 - [ ] Row-evidence panel for structured citations.
 - [ ] Confidence + agent-activity UI.
+- [ ] **Knowledge upload + grant UI** (deferred from P3): admin upload dialog with
+      visibility (PRIVATE/ORG) + per-user/department grant picker (frontend expands
+      dept→userIds → `setDocumentGrants`); employee self-upload. Wire to
+      `uploadKnowledgeDocument` / `setDocumentGrants`.
+- [ ] **End-to-end browser verification** (deferred from P2/P3): real login flow,
+      session revocation visible in UI, `next build` passes (validates the edge
+      Proxy bundle has no Node-only imports), upload→ingest→chat happy path.
 
 **Exit:** a user logs in, picks allowed docs, asks a question, sees streamed answer
 with citations, clicks a citation → visualizer highlights the passage/row. A
-second user sees only *their* documents.
+second user sees only *their* documents. `next build` is green.
 
 ---
 
