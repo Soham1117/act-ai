@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "./auth";
 import { db } from "@/lib/db";
 
 export type AppRole = "ADMIN" | "EMPLOYEE";
@@ -15,31 +15,37 @@ export type SessionUser = {
 };
 
 /**
- * Server-only. Returns the current session user, or null if not
- * authenticated. Cached per-request via React `cache`.
+ * Server-only. Returns the current session user, or null if not authenticated.
+ * Cached per-request via React `cache`.
  *
- * Source of truth for `role` is the User table (not JWT claims) — keeps
- * gating reliable without an auth.jwt hook.
+ * Role is read from the User table (source of truth), not the JWT claim, so a
+ * role change takes effect immediately. The `tv` (tokenVersion) claim is checked
+ * against the DB to support instant session revocation — a mismatch means the
+ * token was issued before a logout-everywhere / disable and is rejected.
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const session = await auth();
+  const uid = session?.user?.id;
+  if (!uid) return null;
 
   const profile = await db.user.findUnique({
-    where: { id: user.id },
+    where: { id: uid },
     select: {
       id: true,
       email: true,
       name: true,
       profileImage: true,
       role: true,
+      tokenVersion: true,
       employee: { select: { id: true } },
     },
   });
   if (!profile) return null;
+
+  // Instant revocation: the token's tokenVersion must match the current one.
+  if (typeof session.user.tv === "number" && session.user.tv !== profile.tokenVersion) {
+    return null;
+  }
 
   return {
     id: profile.id,
@@ -63,4 +69,16 @@ export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
   if (user.role !== "ADMIN") redirect("/unauthorized");
   return user;
+}
+
+/**
+ * Revoke every active session for a user (logout-everywhere). Call after a
+ * forced password reset, role change, or account disable. Bumps tokenVersion so
+ * all previously-issued JWTs fail the check in getSessionUser.
+ */
+export async function revokeUserSessions(userId: string): Promise<void> {
+  await db.user.update({
+    where: { id: userId },
+    data: { tokenVersion: { increment: 1 } },
+  });
 }

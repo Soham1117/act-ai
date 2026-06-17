@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { createClient } from "@/lib/supabase/client";
+import { loginAction } from "@/server/actions/auth";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -40,16 +40,12 @@ export function LoginForm({
   function onSubmit(values: Values) {
     setError(null);
     startTransition(async () => {
-      const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
-      });
-      if (signInError) {
-        setError(signInError.message);
+      const res = await loginAction(values.email, values.password);
+      if (!res.ok) {
+        setError(res.error);
         return;
       }
-      // Refresh server state then route. The proxy will land them on the right surface.
+      // Refresh server state then route. The proxy lands them on the right surface.
       router.refresh();
       router.push(next || "/admin");
     });

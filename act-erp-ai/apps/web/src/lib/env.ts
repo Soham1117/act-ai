@@ -6,6 +6,9 @@ export const env = createEnv({
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
     DATABASE_URL: z.string().url(),
     DIRECT_URL: z.string().url().optional(),
+    // NextAuth signing secret (generate: `openssl rand -base64 32`).
+    AUTH_SECRET: z.string().min(1),
+    // Supabase storage — still used until Phase 3 migrates storage to S3.
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   },
   client: {
@@ -17,6 +20,7 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     DATABASE_URL: process.env.DATABASE_URL,
     DIRECT_URL: process.env.DIRECT_URL,
+    AUTH_SECRET: process.env.AUTH_SECRET,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,

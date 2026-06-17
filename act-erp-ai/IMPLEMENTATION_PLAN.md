@@ -57,15 +57,23 @@ boot deferred until Phase 1 provides the schema.
 
 **Goal:** replace Supabase Auth; sessions are short-lived and revocable.
 
-- [ ] Install NextAuth v5 + Prisma adapter; add session/account tables.
-- [ ] **Database session strategy**, rolling 30m idle / 8h absolute.
-- [ ] Rewire `getSessionUser()`, `requireUser()`, `requireAdmin()`, middleware.
-- [ ] Sign-in method decision: company SSO (Google/M365) vs credentials → implement.
-- [ ] Secure cookies; CSRF; re-issue session on role change; MFA for ADMIN (optional).
-- [ ] Migrate existing users (map Supabase `auth.users` → `User`).
+- [x] Install NextAuth v5 (`next-auth@beta`) + bcryptjs. No adapter (credentials → JWT).
+- [x] **JWT strategy + `User.tokenVersion`** for instant revocation (DB sessions
+      aren't supported with credentials); rolling 30m / 8h absolute.
+- [x] Split config: `auth.config.ts` (edge-safe) + `auth.ts` (Node, Credentials).
+      Rewired `getSessionUser` (role + tokenVersion from DB), `requireUser/Admin`,
+      `proxy.ts` (optimistic), `[...nextauth]/route.ts`, login action + form, signOut.
+- [x] Credentials sign-in (email+password, bcrypt cost 12). `scripts/create-admin.ts`.
+      `revokeUserSessions()` helper for logout-everywhere.
+- [x] Repointed dev DB off Supabase → local `act`; added `AUTH_SECRET`.
+- [x] **Verified:** typecheck clean; admin created; correct password verifies,
+      wrong password rejected; role/tokenVersion correct.
+- [ ] MFA for ADMIN — deferred. Password reset/forgot + Supabase OAuth callback
+      routes still present (non-functional for credentials) — cleaned up in P3.
+- [ ] No user migration needed (no real data yet).
 
-**Exit:** login works; session revocation takes effect immediately; tokens expire
-within the configured window (no more multi-day sessions).
+**Exit:** ✅ credentials auth implemented & verified; revocation via tokenVersion;
+8h/30m lifetimes.
 
 ---
 

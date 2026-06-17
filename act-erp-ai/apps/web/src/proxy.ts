@@ -1,5 +1,12 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
+import NextAuth from "next-auth";
+import { NextResponse } from "next/server";
+import { authConfig } from "@/lib/auth/auth.config";
+
+// Edge instance built from the base config only (no Node providers) so the
+// Proxy stays edge-safe. This is an OPTIMISTIC check (JWT presence/decode) per
+// Next.js guidance — real authorization happens in Server Components via
+// requireAdmin()/requireUser(), which read the role + tokenVersion from the DB.
+const { auth } = NextAuth(authConfig);
 
 const PUBLIC_PATHS = [
   "/login",
@@ -14,42 +21,30 @@ function isPublic(path: string) {
 }
 
 /**
- * The kiosk *terminal* endpoints are public (employees clock in via ID
- * without admin auth). The /kiosk index itself is admin-only and goes
- * through the standard auth guard. Match `/kiosk/<anything>` but not
- * `/kiosk` exactly.
+ * Kiosk *terminal* endpoints are public (employees clock in via ID without admin
+ * auth). The /kiosk index itself is admin-only via the standard guard. Match
+ * `/kiosk/<anything>` but not `/kiosk` exactly.
  */
 function isKiosk(path: string) {
   return /^\/kiosk\/[^/]+/.test(path);
 }
 
-/**
- * Edge-friendly proxy. Only handles auth (logged-in or not). Role-based
- * gating happens in (admin)/layout.tsx via requireAdmin() which reads
- * the active role straight from the User table — that's our single
- * source of truth and avoids JWT/app_metadata cache headaches.
- */
-export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+export default auth((req) => {
+  const { pathname } = req.nextUrl;
 
-  // Always refresh the auth session cookie.
-  const { response, user } = await updateSession(request);
-
-  // Public + kiosk routes — let through.
   if (isPublic(pathname) || pathname === "/" || isKiosk(pathname)) {
-    return response;
+    return NextResponse.next();
   }
 
-  // All other routes require an authenticated user.
-  if (!user) {
-    const url = request.nextUrl.clone();
+  if (!req.auth) {
+    const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
-  return response;
-}
+  return NextResponse.next();
+});
 
 export const config = {
   matcher: [

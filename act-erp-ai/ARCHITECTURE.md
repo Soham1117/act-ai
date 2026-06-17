@@ -328,14 +328,23 @@ The existing erp UI is untouched except for additions.
 
 Fixes the current "sessions active for days" problem.
 
-- **Database session strategy** (Prisma adapter) — sessions are rows → instantly
-  revocable on role change / termination / "log out everywhere".
-- **Rolling 30-min idle, 8-hour absolute** timeout.
+> **Note:** Auth.js v5's Credentials provider **only supports the JWT session
+> strategy** (database sessions aren't available without manual session
+> management). We get the same security properties a different way:
+
+- **JWT strategy + `User.tokenVersion`** — the token carries a `tv` claim;
+  `getSessionUser` compares it to the DB. `revokeUserSessions()` bumps
+  `tokenVersion` → **instant logout-everywhere** on role change / termination /
+  forced reset. No DB session table, no adapter (less bloat).
+- **Role read from the DB** every request (not the JWT) → role changes are immediate.
+- **Rolling 30-min refresh, 8-hour absolute** lifetime (`session.maxAge`/`updateAge`).
 - Cookies `httpOnly` + `secure` + `sameSite=lax`; CSRF built-in.
-- Re-issue session on privilege change so stale roles don't linger.
-- **MFA for ADMIN** (recommended).
+- **MFA for ADMIN** (recommended; deferred).
 - **Sign-in (locked):** email + password **credentials** for v1. SSO (Google/M365)
-  added later — the NextAuth provider array is built to accept it without rework.
+  added later — split config (`auth.config.ts` edge-safe + `auth.ts` Node) accepts
+  new providers without rework.
+- Proxy (Next 16's renamed middleware) does **optimistic** checks only; real authz
+  is in Server Components via `requireAdmin()`/`requireUser()`.
 
 ---
 

@@ -26,11 +26,17 @@ datasource db {
 /// access — `requireAdmin` gates admin-only routes; `requireUser` lets
 /// either role through, so admins can use the employee dashboard too.
 model User {
-  id           String     @id @db.Uuid
+  id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique
   name         String
   profileImage String?
   role         Role       @default(EMPLOYEE)
+  /// bcrypt hash for credentials auth (NextAuth). Null until a password is set
+  /// (e.g. legacy/SSO users). See lib/auth.
+  passwordHash String?
+  /// Bumped to revoke all of a user's JWT sessions instantly (logout-everywhere,
+  /// role change, disable). getSessionUser compares this against the token.
+  tokenVersion Int        @default(0)
   employee     Employee?
   auditLogs    AuditLog[] @relation("ActorAuditLogs")
   // Agentic RAG relations (act-erp-ai)
