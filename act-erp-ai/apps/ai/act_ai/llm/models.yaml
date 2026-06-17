@@ -1,0 +1,10 @@
+# Role-based model registry (ported pattern from relearn).
+# Swap a model by editing the value here — no code change. IDs are litellm-style.
+roles:
+  agent: bedrock/us.meta.llama3-3-70b-instruct-v1:0
+  small: bedrock/us.meta.llama3-3-70b-instruct-v1:0
+  embeddings: bedrock/amazon.titan-embed-text-v2:0
+
+# Swap-in alternatives (kept for reference / quick A-B):
+#   agent: bedrock/openai.gpt-oss-120b-1:0
+#   embeddings: bedrock/cohere.embed-english-v3

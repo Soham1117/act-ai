@@ -1,0 +1,27 @@
+# Node / Next
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.turbo/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+*.log
+
+# Local data
+.data/
