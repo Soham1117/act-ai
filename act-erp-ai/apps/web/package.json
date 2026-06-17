@@ -21,6 +21,9 @@
     "postinstall": "prisma generate || true"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1071.0",
+    "@aws-sdk/client-sqs": "^3.1071.0",
+    "@aws-sdk/s3-request-presigner": "^3.1071.0",
     "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-accordion": "^1.2.12",

@@ -81,15 +81,22 @@ boot deferred until Phase 1 provides the schema.
 
 **Goal:** documents land in S3 and enqueue an ingestion job.
 
-- [ ] Point `lib/storage.ts` at S3 (LocalStack locally) — single-file swap.
-- [ ] Migrate existing Supabase Storage buckets/objects to S3.
-- [ ] `knowledge_document` upload server action: write S3, create row
-      (`status=queued`), set grants/visibility, enqueue SQS message.
-- [ ] Grant UI: assign to users / department-expansion / `ORG`; employee self-upload.
-- [ ] Audit log extended to uploads + grant changes.
+- [x] `lib/storage.ts` rewritten on S3 (single bucket + logical-prefix; private
+      objects; signed-URL reads). `lib/aws.ts` shared S3/SQS clients (LocalStack
+      endpoint locally, task IAM role in prod). `lib/queue.ts` `enqueueIngestion`.
+- [x] `uploadKnowledgeDocument` action: sha256 dedup → S3 → KnowledgeDocument row
+      (`status=QUEUED`) → grants/visibility → audit → SQS enqueue. `setDocumentGrants`.
+- [x] `lib/knowledge/access.ts`: `allowedDocumentIds` / `listAccessibleDocuments`
+      (the authoritative scope reused by the agent gateway in P6).
+- [x] Audit extended to `knowledge.upload` / `upload_dedup` / `set_grants`.
+- [x] **Verified on LocalStack:** S3 put→sign→download round-trips; SQS
+      enqueue→receive works; typecheck clean.
+- [ ] Grant management UI + upload UI — lands with the chat document picker (P7).
+- [ ] Migrate remaining Supabase usage (employee/onboarding auth-user creation,
+      realtime notifications, password reset) — post-Phase-3 follow-up.
 
-**Exit:** uploading a file creates a `knowledge_document` row + an SQS message;
-grants resolve correctly per user.
+**Exit:** ✅ storage on S3; knowledge upload creates row + SQS job; scope helper
+resolves grants per user.
 
 ---
 
