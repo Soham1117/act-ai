@@ -15,12 +15,14 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from act_ai.config import get_settings
-from act_ai.db import close_pool, init_pool
+from act_ai.db import close_pool, init_owner_pool, init_pool
+from act_ai.service.runner import run_chat_turn
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_pool()
+    await init_owner_pool()
     yield
     await close_pool()
 
@@ -48,15 +50,16 @@ async def health() -> dict:
 
 @app.post("/chat", dependencies=[Depends(require_service_token)])
 async def chat(req: ChatRequest) -> EventSourceResponse:
-    """SSE stream. Phase 0 stub — emits a placeholder run so the web gateway and
-    frontend reducer can be wired end-to-end before the agent loop exists."""
+    """Run the agent for one turn, streaming SSE events. Scope is enforced from
+    the web-computed allowed_doc_ids (never trusted from the browser)."""
 
     async def event_stream() -> AsyncIterator[dict]:
-        yield {"event": "run_started", "data": "{}"}
-        yield {
-            "event": "text_delta",
-            "data": '{"text": "agent service reachable; loop not yet implemented (Phase 6)."}',
-        }
-        yield {"event": "run_completed", "data": '{"steps": 0}'}
+        async for event in run_chat_turn(
+            user_id=req.user_id,
+            allowed_doc_ids=req.allowed_doc_ids,
+            selected_doc_ids=req.selected_doc_ids,
+            messages=req.messages,
+        ):
+            yield event.sse()
 
     return EventSourceResponse(event_stream())

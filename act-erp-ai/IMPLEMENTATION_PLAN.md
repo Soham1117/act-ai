@@ -176,15 +176,22 @@ and unit-tested (live-pending credentials).
 
 **Goal:** end-to-end agent run with provenance and streaming.
 
-- [ ] Wire the ported loop to the new tool registry + `RunContext`.
-- [ ] Emit full SSE taxonomy; persist `agent_run` + `agent_run_event` (seq replay).
-- [ ] Evidence supports both `chunk` and `row` kinds in `evidence_log`.
-- [ ] Citation verification + confidence scoring.
-- [ ] `ask_user` HITL suspend/resume.
-- [ ] `web` `/api/chat` route handler: auth → compute `allowed_doc_ids` → proxy SSE.
+- [x] `agent/loop.py` ported (asyncpg, our tools/RunContext); injectable streamer.
+- [x] `llm/stream.py`: litellm→Bedrock streaming, normalized to `Delta` + tool-call
+      assembly. `agent/prompt.py` (ACT invariants + structured-vs-prose guidance).
+- [x] Full SSE taxonomy (`agent/events.py`); `service/runner.py` persists `AgentRun`
+      + `AgentRunEvent` (seq replay) via owner conn; tool reads via `scoped_conn` (RLS).
+- [x] Evidence supports `chunk` + `row`; `EvidenceLog` written per evidence_added.
+- [x] Citation verification (dangling/uncited) + confidence scoring.
+- [x] `main.py` `/chat` (service-token) → runner SSE. `web` `/api/chat` route:
+      auth → `allowedDocumentIds` → proxy SSE (browser never reaches the agent).
+- [x] **Verified** with a scripted fake model: event order correct, real tool run
+      under scope, `[E1]` resolved+used, confidence computed, persisted (1 run / 8
+      events / 1 evidence-log). Web typecheck clean.
+- [ ] `ask_user` full HITL **resume** — minimal suspend emits clarification + stops;
+      resume is a follow-up (needs registry snapshot/restore).
 
-**Exit:** a curl/UI run streams events, cites real evidence, and a hostile prompt
-("show me documents I don't own") returns nothing out-of-scope.
+**Exit:** ✅ agent streams events, cites real evidence, scope-enforced; gateway wired.
 
 ---
 

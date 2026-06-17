@@ -13,6 +13,9 @@ export const env = createEnv({
     AWS_ENDPOINT_URL: z.string().url().optional(),
     S3_BUCKET: z.string().min(1),
     SQS_QUEUE_URL: z.string().url(),
+    // Internal agent service (apps/ai). The browser never calls it directly.
+    AGENT_SERVICE_URL: z.string().url().default("http://localhost:8001"),
+    INTERNAL_SERVICE_TOKEN: z.string().min(1),
     // Supabase service role — STILL required: employee/onboarding auth-user
     // creation, realtime notifications, and password-reset flows are not yet
     // migrated off Supabase (tracked as post-Phase-3 follow-up). Storage is S3.
@@ -32,6 +35,8 @@ export const env = createEnv({
     AWS_ENDPOINT_URL: process.env.AWS_ENDPOINT_URL,
     S3_BUCKET: process.env.S3_BUCKET,
     SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
+    AGENT_SERVICE_URL: process.env.AGENT_SERVICE_URL,
+    INTERNAL_SERVICE_TOKEN: process.env.INTERNAL_SERVICE_TOKEN,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
