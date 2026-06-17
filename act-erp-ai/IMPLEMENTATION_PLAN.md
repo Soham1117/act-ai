@@ -199,23 +199,24 @@ and unit-tested (live-pending credentials).
 
 **Goal:** the Chat feature inside the existing erp UI.
 
-- [ ] "Chat" nav entry in both sidebars; `/dashboard/chat` + `/admin/chat`.
-- [ ] Shared `<ChatWorkspace>`: document picker (scoped) | chat+activity | visualizer.
-- [ ] Wire ported chat reducer to the SSE stream from `/api/chat`.
-- [ ] DocumentVisualizer: pdf.js bbox highlight + citation-jump; restyle to shadcn.
-- [ ] Row-evidence panel for structured citations.
-- [ ] Confidence + agent-activity UI.
-- [ ] **Knowledge upload + grant UI** (deferred from P3): admin upload dialog with
-      visibility (PRIVATE/ORG) + per-user/department grant picker (frontend expands
-      dept→userIds → `setDocumentGrants`); employee self-upload. Wire to
-      `uploadKnowledgeDocument` / `setDocumentGrants`.
-- [ ] **End-to-end browser verification** (deferred from P2/P3): real login flow,
-      session revocation visible in UI, `next build` passes (validates the edge
-      Proxy bundle has no Node-only imports), upload→ingest→chat happy path.
+- [x] "Assistant" nav in both sidebars; `/dashboard/chat` + `/admin/chat` → shared
+      `<ChatWorkspace>` (picker | chat+activity | evidence/visualizer).
+- [x] Ported chat reducer/types/SSE client + `useAgentChat` (stateless, resends
+      history); wired to `/api/chat`.
+- [x] `DocumentVisualizer` + `PdfPage` (pdf.js, windowed, bbox/polygon highlight,
+      jump-by-nonce); `lib/pdf.ts` + worker copy script (postinstall). `EvidencePanel`
+      loads scoped signed URL via `/api/knowledge/[id]/view`; row-evidence handled.
+- [x] Citation chips ([E#] → panel), agent-activity (tools/thinking), confidence UI.
+- [x] **Knowledge upload UI**: admin `/admin/knowledge` page + upload dialog
+      (title/file/visibility) → `uploadKnowledgeDocument`. (Per-user/dept grant
+      picker → `setDocumentGrants` is the remaining sub-item; server side done.)
+- [x] **`next build` green** — all routes compile incl. the edge Proxy bundle (the
+      deferred P2/P3 build check); typecheck clean.
+- [ ] Per-user/department **grant picker UI** (server action `setDocumentGrants`
+      ready) and full **browser/Bedrock** run-through — needs a live run (see below).
 
-**Exit:** a user logs in, picks allowed docs, asks a question, sees streamed answer
-with citations, clicks a citation → visualizer highlights the passage/row. A
-second user sees only *their* documents. `next build` is green.
+**Exit:** ✅ chat UI + visualizer build green; scoped picker; citations open the
+source. Live browser + Bedrock walkthrough pending credentials.
 
 ---
 

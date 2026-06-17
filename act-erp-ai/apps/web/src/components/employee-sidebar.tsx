@@ -25,6 +25,7 @@ import {
   Plane,
   Receipt,
   Settings,
+  Sparkles,
   User,
   Users,
 } from "lucide-react";
@@ -35,7 +36,10 @@ const NAV: Array<{
 }> = [
   {
     group: "Overview",
-    items: [{ href: "/dashboard", label: "Home", icon: Home }],
+    items: [
+      { href: "/dashboard", label: "Home", icon: Home },
+      { href: "/dashboard/chat", label: "Assistant", icon: Sparkles },
+    ],
   },
   {
     group: "Time",

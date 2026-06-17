@@ -26,10 +26,12 @@ import {
   FileText,
   Home,
   LayoutGrid,
+  Library,
   Plane,
   Receipt,
   Settings,
   Shield,
+  Sparkles,
   Tags,
   Users,
 } from "lucide-react";
@@ -40,7 +42,10 @@ const NAV: Array<{
 }> = [
   {
     group: "Overview",
-    items: [{ href: "/admin", label: "Dashboard", icon: Home }],
+    items: [
+      { href: "/admin", label: "Dashboard", icon: Home },
+      { href: "/admin/chat", label: "Assistant", icon: Sparkles },
+    ],
   },
   {
     group: "People",
@@ -66,6 +71,7 @@ const NAV: Array<{
     group: "Workspace",
     items: [
       { href: "/admin/documents", label: "Documents", icon: FileText },
+      { href: "/admin/knowledge", label: "Knowledge base", icon: Library },
       { href: "/admin/activity", label: "Activity", icon: Activity },
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
       { href: "/admin/kiosks", label: "Kiosks", icon: LayoutGrid },
