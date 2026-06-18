@@ -1,10 +1,12 @@
-# Role-based model registry (ported pattern from relearn).
-# Swap a model by editing the value here — no code change. IDs are litellm-style.
+# Role-based model registry. Swap a model by editing the value here — no code
+# change. IDs are litellm-style. Local dev uses Gemini (set GEMINI_API_KEY);
+# production swaps these three lines to the Bedrock ids below.
 roles:
-  agent: bedrock/us.meta.llama3-3-70b-instruct-v1:0
-  small: bedrock/us.meta.llama3-3-70b-instruct-v1:0
-  embeddings: bedrock/amazon.titan-embed-text-v2:0
+  agent: gemini/gemini-2.5-flash
+  small: gemini/gemini-2.5-flash
+  embeddings: gemini/gemini-embedding-001   # 1024-d (output_dimensionality)
 
-# Swap-in alternatives (kept for reference / quick A-B):
-#   agent: bedrock/openai.gpt-oss-120b-1:0
-#   embeddings: bedrock/cohere.embed-english-v3
+# Production (Bedrock, us-east-2):
+#   agent: bedrock/us.meta.llama3-3-70b-instruct-v1:0
+#   small: bedrock/us.meta.llama3-3-70b-instruct-v1:0
+#   embeddings: bedrock/amazon.titan-embed-text-v2:0

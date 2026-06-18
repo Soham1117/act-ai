@@ -12,8 +12,7 @@ import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
-from act_ai.config import get_settings
-from act_ai.llm.gateway import model_for
+from act_ai.llm.gateway import model_for, provider_kwargs
 
 
 @dataclass
@@ -49,13 +48,8 @@ async def stream_turn(
     terminal Delta(done=True) with the assembled turn."""
     import litellm
 
-    s = get_settings()
-    kwargs: dict = {
-        "model": model_for(role),
-        "messages": messages,
-        "stream": True,
-        "aws_region_name": s.aws_region,
-    }
+    model = model_for(role)
+    kwargs: dict = {"model": model, "messages": messages, "stream": True, **provider_kwargs(model)}
     if tools:
         kwargs["tools"] = tools
 

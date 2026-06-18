@@ -1,8 +1,6 @@
-"""LLM + embeddings gateway via litellm -> Amazon Bedrock.
-
-One place to call models; role->model mapping lives in models.yaml. Bedrock auth
-is via the task IAM role (no API keys). Phase 5 wires retrieval to `embed()`;
-Phase 6 wires the agent loop to `acompletion`.
+"""LLM + embeddings gateway via litellm. Provider is inferred from the model id
+(see models.yaml): `bedrock/*` uses the task IAM role + region; `gemini/*` uses
+GEMINI_API_KEY. One place to call models; role→model mapping is config-driven.
 """
 
 from __future__ import annotations
@@ -19,37 +17,39 @@ _MODELS_PATH = Path(__file__).with_name("models.yaml")
 
 @lru_cache
 def _roles() -> dict[str, str]:
-    data = yaml.safe_load(_MODELS_PATH.read_text())
-    return data["roles"]
+    return yaml.safe_load(_MODELS_PATH.read_text())["roles"]
 
 
 def model_for(role: str) -> str:
     return _roles()[role]
 
 
+def provider_kwargs(model: str) -> dict:
+    """Provider-specific call kwargs. Region only matters for Bedrock."""
+    if model.startswith("bedrock/"):
+        return {"aws_region_name": get_settings().aws_region}
+    return {}
+
+
 async def embed(texts: list[str]) -> list[list[float]]:
-    """Embed a batch of texts with the configured embeddings model (Titan v2, 1024-d)."""
+    """Embed a batch with the configured embeddings model at embed_dims (1024).
+    `dimensions` maps to Titan's outputDimensions / Gemini's output_dimensionality."""
     import litellm
 
-    s = get_settings()
+    model = model_for("embeddings")
     resp = await litellm.aembedding(
-        model=model_for("embeddings"),
+        model=model,
         input=texts,
-        aws_region_name=s.aws_region,
+        dimensions=get_settings().embed_dims,
+        **provider_kwargs(model),
     )
     return [d["embedding"] for d in resp["data"]]
 
 
 async def acompletion(messages: list[dict], tools: list[dict] | None = None, **kwargs):
-    """Streaming/non-streaming chat completion with the agent model. Used by the
-    agent loop in Phase 6."""
     import litellm
 
-    s = get_settings()
+    model = model_for("agent")
     return await litellm.acompletion(
-        model=model_for("agent"),
-        messages=messages,
-        tools=tools,
-        aws_region_name=s.aws_region,
-        **kwargs,
+        model=model, messages=messages, tools=tools, **provider_kwargs(model), **kwargs
     )
