@@ -1,0 +1,40 @@
+{
+  "family": "act-erp-ai-agent",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/act-erp-ai-exec",
+  "taskRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/act-erp-ai-task",
+  "containerDefinitions": [
+    {
+      "name": "agent",
+      "image": "${AI_IMAGE}",
+      "essential": true,
+      "command": ["uvicorn", "act_ai.main:app", "--host", "0.0.0.0", "--port", "8001"],
+      "portMappings": [{ "containerPort": 8001 }],
+      "environment": [
+        { "name": "AWS_REGION", "value": "${REGION}" },
+        { "name": "S3_BUCKET", "value": "${S3_BUCKET}" },
+        { "name": "SQS_QUEUE_URL", "value": "${SQS_QUEUE_URL}" },
+        { "name": "EMBED_FAKE", "value": "false" },
+        { "name": "AGENT_MODEL", "value": "${AGENT_MODEL}" },
+        { "name": "EMBED_MODEL", "value": "${EMBED_MODEL}" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "${SECRET_DATABASE_URL}" },
+        { "name": "RLS_DATABASE_URL", "valueFrom": "${SECRET_RLS_DATABASE_URL}" },
+        { "name": "INTERNAL_SERVICE_TOKEN", "valueFrom": "${SECRET_INTERNAL_SERVICE_TOKEN}" },
+        { "name": "DATALAB_API_KEY", "valueFrom": "${SECRET_DATALAB_API_KEY}" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/act-erp-ai",
+          "awslogs-region": "${REGION}",
+          "awslogs-stream-prefix": "agent"
+        }
+      }
+    }
+  ]
+}

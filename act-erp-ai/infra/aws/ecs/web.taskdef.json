@@ -1,0 +1,38 @@
+{
+  "family": "act-erp-ai-web",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/act-erp-ai-exec",
+  "taskRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/act-erp-ai-task",
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "${WEB_IMAGE}",
+      "essential": true,
+      "portMappings": [{ "containerPort": 3000 }],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "AWS_REGION", "value": "${REGION}" },
+        { "name": "S3_BUCKET", "value": "${S3_BUCKET}" },
+        { "name": "SQS_QUEUE_URL", "value": "${SQS_QUEUE_URL}" },
+        { "name": "AGENT_SERVICE_URL", "value": "http://agent.act-erp-ai.local:8001" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "${SECRET_DATABASE_URL}" },
+        { "name": "DIRECT_URL", "valueFrom": "${SECRET_DIRECT_URL}" },
+        { "name": "AUTH_SECRET", "valueFrom": "${SECRET_AUTH_SECRET}" },
+        { "name": "INTERNAL_SERVICE_TOKEN", "valueFrom": "${SECRET_INTERNAL_SERVICE_TOKEN}" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/act-erp-ai",
+          "awslogs-region": "${REGION}",
+          "awslogs-stream-prefix": "web"
+        }
+      }
+    }
+  ]
+}

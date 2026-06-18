@@ -225,21 +225,25 @@ source. Live browser + Bedrock walkthrough pending credentials.
 
 **Goal:** production on Fargate.
 
-- [x] IaC written (`infra/iac/`, Terraform): VPC (2 public/2 private, no NAT),
-      RDS Postgres 16 + pgvector, S3 (private), SQS (+DLQ), ECR ×2, Secrets Manager
-      (DB/auth/token/datalab, generated), IAM (exec + task: S3/SQS/Bedrock),
-      Cloud Map (web→agent), CloudWatch logs.
-- [x] ALB + HTTP (optional HTTPS via `acm_certificate_arn`); web health check `/login`.
-- [x] 3 Fargate services: web (ALB), agent (Cloud Map, internal), worker (no inbound).
+Approach: **plain AWS CLI runbook** (no IaC for now — see the end of this doc for
+the "revisit IaC" note). Uses the account's default VPC to stay simple.
+
+- [x] `infra/aws/DEPLOY.md`: ordered CLI runbook — default VPC, security groups,
+      ECR ×2 + image push, S3 (private), SQS (+DLQ), RDS Postgres 16 (pgvector),
+      Secrets Manager, IAM (2 roles), CloudWatch, ECS cluster, Cloud Map (web→agent),
+      ALB + target group + listener, 3 Fargate services, DB migrate, first admin, smoke test.
+- [x] IAM policy JSONs (`infra/aws/iam/`): exec trust + secrets-read; task trust +
+      S3/SQS/Bedrock (Bedrock `*`, noted to scope to model ARNs).
+- [x] ECS task-def JSONs (`infra/aws/ecs/`, envsubst placeholders): web/agent/worker.
 - [x] CI (`.github/workflows/deploy.yml`): path-filtered build+push to ECR + roll services.
 - [x] `next.config` standalone output; gateway env override (AGENT_MODEL/EMBED_MODEL
-      → Bedrock in prod, Gemini yaml locally). Deploy steps in `infra/iac/README.md`.
-- [ ] **Apply pending your AWS account**: `terraform plan/apply` (not validated locally
-      — no terraform/creds in dev box), enable Bedrock model access in us-east-2,
-      run DB migrate + RLS SQL, smoke test. **Phase 3b must land first** (web image
-      has no Supabase env in the task defs).
+      → Bedrock in prod, Gemini yaml locally).
+- [ ] **Run pending your AWS account**: enable Bedrock model access (us-east-2),
+      execute `infra/aws/DEPLOY.md`, migrate DB + RLS SQL, smoke test. **Phase 3b
+      done** ✅ (web task def injects no Supabase env).
 
-**Exit (code):** ✅ full deploy IaC + CI authored. **Exit (live):** pending your apply.
+**Exit (code):** ✅ deploy runbook + task defs + IAM + CI authored. **Exit (live):**
+pending your run.
 
 ---
 
@@ -270,3 +274,15 @@ P0 ─▶ P1 ─▶ P3 ─▶ P4 ─▶ P5 ─▶ P6 ─▶ P7 ─▶ P8
 2. AWS region: **`us-east-2` (Ohio)** — closest to Texas, native Llama 3.3 70B.
 3. Agent model: **Llama 3.3 70B Instruct** (`us.meta.llama3-3-70b-instruct-v1:0`).
 4. Embeddings: **Titan Text Embeddings v2** (`amazon.titan-embed-text-v2:0`), 1024-dim.
+
+## Future — revisit Infrastructure-as-Code (Terraform / CDK)
+Deployment is intentionally a **plain AWS CLI runbook** (`infra/aws/DEPLOY.md`) for
+v1 — simplest to understand and run by hand while the footprint is small. Once the
+infra is stable and changes more often, port it to IaC for repeatability,
+drift-detection, and easy teardown/rebuild:
+- **Terraform** — portable, declarative, single source of truth (a first cut was
+  written then removed by request; the resource shapes in DEPLOY.md map 1:1).
+- **AWS CDK (TypeScript)** — likely the better fit for this TS-heavy repo
+  (same language, typed, testable); needs `cdk bootstrap`.
+Trigger to do this: more than one environment (staging/prod), or manual drift
+becoming painful. Until then the runbook + task-def JSONs + CI are enough.
