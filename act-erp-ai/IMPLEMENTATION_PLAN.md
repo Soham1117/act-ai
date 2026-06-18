@@ -106,21 +106,22 @@ resolves grants per user.
 land before Phase 8 deploy** (prod should be Supabase-free, single AWS bill).
 Storage is already migrated; this covers the rest.
 
-- [ ] **Auth-user creation** — `server/actions/employees.ts` and `onboarding.ts`
-      currently call `createServiceRoleClient()` to create Supabase auth users.
-      Replace with creating a `User` row (uuid) + setting `passwordHash` (reuse
-      `lib/auth/password.ts`); onboarding sets the password during invite completion.
-- [ ] **Realtime notifications** — `components/notifications-realtime.tsx` uses
-      Supabase Realtime. Replace with polling (TanStack Query refetch) or SSE; the
-      `NotificationRecipient` table already drives unread counts.
-- [ ] **Password reset** — `auth/forgot-password` + `auth/reset-password` +
-      `dashboard/settings/change-password-form.tsx` are Supabase flows. Reimplement
-      with a credentials reset (signed token row → set new `passwordHash` →
-      `revokeUserSessions`). Remove `auth/callback` (Supabase OAuth, unused).
-- [ ] Delete `lib/supabase/*`, drop `@supabase/*` deps, drop `NEXT_PUBLIC_SUPABASE_*`
-      + `SUPABASE_SERVICE_ROLE_KEY` from `env.ts`.
+- [x] **Auth-user creation** — `employees.ts` (`createEmployee`, `changeEmployeePassword`,
+      `bulkDeleteEmployees`) + `onboarding.ts` now create a `User` + `passwordHash`
+      (no Supabase). Delete disables login (null hash + bump tokenVersion), preserving
+      provenance. Password change/reset revokes sessions.
+- [x] **Realtime notifications** — `notifications-realtime.tsx` polls
+      `/api/notifications/unread` every 30s (replaced Supabase Realtime).
+- [x] **Password reset/change** — self-service `changeMyPassword` (verifies current,
+      revokes sessions); `forgot-password` is now a "contact your admin" page; removed
+      `auth/reset-password` + `auth/callback` (Supabase OAuth).
+- [x] Deleted `lib/supabase/*`, dropped `@supabase/*` deps, removed all Supabase env
+      from `env.ts`/`.env.example`/`next.config`. Removed legacy Supabase seed scripts
+      (`create-admin.ts` remains for the first admin).
+- [x] **Verified:** `git grep supabase` clean in code (only historical comments);
+      `next build` green.
 
-**Exit:** `git grep supabase` is empty; app builds and runs with only AWS + NextAuth.
+**Exit:** ✅ runtime is Supabase-free (AWS + NextAuth only); build green.
 
 ---
 

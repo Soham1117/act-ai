@@ -16,14 +16,8 @@ export const env = createEnv({
     // Internal agent service (apps/ai). The browser never calls it directly.
     AGENT_SERVICE_URL: z.string().url().default("http://localhost:8001"),
     INTERNAL_SERVICE_TOKEN: z.string().min(1),
-    // Supabase service role — STILL required: employee/onboarding auth-user
-    // creation, realtime notifications, and password-reset flows are not yet
-    // migrated off Supabase (tracked as post-Phase-3 follow-up). Storage is S3.
-    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   },
   client: {
-    NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
     NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
   },
   runtimeEnv: {
@@ -37,9 +31,6 @@ export const env = createEnv({
     SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
     AGENT_SERVICE_URL: process.env.AGENT_SERVICE_URL,
     INTERNAL_SERVICE_TOKEN: process.env.INTERNAL_SERVICE_TOKEN,
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   },
   emptyStringAsUndefined: true,

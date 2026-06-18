@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { hashPassword } from "@/lib/auth/password";
 import { audit } from "@/lib/audit";
 import { uploadFile } from "@/lib/storage";
 
@@ -26,17 +26,7 @@ export async function createEmployee(input: z.infer<typeof employeeSchema>) {
   await requireAdmin();
   const data = employeeSchema.parse(input);
 
-  // Provision the Supabase auth user with the service-role client.
-  const admin = createServiceRoleClient();
-  const { data: created, error } = await admin.auth.admin.createUser({
-    email: data.email,
-    password: data.password,
-    email_confirm: true,
-    user_metadata: { name: data.name },
-  });
-  if (error || !created.user) {
-    throw new Error(error?.message ?? "Failed to create auth user");
-  }
+  const passwordHash = await hashPassword(data.password);
 
   // Auto-generate EMP-YYYY-NNNN.
   const year = new Date().getFullYear();
@@ -46,18 +36,18 @@ export async function createEmployee(input: z.infer<typeof employeeSchema>) {
   const employeeId = `EMP-${year}-${String(count + 1).padStart(4, "0")}`;
 
   const employee = await db.$transaction(async (tx) => {
-    await tx.user.create({
+    const user = await tx.user.create({
       data: {
-        id: created.user.id,
         email: data.email,
         name: data.name,
         role: "EMPLOYEE",
+        passwordHash,
       },
     });
     return tx.employee.create({
       data: {
         employeeId,
-        userId: created.user.id,
+        userId: user.id,
         name: data.name,
         email: data.email,
         ssn: data.ssn,
@@ -152,9 +142,11 @@ export async function changeEmployeePassword(
     select: { userId: true, name: true },
   });
   if (!employee) throw new Error("Employee not found");
-  const admin = createServiceRoleClient();
-  const { error } = await admin.auth.admin.updateUserById(employee.userId, { password });
-  if (error) throw new Error(error.message);
+  // Set the new hash and revoke existing sessions (bump tokenVersion).
+  await db.user.update({
+    where: { id: employee.userId },
+    data: { passwordHash: await hashPassword(password), tokenVersion: { increment: 1 } },
+  });
   await audit({
     action: "employee.password_change",
     resource: `Employee:${employeeId}`,
@@ -212,11 +204,14 @@ export async function bulkDeleteEmployees(ids: string[]) {
     where: { id: { in: ids } },
     select: { userId: true },
   });
-  const admin = createServiceRoleClient();
-  await Promise.all(
-    employees.map((e) => admin.auth.admin.deleteUser(e.userId).catch(() => null)),
-  );
+  const userIds = employees.map((e) => e.userId);
   const { count } = await db.employee.deleteMany({ where: { id: { in: ids } } });
+  // Disable login for the removed users (null the hash + revoke sessions). We keep
+  // the User row so audit logs / uploaded-doc provenance stay intact.
+  await db.user.updateMany({
+    where: { id: { in: userIds } },
+    data: { passwordHash: null, tokenVersion: { increment: 1 } },
+  });
   revalidatePath("/admin/employees");
   return count;
 }

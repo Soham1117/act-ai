@@ -1,19 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Bell } from "lucide-react";
-import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 
 /**
- * Listens for new NotificationRecipient rows for the current employee
- * via Supabase Realtime. Shows a toast on receive + keeps a live unread
- * count badge.
- *
- * Mount once in the topbar/layout. Pass the seeded initial count from the
- * server so the badge is accurate before the first realtime tick.
+ * Live-ish unread badge. Polls /api/notifications/unread every 30s (replaced
+ * Supabase Realtime in Phase 3b). Mount once in the topbar; pass the seeded
+ * server count so the badge is accurate before the first poll.
  */
 export function NotificationsRealtime({
   employeeId,
@@ -23,62 +16,27 @@ export function NotificationsRealtime({
   initialUnread: number;
 }) {
   const [unread, setUnread] = useState(initialUnread);
-  const router = useRouter();
 
   useEffect(() => {
     if (!employeeId) return;
-    const supabase = createClient();
-
-    // Subscribe to: new recipient rows for this employee (broadcasts they
-    // just received) AND updates that flip read=true (so the badge ticks
-    // down when they mark something read elsewhere).
-    const channel = supabase
-      .channel(`notifications-${employeeId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notification_recipients",
-          filter: `employee_id=eq.${employeeId}`,
-        },
-        () => {
-          setUnread((u) => u + 1);
-          toast("New notification", {
-            description: "Open your notifications inbox to read it.",
-            icon: <Bell className="h-4 w-4 text-primary" />,
-            action: {
-              label: "Open",
-              onClick: () => router.push("/dashboard/notifications"),
-            },
-          });
-          // Refresh server data so cards/lists pick it up.
-          router.refresh();
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "notification_recipients",
-          filter: `employee_id=eq.${employeeId}`,
-        },
-        (payload) => {
-          // If a previously-unread row was just marked read, decrement.
-          const oldRow = payload.old as { read?: boolean };
-          const newRow = payload.new as { read?: boolean };
-          if (oldRow?.read === false && newRow?.read === true) {
-            setUnread((u) => Math.max(0, u - 1));
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/notifications/unread", { cache: "no-store" });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (active) setUnread(d.unread ?? 0);
+      } catch {
+        /* transient — keep last count */
+      }
     };
-  }, [employeeId, router]);
+    const id = setInterval(poll, 30000);
+    poll();
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [employeeId]);
 
   if (unread <= 0) return null;
   return (
