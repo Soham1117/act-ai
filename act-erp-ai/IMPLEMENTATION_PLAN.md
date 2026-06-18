@@ -224,15 +224,21 @@ source. Live browser + Bedrock walkthrough pending credentials.
 
 **Goal:** production on Fargate.
 
-- [ ] IaC (`infra/iac/`): VPC, RDS Postgres+pgvector, S3, SQS, ALB, ECS cluster.
-- [ ] ECR repos; CI builds 2 images (web, ai), path-filtered.
-- [ ] 3 Fargate services: web, agent (internal), worker (no inbound).
-- [ ] Secrets in Secrets Manager / SSM; task IAM roles (Bedrock, S3, SQS, DB).
-- [ ] Enable Bedrock model access in the chosen region.
-- [ ] ALB routing + HTTPS (ACM cert); health checks.
-- [ ] Smoke test: upload → ingest → chat → cite, end-to-end in AWS.
+- [x] IaC written (`infra/iac/`, Terraform): VPC (2 public/2 private, no NAT),
+      RDS Postgres 16 + pgvector, S3 (private), SQS (+DLQ), ECR ×2, Secrets Manager
+      (DB/auth/token/datalab, generated), IAM (exec + task: S3/SQS/Bedrock),
+      Cloud Map (web→agent), CloudWatch logs.
+- [x] ALB + HTTP (optional HTTPS via `acm_certificate_arn`); web health check `/login`.
+- [x] 3 Fargate services: web (ALB), agent (Cloud Map, internal), worker (no inbound).
+- [x] CI (`.github/workflows/deploy.yml`): path-filtered build+push to ECR + roll services.
+- [x] `next.config` standalone output; gateway env override (AGENT_MODEL/EMBED_MODEL
+      → Bedrock in prod, Gemini yaml locally). Deploy steps in `infra/iac/README.md`.
+- [ ] **Apply pending your AWS account**: `terraform plan/apply` (not validated locally
+      — no terraform/creds in dev box), enable Bedrock model access in us-east-2,
+      run DB migrate + RLS SQL, smoke test. **Phase 3b must land first** (web image
+      has no Supabase env in the task defs).
 
-**Exit:** the full flow works in AWS; only one AWS bill; no Vercel/Supabase deps.
+**Exit (code):** ✅ full deploy IaC + CI authored. **Exit (live):** pending your apply.
 
 ---
 

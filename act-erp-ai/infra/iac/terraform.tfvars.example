@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (gitignored) and adjust.
+region = "us-east-2"
+name   = "act-erp-ai"
+
+# Bedrock model ids (LiteLLM-style). Enable model access in this region first.
+agent_model = "bedrock/us.meta.llama3-3-70b-instruct-v1:0"
+embed_model = "bedrock/amazon.titan-embed-text-v2:0"
+
+# HTTPS: paste an ACM certificate ARN (in `region`) to enable the 443 listener.
+acm_certificate_arn = ""
+
+# Optional: Datalab Marker key for PDF/DOCX ingestion.
+datalab_api_key = ""

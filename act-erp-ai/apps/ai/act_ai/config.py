@@ -21,9 +21,11 @@ class Settings(BaseSettings):
 
     # --- AWS / Bedrock ---
     aws_region: str = "us-east-2"
-    bedrock_agent_model: str = "bedrock/us.meta.llama3-3-70b-instruct-v1:0"
-    bedrock_embed_model: str = "bedrock/amazon.titan-embed-text-v2:0"
     embed_dims: int = 1024
+    # Optional model overrides (env AGENT_MODEL / EMBED_MODEL). When set they win
+    # over llm/models.yaml — prod sets these to Bedrock ids; local uses the yaml.
+    agent_model: str | None = None
+    embed_model: str | None = None
 
     # --- Object storage / queue (LocalStack locally, real AWS in prod) ---
     s3_bucket: str = "act-erp-ai-docs"

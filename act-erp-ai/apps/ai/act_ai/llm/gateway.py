@@ -21,6 +21,12 @@ def _roles() -> dict[str, str]:
 
 
 def model_for(role: str) -> str:
+    # Env overrides (prod → Bedrock) win over models.yaml (local → Gemini).
+    s = get_settings()
+    if role in ("agent", "small") and s.agent_model:
+        return s.agent_model
+    if role == "embeddings" and s.embed_model:
+        return s.embed_model
     return _roles()[role]
 
 
