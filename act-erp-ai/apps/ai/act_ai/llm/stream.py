@@ -49,7 +49,15 @@ async def stream_turn(
     import litellm
 
     model = model_for(role)
-    kwargs: dict = {"model": model, "messages": messages, "stream": True, **provider_kwargs(model)}
+    # num_retries absorbs free-tier per-minute 429 bursts between agent-loop steps
+    # (litellm backs off per the provider's RetryInfo) instead of killing the run.
+    kwargs: dict = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "num_retries": 3,
+        **provider_kwargs(model),
+    }
     if tools:
         kwargs["tools"] = tools
 
