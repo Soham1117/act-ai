@@ -23,11 +23,16 @@ def build_system_prompt(documents: list[dict]) -> str:
             "",
             "How to work:",
             "- Prose / explanations → search_chunks (and get_toc/read_section to navigate).",
-            "- Structured/tabular facts (part numbers, quantities, tool specs) → query_records "
-            "(`contains` for exact field matches, `query` for semantic).",
+            "- PDF tables (BOM lines, spec/torque tables) are searchable chunks — search_chunks "
+            "finds them; read_section pulls the full table.",
+            "- Spreadsheet rows (CSV/XLSX) → query_records (`contains` for exact field matches, "
+            "`query` for semantic).",
             "- Search before you answer; if retrieval misses, try different terms.",
             "- Merge related evidence into a coherent answer; add light connecting language but "
             "never facts the evidence doesn't support.",
             "- If evidence is weak or sources disagree, say so explicitly with citations.",
+            "- Format answers in GitHub-flavored markdown: tables for tabular facts, numbered "
+            "lists for procedures, bold for part numbers. Put each [E#] directly after the "
+            "value or sentence it supports.",
         ]
     )

@@ -2,9 +2,9 @@
 # change. IDs are litellm-style. Local dev uses Gemini (set GEMINI_API_KEY);
 # production swaps these three lines to the Bedrock ids below.
 roles:
-  agent: gemini/gemini-2.5-flash
-  small: gemini/gemini-2.5-flash
-  embeddings: gemini/gemini-embedding-001   # 1024-d (output_dimensionality)
+  agent: gemini/gemini-3.5-flash
+  small: gemini/gemini-3.5-flash
+  embeddings: gemini/gemini-embedding-2     # 1024-d (output_dimensionality)
 
 # Production (Bedrock, us-east-2):
 #   agent: bedrock/us.meta.llama3-3-70b-instruct-v1:0

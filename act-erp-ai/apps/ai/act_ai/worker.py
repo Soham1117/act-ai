@@ -48,8 +48,20 @@ async def run() -> None:
                 MaxNumberOfMessages=5,
                 WaitTimeSeconds=10,
             )
-            for msg in resp.get("Messages", []):
+            msgs = resp.get("Messages", [])
+            if not msgs:
+                continue
+
+            async def _process(msg: dict) -> None:
+                # Marker parses can take minutes — extend visibility so the
+                # message isn't redelivered to a second worker mid-ingest.
                 try:
+                    await asyncio.to_thread(
+                        sqs.change_message_visibility,
+                        QueueUrl=queue_url,
+                        ReceiptHandle=msg["ReceiptHandle"],
+                        VisibilityTimeout=900,
+                    )
                     await handle_job(json.loads(msg["Body"]))
                     await asyncio.to_thread(
                         sqs.delete_message,
@@ -58,6 +70,8 @@ async def run() -> None:
                     )
                 except Exception as exc:  # noqa: BLE001 - keep the loop alive
                     print(f"[worker] job failed, leaving for retry: {exc}")
+
+            await asyncio.gather(*(_process(m) for m in msgs))
     finally:
         await close_pool()
 

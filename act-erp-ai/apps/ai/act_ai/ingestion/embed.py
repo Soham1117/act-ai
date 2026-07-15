@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import threading
 
 from act_ai.config import get_settings
 
@@ -27,19 +28,41 @@ def _fake_embedding(text: str, dims: int) -> list[float]:
     return [x / norm for x in vec]
 
 
+_local_model = None
+_local_lock = threading.Lock()
+
+
+def _local_embed(texts: list[str]) -> list[list[float]]:
+    """Local sentence-transformers model (1024-d, L2-normalized). Loaded once and
+    encoded under a lock — concurrent ingests must not each load a model copy or
+    encode in parallel (memory). No API quota, so nothing can be rate-limited."""
+    global _local_model
+    with _local_lock:
+        if _local_model is None:
+            from sentence_transformers import SentenceTransformer
+
+            _local_model = SentenceTransformer(get_settings().embed_local_model)
+        vecs = _local_model.encode(texts, normalize_embeddings=True, batch_size=32)
+    return [v.tolist() for v in vecs]
+
+
 async def embed_texts(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
     s = get_settings()
     if s.embed_fake:
         return [_fake_embedding(t, s.embed_dims) for t in texts]
+    if s.embed_local:
+        import asyncio
 
-    # Real path: batch through the Bedrock gateway.
-    from act_ai.llm.gateway import embed as bedrock_embed
+        return await asyncio.to_thread(_local_embed, texts)
+
+    # Remote path: batch through the LLM gateway (Bedrock/Gemini).
+    from act_ai.llm.gateway import embed as gateway_embed
 
     out: list[list[float]] = []
     for i in range(0, len(texts), s.embed_batch_size):
-        out.extend(await bedrock_embed(texts[i : i + s.embed_batch_size]))
+        out.extend(await gateway_embed(texts[i : i + s.embed_batch_size]))
     return out
 
 

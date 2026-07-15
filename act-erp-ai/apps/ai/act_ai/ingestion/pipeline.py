@@ -2,16 +2,22 @@
 
 Flow:
   load doc → status PARSING
-    PDF/DOCX → Marker (S3-cached) → normalize → nodes/chunks/tables/images
+    PDF/DOCX → Marker (S3-cached) → normalize_marker_tree → tree_mapper → gates
     CSV/XLSX → pandas → tables
-  → status EMBEDDING → embed chunk + row texts (Bedrock or fake)
-  → transactional commit (nodes, chunks, images, tables, rows)
-  → status READY     (on failure: FAILED + reason)
+  → status EMBEDDING → embed chunk + row texts
+  → transactional commit → status READY   (on failure: FAILED + reason)
+
+The PDF path stores everything the visualizer and agent need: 1-based page
+numbers, Marker-coordinate bbox/polygon per chunk, heading hierarchy with
+parents/breadcrumbs, token counts, figure images in S3, and per-document
+pageDimensions (0-based page index → [w, h] in Marker coordinates).
 """
 
 from __future__ import annotations
 
+import base64
 import json
+from typing import Any
 
 import asyncpg
 
@@ -19,8 +25,15 @@ from act_ai.db import new_id, owner_conn
 from act_ai.ingestion import s3io
 from act_ai.ingestion.datalab import parse_document, payload_bytes
 from act_ai.ingestion.embed import embed_texts, to_pgvector
-from act_ai.ingestion.marker_normalize import NormalizedDoc, normalize
+from act_ai.ingestion.gates import run_quality_gates
+from act_ai.ingestion.marker_payload import normalize_marker_payload
+from act_ai.ingestion.normalize_tree import normalize_marker_tree
 from act_ai.ingestion.structured import ParsedTable, parse_structured
+from act_ai.ingestion.tree_mapper import (
+    MappedDocument,
+    map_marker_document_tree,
+    parse_page_number,
+)
 
 
 async def _set_status(conn: asyncpg.Connection, doc_id: str, status: str, reason: str | None = None) -> None:
@@ -34,31 +47,72 @@ async def _set_status(conn: asyncpg.Connection, doc_id: str, status: str, reason
 
 async def _load_doc(conn: asyncpg.Connection, doc_id: str) -> asyncpg.Record | None:
     return await conn.fetchrow(
-        'SELECT id, "s3Key", "fileKind", "mimeType", "sourceFilename", checksum '
+        'SELECT id, title, "s3Key", "fileKind", "mimeType", "sourceFilename", checksum '
         'FROM "KnowledgeDocument" WHERE id=$1',
         doc_id,
     )
 
 
-def _build_from_structured(tables: list[ParsedTable]) -> NormalizedDoc:
-    """Structured files have no prose tree; wrap their tables in a NormalizedDoc."""
-    doc = NormalizedDoc()
-    doc.tables = tables
-    return doc
+# --------------------------------------------------------------------------- #
+# PDF/DOCX (Marker) path
+# --------------------------------------------------------------------------- #
 
 
-async def _commit(conn: asyncpg.Connection, doc_id: str, nd: NormalizedDoc) -> dict:
-    # Embed chunk texts + row texts together.
-    chunk_texts = [c.content for c in nd.chunks]
-    row_text_index: list[tuple[int, int]] = []  # (table_idx, row_idx)
-    row_texts: list[str] = []
-    for ti, t in enumerate(nd.tables):
-        for ri, rt in enumerate(t.row_texts or []):
-            row_text_index.append((ti, ri))
-            row_texts.append(rt)
+def _page_dimensions(document_root: dict[str, Any]) -> dict[str, list[float]]:
+    """{0-based page index: [width, height]} in Marker coordinates — the one
+    coordinate space the visualizer overlay uses."""
+    dims: dict[str, list[float]] = {}
+    for page in document_root.get("children") or []:
+        if not isinstance(page, dict) or page.get("block_type") != "Page":
+            continue
+        pnum = parse_page_number(page.get("id") if isinstance(page.get("id"), str) else None)
+        bbox = page.get("bbox")
+        if pnum is not None and isinstance(bbox, list) and len(bbox) >= 4:
+            dims[str(pnum)] = [float(bbox[2]), float(bbox[3])]
+    return dims
 
-    chunk_vecs = await embed_texts(chunk_texts)
-    row_vecs = await embed_texts(row_texts)
+
+def _upload_images(document_root: dict[str, Any], checksum: str) -> dict[str, str]:
+    """Decode base64 images from Marker blocks → S3. {marker_block_id: s3_key}."""
+    keys: dict[str, str] = {}
+    n = 0
+
+    def walk(node: dict[str, Any]) -> None:
+        nonlocal n
+        imgs = node.get("images")
+        if isinstance(imgs, dict):
+            for bid, b64 in imgs.items():
+                if not isinstance(b64, str) or len(b64) < 8 or str(bid) in keys:
+                    continue
+                try:
+                    data = base64.b64decode(b64)
+                except Exception:
+                    continue
+                key = f"images/{checksum}/{n}.png"
+                n += 1
+                s3io.put_image(key, data)
+                keys[str(bid)] = key
+        for c in node.get("children") or []:
+            if isinstance(c, dict):
+                walk(c)
+
+    walk(document_root)
+    return keys
+
+
+def _page_1based(page: int | None) -> int | None:
+    return page + 1 if page is not None else None
+
+
+async def _commit_pdf(
+    conn: asyncpg.Connection,
+    doc_id: str,
+    mapped: MappedDocument,
+    page_dims: dict[str, list[float]],
+    image_keys: dict[str, str],
+) -> dict:
+    chunks = [c for c in mapped.chunks if c.content.strip()]
+    chunk_vecs = await embed_texts([c.content for c in chunks])
 
     async with conn.transaction():
         # Clear any prior partial ingest for idempotency.
@@ -68,53 +122,82 @@ async def _commit(conn: asyncpg.Connection, doc_id: str, nd: NormalizedDoc) -> d
         await conn.execute('DELETE FROM "RecordRow" WHERE "documentId"=$1', doc_id)
         await conn.execute('DELETE FROM "RecordTable" WHERE "documentId"=$1', doc_id)
 
-        # Structure nodes (index -> id).
-        node_ids: list[str] = []
-        for n in nd.nodes:
-            nid = new_id()
+        # Structure nodes — creation order guarantees parents precede children.
+        for node in mapped.structure_nodes:
             await conn.execute(
-                'INSERT INTO "StructureNode" (id,"documentId","parentId",depth,"headingText",breadcrumb,"pageStart") '
-                "VALUES ($1,$2,NULL,$3,$4,$5,$6)",
-                nid, doc_id, n.depth, n.heading_text, n.breadcrumb, n.page_start,
+                'INSERT INTO "StructureNode" (id,"documentId","parentId",depth,"headingText",breadcrumb,"pageStart","pageEnd") '
+                "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+                str(node.id), doc_id,
+                str(node.parent_node_id) if node.parent_node_id else None,
+                node.depth, node.heading_text, node.heading_breadcrumb,
+                _page_1based(node.page_start), _page_1based(node.page_end),
             )
-            node_ids.append(nid)
 
-        # Chunks (+ embeddings).
-        for c, vec in zip(nd.chunks, chunk_vecs):
-            sn = node_ids[c.node_index] if (c.node_index is not None and c.node_index < len(node_ids)) else None
+        # Chunks (+ embeddings). bbox/polygon stay in Marker coordinates.
+        for c, vec in zip(chunks, chunk_vecs):
             await conn.execute(
-                'INSERT INTO "Chunk" (id,"documentId","structureNodeId",content,"pageNumber",bbox,embedding,"createdAt") '
-                "VALUES ($1,$2,$3,$4,$5,$6,$7::vector,now())",
-                new_id(), doc_id, sn, c.content, c.page_number,
+                'INSERT INTO "Chunk" (id,"documentId","structureNodeId",content,"contentHtml","pageNumber",bbox,polygon,"tokenCount",embedding,"createdAt") '
+                "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::vector,now())",
+                str(c.id), doc_id,
+                str(c.structure_node_id) if c.structure_node_id else None,
+                c.content, c.content_html, _page_1based(c.page_number),
                 json.dumps(c.bbox) if c.bbox is not None else None,
-                to_pgvector(vec),
+                json.dumps(c.polygon) if c.polygon is not None else None,
+                c.token_count, to_pgvector(vec),
             )
 
-        # Images.
-        for im in nd.images:
+        # Images (figureRefNorm is unique per document — dedupe defensively).
+        seen_refs: set[str] = set()
+        for im in mapped.images:
+            ref = im.figure_ref_norm
+            if ref in seen_refs:
+                ref = None
+            elif ref:
+                seen_refs.add(ref)
             await conn.execute(
                 'INSERT INTO "DocImage" (id,"documentId","pageNumber",bbox,caption,"figureRefNorm","s3Key") '
                 "VALUES ($1,$2,$3,$4,$5,$6,$7)",
-                new_id(), doc_id, im.page_number,
+                str(im.id), doc_id, _page_1based(im.page_number),
                 json.dumps(im.bbox) if im.bbox is not None else None,
-                im.caption, im.figure_ref_norm, "",
+                im.caption, ref, image_keys.get(im.marker_block_id, ""),
             )
 
-        # Record tables + rows (+ row embeddings).
-        for ti, t in enumerate(nd.tables):
+    await conn.execute(
+        'UPDATE "KnowledgeDocument" SET "pageDimensions"=$1::jsonb, "updatedAt"=now() WHERE id=$2',
+        json.dumps(page_dims), doc_id,
+    )
+    return {
+        "nodes": len(mapped.structure_nodes),
+        "chunks": len(chunks),
+        "images": len(mapped.images),
+        "pages": len(page_dims),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# CSV/XLSX (structured) path
+# --------------------------------------------------------------------------- #
+
+
+async def _commit_structured(conn: asyncpg.Connection, doc_id: str, tables: list[ParsedTable]) -> dict:
+    row_texts = [rt for t in tables for rt in (t.row_texts or [])]
+    row_vecs = await embed_texts(row_texts)
+
+    async with conn.transaction():
+        await conn.execute('DELETE FROM "RecordRow" WHERE "documentId"=$1', doc_id)
+        await conn.execute('DELETE FROM "RecordTable" WHERE "documentId"=$1', doc_id)
+
+        vi = 0
+        for t in tables:
             tid = new_id()
             await conn.execute(
                 'INSERT INTO "RecordTable" (id,"documentId",name,"schemaJson","createdAt") VALUES ($1,$2,$3,$4,now())',
                 tid, doc_id, t.name, json.dumps(t.columns),
             )
             for ri, rec in enumerate(t.rows):
-                # find matching embedding
-                vec = None
-                for k, (tt, rr) in enumerate(row_text_index):
-                    if tt == ti and rr == ri:
-                        vec = row_vecs[k]
-                        break
+                vec = row_vecs[vi] if ri < len(t.row_texts or []) else None
                 if vec is not None:
+                    vi += 1
                     await conn.execute(
                         'INSERT INTO "RecordRow" (id,"recordTableId","documentId","dataJson","rowEmbedding") '
                         "VALUES ($1,$2,$3,$4,$5::vector)",
@@ -126,13 +209,12 @@ async def _commit(conn: asyncpg.Connection, doc_id: str, nd: NormalizedDoc) -> d
                         new_id(), tid, doc_id, json.dumps(rec),
                     )
 
-    return {
-        "nodes": len(nd.nodes),
-        "chunks": len(nd.chunks),
-        "images": len(nd.images),
-        "tables": len(nd.tables),
-        "rows": sum(len(t.rows) for t in nd.tables),
-    }
+    return {"tables": len(tables), "rows": sum(len(t.rows) for t in tables)}
+
+
+# --------------------------------------------------------------------------- #
+# Entry point
+# --------------------------------------------------------------------------- #
 
 
 async def ingest_document(doc_id: str) -> dict:
@@ -148,19 +230,30 @@ async def ingest_document(doc_id: str) -> dict:
 
             if kind in ("CSV", "XLSX"):
                 tables = parse_structured(kind, data, source_name=doc["sourceFilename"])
-                nd = _build_from_structured(tables)
+                await _set_status(conn, doc_id, "EMBEDDING")
+                stats = await _commit_structured(conn, doc_id, tables)
             elif kind in ("PDF", "DOCX"):
                 cached = s3io.get_cached_parse(doc["checksum"])
                 payload = json.loads(cached) if cached else None
                 if payload is None:
                     payload = await parse_document(data, doc["sourceFilename"], doc["mimeType"])
                     s3io.put_cached_parse(doc["checksum"], payload_bytes(payload))
-                nd = normalize(payload)
+
+                root, _envelope = normalize_marker_payload(payload)
+                normalize_marker_tree(root)
+                mapped = map_marker_document_tree(root, doc_id, document_title=doc["title"])
+                page_dims = _page_dimensions(root)
+
+                gates = run_quality_gates(mapped, page_count=len(page_dims))
+                if not gates.passed:
+                    raise RuntimeError("quality gates failed: " + "; ".join(gates.failures))
+
+                image_keys = _upload_images(root, doc["checksum"])
+                await _set_status(conn, doc_id, "EMBEDDING")
+                stats = await _commit_pdf(conn, doc_id, mapped, page_dims, image_keys)
             else:
                 raise RuntimeError(f"unsupported file kind: {kind}")
 
-            await _set_status(conn, doc_id, "EMBEDDING")
-            stats = await _commit(conn, doc_id, nd)
             await _set_status(conn, doc_id, "READY")
             return stats
         except Exception as exc:  # noqa: BLE001 - record and re-raise for the worker

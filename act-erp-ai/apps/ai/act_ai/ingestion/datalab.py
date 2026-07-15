@@ -15,7 +15,7 @@ import httpx
 from act_ai.config import get_settings
 
 _POLL_INTERVAL_S = 2
-_POLL_TIMEOUT_S = 300
+_POLL_TIMEOUT_S = 600
 
 
 async def parse_document(data: bytes, filename: str, mime_type: str) -> dict:

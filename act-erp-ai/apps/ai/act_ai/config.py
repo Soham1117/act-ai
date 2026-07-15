@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     embed_batch_size: int = 64
     # Use deterministic local embeddings instead of Bedrock (dev/tests without AWS).
     embed_fake: bool = False
+    # Run a real local embedding model (mxbai-embed-large-v1, 1024-d) instead of the
+    # API — no rate limits; ingestion and queries stay consistent. Dev default.
+    embed_local: bool = False
+    embed_local_model: str = "mixedbread-ai/mxbai-embed-large-v1"
 
     @property
     def db_dsn(self) -> str:

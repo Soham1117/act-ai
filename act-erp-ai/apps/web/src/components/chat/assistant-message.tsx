@@ -1,23 +1,9 @@
 "use client";
 
-import { Fragment } from "react";
 import { Loader2 } from "lucide-react";
 import type { AssistantMessage, CitationInfo } from "@/lib/chat/types";
 import { AgentActivity } from "./agent-activity";
-import { CitationChip } from "./citation-chip";
-
-const EID_RE = /(\[E\d+\])/g;
-
-function renderText(text: string, citations: Record<string, CitationInfo>, onCite: (c: CitationInfo) => void) {
-  return text.split(EID_RE).map((part, i) => {
-    const m = part.match(/^\[(E\d+)\]$/);
-    if (m) {
-      const eid = m[1];
-      return <CitationChip key={i} eid={eid} citation={citations[eid]} onSelect={onCite} />;
-    }
-    return <Fragment key={i}>{part}</Fragment>;
-  });
-}
+import { TextBlock } from "./text-block";
 
 export function AssistantMessageView({
   message,
@@ -28,6 +14,7 @@ export function AssistantMessageView({
 }) {
   const textBlocks = message.blocks.filter((b) => b.kind === "text");
   const clarification = message.blocks.find((b) => b.kind === "clarification");
+  const evidenceCount = Object.keys(message.citations).length;
   const confColor =
     message.confidence?.level === "high"
       ? "text-emerald-600"
@@ -36,18 +23,21 @@ export function AssistantMessageView({
         : "text-destructive";
 
   return (
-    <div className="space-y-1">
-      <AgentActivity blocks={message.blocks} />
+    <div className="space-y-2">
+      <AgentActivity blocks={message.blocks} running={message.running} evidenceCount={evidenceCount} />
 
       {textBlocks.map((b, i) => (
-        <p key={i} className="whitespace-pre-wrap text-sm leading-relaxed">
-          {renderText((b as { text: string }).text, message.citations, onCite)}
-        </p>
+        <TextBlock
+          key={i}
+          text={(b as { text: string }).text}
+          citations={message.citations}
+          onCite={onCite}
+        />
       ))}
 
       {message.running && textBlocks.length === 0 && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking…
+        <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Working…
         </div>
       )}
 
@@ -61,7 +51,7 @@ export function AssistantMessageView({
       )}
 
       {message.confidence && !message.running && (
-        <p className={`text-[11px] ${confColor}`}>
+        <p className={`px-1 text-[11px] ${confColor}`}>
           Confidence: {message.confidence.level} — {message.confidence.reason}
         </p>
       )}
