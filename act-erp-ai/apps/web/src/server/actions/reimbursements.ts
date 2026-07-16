@@ -71,7 +71,9 @@ export async function submitReimbursement(
   });
   revalidatePath("/dashboard/reimbursements");
   revalidatePath("/admin/reimbursements");
-  return created;
+  // Plain object only — Reimbursement rows carry Decimals (amount, paidAmount)
+  // that can't cross the server-action boundary to client components.
+  return { id: created.id, status: created.status };
 }
 
 const reviewSchema = z.object({
@@ -114,6 +116,6 @@ export async function reviewReimbursement(input: z.infer<typeof reviewSchema>) {
       resource: `Reimbursement:${data.reimbursementId}`,
       diff: { status: data.status, paidAmount: data.paidAmount },
     });
-    return r;
+    return { id: r.id, status: r.status };
   });
 }

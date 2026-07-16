@@ -211,7 +211,9 @@ export async function kioskAction(input: z.infer<typeof actionSchema>) {
   revalidatePath(`/kiosk/${input.slug}`);
   revalidatePath("/admin/time-tracking");
   revalidatePath("/admin");
-  return entry;
+  // Plain object only — raw rows carry a Decimal (`rate`) that can't cross the
+  // server-action boundary to client components.
+  return { id: entry?.id ?? null, status: entry?.status ?? null };
 }
 
 export async function revokeKiosk(id: string) {

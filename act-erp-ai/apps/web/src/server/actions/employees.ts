@@ -64,7 +64,9 @@ export async function createEmployee(input: z.infer<typeof employeeSchema>) {
 
   await audit({ action: "employee.create", resource: `Employee:${employee.id}`, diff: { employeeId, email: data.email } });
   revalidatePath("/admin/employees");
-  return employee;
+  // Plain object only — Employee rows carry Decimals (compensationValue,
+  // defaultHourlyRate) that can't cross the server-action boundary.
+  return { id: employee.id };
 }
 
 const updateSchema = z.object({
@@ -124,7 +126,7 @@ export async function updateEmployee(
   await audit({ action: "employee.update", resource: `Employee:${employeeId}`, diff: data });
   revalidatePath("/admin/employees");
   revalidatePath(`/admin/employees/${employeeId}`);
-  return updated;
+  return { id: updated.id };
 }
 
 const passwordSchema = z.object({
@@ -171,7 +173,7 @@ export async function setEmploymentStatus(
   });
   revalidatePath("/admin/employees");
   revalidatePath(`/admin/employees/${employeeId}`);
-  return updated;
+  return { id: updated.id };
 }
 
 export async function updateEmployeeProfilePic(
