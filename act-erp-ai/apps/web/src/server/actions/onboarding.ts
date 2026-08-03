@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { hashPassword } from "@/lib/auth/password";
 import { uploadFile } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 
@@ -76,8 +76,7 @@ export type OnboardingSubmit = z.infer<typeof submitSchema>;
  *
  * Flow:
  *   1. Validate the invite token + load fields.
- *   2. Provision a Supabase auth user with the chosen password.
- *   3. Create User + Employee rows in a transaction.
+ *   2. Create User (credentials, hashed password) + Employee rows in a transaction.
  *   4. Upload each document file to the `onboarding` bucket and create
  *      Document rows referencing them.
  *   5. Mark the invite COMPLETED.
@@ -101,33 +100,22 @@ export async function submitOnboarding(
 
   const data = submitSchema.parse(fields);
 
-  // Provision Supabase auth user.
-  const supabase = createServiceRoleClient();
-  const { data: created, error: authErr } = await supabase.auth.admin.createUser({
-    email: data.email,
-    password: data.password,
-    email_confirm: true,
-    user_metadata: { name: data.name },
-  });
-  if (authErr || !created.user) {
-    throw new Error(authErr?.message ?? "Failed to create auth user");
-  }
-  const authId = created.user.id;
+  const passwordHash = await hashPassword(data.password);
 
-  // Create profile + employee.
+  // Create profile + employee (credentials user, no Supabase).
   const employee = await db.$transaction(async (tx) => {
-    await tx.user.create({
+    const user = await tx.user.create({
       data: {
-        id: authId,
         email: data.email,
         name: data.name,
         role: "EMPLOYEE",
+        passwordHash,
       },
     });
     return tx.employee.create({
       data: {
         employeeId: data.employeeId,
-        userId: authId,
+        userId: user.id,
         name: data.name,
         email: data.email,
         gender: data.gender,

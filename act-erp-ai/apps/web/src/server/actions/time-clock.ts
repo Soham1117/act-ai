@@ -183,5 +183,7 @@ export async function reviewTimeEntry(input: z.infer<typeof approveSchema>) {
     },
   });
   revalidatePath("/admin/time-tracking");
-  return updated;
+  // Plain object only — raw rows carry a Decimal (`rate`) that can't cross the
+  // server-action boundary to client components.
+  return { id: updated.id, approvalStatus: updated.approvalStatus };
 }

@@ -1,0 +1,74 @@
+name: deploy
+
+# Build only what changed, push to ECR, roll the affected ECS services.
+# Requires repo secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (or switch to
+# OIDC via aws-actions/configure-aws-credentials role-to-assume).
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-2
+  CLUSTER: act-erp-ai
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      ai: ${{ steps.filter.outputs.ai }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+              - 'infra/Dockerfile.web'
+            ai:
+              - 'apps/ai/**'
+              - 'infra/Dockerfile.ai'
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: Build & push web
+        run: |
+          REPO=${{ steps.ecr.outputs.registry }}/act-erp-ai-web
+          docker build -f infra/Dockerfile.web -t $REPO:latest -t $REPO:${{ github.sha }} apps/web
+          docker push $REPO:latest && docker push $REPO:${{ github.sha }}
+      - run: aws ecs update-service --cluster $CLUSTER --service web --force-new-deployment
+
+  ai:
+    needs: changes
+    if: needs.changes.outputs.ai == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: Build & push ai
+        run: |
+          REPO=${{ steps.ecr.outputs.registry }}/act-erp-ai-ai
+          docker build -f infra/Dockerfile.ai -t $REPO:latest -t $REPO:${{ github.sha }} apps/ai
+          docker push $REPO:latest && docker push $REPO:${{ github.sha }}
+      - name: Roll agent + worker
+        run: |
+          aws ecs update-service --cluster $CLUSTER --service agent  --force-new-deployment
+          aws ecs update-service --cluster $CLUSTER --service worker --force-new-deployment

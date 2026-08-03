@@ -21,9 +21,11 @@ class Settings(BaseSettings):
 
     # --- AWS / Bedrock ---
     aws_region: str = "us-east-2"
-    bedrock_agent_model: str = "bedrock/us.meta.llama3-3-70b-instruct-v1:0"
-    bedrock_embed_model: str = "bedrock/amazon.titan-embed-text-v2:0"
     embed_dims: int = 1024
+    # Optional model overrides (env AGENT_MODEL / EMBED_MODEL). When set they win
+    # over llm/models.yaml — prod sets these to Bedrock ids; local uses the yaml.
+    agent_model: str | None = None
+    embed_model: str | None = None
 
     # --- Object storage / queue (LocalStack locally, real AWS in prod) ---
     s3_bucket: str = "act-erp-ai-docs"
@@ -39,6 +41,16 @@ class Settings(BaseSettings):
 
     # --- Agent loop ---
     max_agent_steps: int = 15
+
+    # --- Ingestion ---
+    parse_cache_prefix: str = "parses"  # S3 prefix for cached Marker payloads
+    embed_batch_size: int = 64
+    # Use deterministic local embeddings instead of Bedrock (dev/tests without AWS).
+    embed_fake: bool = False
+    # Run a real local embedding model (mxbai-embed-large-v1, 1024-d) instead of the
+    # API — no rate limits; ingestion and queries stay consistent. Dev default.
+    embed_local: bool = False
+    embed_local_model: str = "mixedbread-ai/mxbai-embed-large-v1"
 
     @property
     def db_dsn(self) -> str:

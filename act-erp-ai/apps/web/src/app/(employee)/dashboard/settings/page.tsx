@@ -55,7 +55,7 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle className="text-base">Two-factor authentication</CardTitle>
             <CardDescription>
-              Powered by Supabase Auth. Available in v1.5.
+              Available in a future release.
             </CardDescription>
           </CardHeader>
           <CardContent>

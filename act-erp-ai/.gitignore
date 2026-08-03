@@ -25,3 +25,6 @@ __pycache__/
 
 # Local data
 .data/
+
+# Generated pdf.js worker (copied from node_modules by postinstall)
+apps/web/public/pdf.worker.min.mjs

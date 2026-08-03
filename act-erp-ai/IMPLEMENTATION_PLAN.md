@@ -100,22 +100,54 @@ resolves grants per user.
 
 ---
 
+## Phase 3b — Complete Supabase removal (follow-up)
+
+**Goal:** no runtime dependency on Supabase. Non-blocking for P4–P7 but **must
+land before Phase 8 deploy** (prod should be Supabase-free, single AWS bill).
+Storage is already migrated; this covers the rest.
+
+- [x] **Auth-user creation** — `employees.ts` (`createEmployee`, `changeEmployeePassword`,
+      `bulkDeleteEmployees`) + `onboarding.ts` now create a `User` + `passwordHash`
+      (no Supabase). Delete disables login (null hash + bump tokenVersion), preserving
+      provenance. Password change/reset revokes sessions.
+- [x] **Realtime notifications** — `notifications-realtime.tsx` polls
+      `/api/notifications/unread` every 30s (replaced Supabase Realtime).
+- [x] **Password reset/change** — self-service `changeMyPassword` (verifies current,
+      revokes sessions); `forgot-password` is now a "contact your admin" page; removed
+      `auth/reset-password` + `auth/callback` (Supabase OAuth).
+- [x] Deleted `lib/supabase/*`, dropped `@supabase/*` deps, removed all Supabase env
+      from `env.ts`/`.env.example`/`next.config`. Removed legacy Supabase seed scripts
+      (`create-admin.ts` remains for the first admin).
+- [x] **Verified:** `git grep supabase` clean in code (only historical comments);
+      `next build` green.
+
+**Exit:** ✅ runtime is Supabase-free (AWS + NextAuth only); build green.
+
+---
+
 ## Phase 4 — Ingestion worker (multi-format)
 
 **Goal:** queued docs become retrievable (chunks/embeddings + structured rows).
 
-- [ ] SQS consumer loop in `worker.py`.
-- [ ] **PDF/DOCX path:** Marker (Datalab) call + S3 parse cache → normalize tree →
-      `structure_node` + `chunk`; extracted tables → `record_table`/`record_row`;
-      figures → `doc_image`. DOCX→PDF fallback via LibreOffice if needed.
-- [ ] **CSV/XLSX path:** pandas/openpyxl → `record_table`/`record_row` directly;
-      optional per-row text embedding.
-- [ ] Common tail: Bedrock batch embeddings → quality gate → transactional commit →
-      `status=ready`; failures → `status=failed` with reason.
-- [ ] Dedup by checksum (short-circuit re-uploads).
+- [x] SQS consumer loop in `worker.py` → `ingest_document(doc_id)`; owner DB pool
+      (RLS-bypassing) for writes; `new_id()` for cuid-less raw inserts.
+- [x] **PDF/DOCX path:** `datalab.py` (submit/poll Marker) + S3 parse cache by
+      checksum → `marker_normalize.py` → StructureNode + Chunk + RecordTable/Row +
+      DocImage. (LibreOffice DOCX→PDF fallback available in the image.)
+- [x] **CSV/XLSX path:** `structured.py` (pandas/openpyxl) → RecordTable/RecordRow
+      directly, with per-row text serialized for embedding.
+- [x] Common tail (`pipeline.py`): batch embeddings (Bedrock via gateway, or
+      deterministic **fake fallback** for dev) → transactional commit (idempotent
+      delete-then-insert) → `status=READY`; failures → `FAILED` + reason.
+- [x] Dedup handled at upload (P3 checksum) + idempotent re-ingest.
+- [x] **Verified:** CSV end-to-end (S3 download → 1 table/3 rows → embedded →
+      READY) against real Postgres + LocalStack; 3 unit tests pass (structured +
+      marker normalize).
+- [ ] PDF/DOCX live run needs `DATALAB_API_KEY` + Bedrock — normalizer may need
+      tuning against real Marker JSON (isolated in `marker_normalize.py`).
 
-**Exit:** upload one of each format (PDF, DOCX, CSV, XLSX) → all reach `ready` with
-chunks and/or rows populated and embeddings present.
+**Exit:** ✅ CSV/XLSX reach READY with rows+embeddings; PDF/DOCX path implemented
+and unit-tested (live-pending credentials).
 
 ---
 
@@ -123,15 +155,21 @@ chunks and/or rows populated and embeddings present.
 
 **Goal:** scoped hybrid retrieval and structured queries work against Bedrock.
 
-- [ ] LiteLLM gateway + `models.yaml`; wire IAM/Bedrock (agent model + embeddings).
-- [ ] `search_chunks`: vector (pgvector HNSW) + FTS (tsv) + RRF fusion, scoped.
-- [ ] `query_records`: typed, parameterized structured query tool, run under RLS role.
-- [ ] `get_toc`, `read_section`, `expand_chunk`, `get_images` (scoped).
-- [ ] Unit tests: every tool returns **zero** out-of-scope results given a restricted
-      `RunContext` (the core RBAC test).
+- [x] LiteLLM gateway + `models.yaml` (Bedrock embed + acompletion); embeddings via
+      `ingestion/embed.py` with deterministic fake fallback for local runs.
+- [x] `agent/retrieval.py`: `search_chunks` internals — pgvector HNSW + FTS (tsv) +
+      RRF fusion + heading boost, scoped (asyncpg, our schema).
+- [x] `agent/tools/`: `search_chunks`, `get_toc`, `read_section`, `expand_chunk`,
+      `get_images`, and `query_records` (typed/parameterized: `contains` JSON-match
+      + semantic over `rowEmbedding`; **no raw SQL from the model**). `RunContext` +
+      `EvidenceRegistry` (chunk + row evidence) ported.
+- [x] **Verified under the `act_rls` role:** docA-scoped user gets only docA passages
+      (no cross-doc leak); `query_records` for an out-of-scope record returns 0.
+- [x] **Gotcha recorded:** `prisma db push` drops the raw-SQL `tsv`/HNSW/RLS objects
+      (not in the Prisma schema) — re-apply `prisma/sql/01_rag_pgvector_rls.sql` after
+      every push (added to the run steps below).
 
-**Exit:** given a fixed `allowed_doc_ids`, each tool returns only in-scope data;
-embeddings/search produce sensible hits on the seeded corpus.
+**Exit:** ✅ each tool returns only in-scope data; hybrid search produces hits.
 
 ---
 
@@ -139,15 +177,22 @@ embeddings/search produce sensible hits on the seeded corpus.
 
 **Goal:** end-to-end agent run with provenance and streaming.
 
-- [ ] Wire the ported loop to the new tool registry + `RunContext`.
-- [ ] Emit full SSE taxonomy; persist `agent_run` + `agent_run_event` (seq replay).
-- [ ] Evidence supports both `chunk` and `row` kinds in `evidence_log`.
-- [ ] Citation verification + confidence scoring.
-- [ ] `ask_user` HITL suspend/resume.
-- [ ] `web` `/api/chat` route handler: auth → compute `allowed_doc_ids` → proxy SSE.
+- [x] `agent/loop.py` ported (asyncpg, our tools/RunContext); injectable streamer.
+- [x] `llm/stream.py`: litellm→Bedrock streaming, normalized to `Delta` + tool-call
+      assembly. `agent/prompt.py` (ACT invariants + structured-vs-prose guidance).
+- [x] Full SSE taxonomy (`agent/events.py`); `service/runner.py` persists `AgentRun`
+      + `AgentRunEvent` (seq replay) via owner conn; tool reads via `scoped_conn` (RLS).
+- [x] Evidence supports `chunk` + `row`; `EvidenceLog` written per evidence_added.
+- [x] Citation verification (dangling/uncited) + confidence scoring.
+- [x] `main.py` `/chat` (service-token) → runner SSE. `web` `/api/chat` route:
+      auth → `allowedDocumentIds` → proxy SSE (browser never reaches the agent).
+- [x] **Verified** with a scripted fake model: event order correct, real tool run
+      under scope, `[E1]` resolved+used, confidence computed, persisted (1 run / 8
+      events / 1 evidence-log). Web typecheck clean.
+- [ ] `ask_user` full HITL **resume** — minimal suspend emits clarification + stops;
+      resume is a follow-up (needs registry snapshot/restore).
 
-**Exit:** a curl/UI run streams events, cites real evidence, and a hostile prompt
-("show me documents I don't own") returns nothing out-of-scope.
+**Exit:** ✅ agent streams events, cites real evidence, scope-enforced; gateway wired.
 
 ---
 
@@ -155,16 +200,24 @@ embeddings/search produce sensible hits on the seeded corpus.
 
 **Goal:** the Chat feature inside the existing erp UI.
 
-- [ ] "Chat" nav entry in both sidebars; `/dashboard/chat` + `/admin/chat`.
-- [ ] Shared `<ChatWorkspace>`: document picker (scoped) | chat+activity | visualizer.
-- [ ] Wire ported chat reducer to the SSE stream from `/api/chat`.
-- [ ] DocumentVisualizer: pdf.js bbox highlight + citation-jump; restyle to shadcn.
-- [ ] Row-evidence panel for structured citations.
-- [ ] Confidence + agent-activity UI.
+- [x] "Assistant" nav in both sidebars; `/dashboard/chat` + `/admin/chat` → shared
+      `<ChatWorkspace>` (picker | chat+activity | evidence/visualizer).
+- [x] Ported chat reducer/types/SSE client + `useAgentChat` (stateless, resends
+      history); wired to `/api/chat`.
+- [x] `DocumentVisualizer` + `PdfPage` (pdf.js, windowed, bbox/polygon highlight,
+      jump-by-nonce); `lib/pdf.ts` + worker copy script (postinstall). `EvidencePanel`
+      loads scoped signed URL via `/api/knowledge/[id]/view`; row-evidence handled.
+- [x] Citation chips ([E#] → panel), agent-activity (tools/thinking), confidence UI.
+- [x] **Knowledge upload UI**: admin `/admin/knowledge` page + upload dialog
+      (title/file/visibility) → `uploadKnowledgeDocument`. (Per-user/dept grant
+      picker → `setDocumentGrants` is the remaining sub-item; server side done.)
+- [x] **`next build` green** — all routes compile incl. the edge Proxy bundle (the
+      deferred P2/P3 build check); typecheck clean.
+- [ ] Per-user/department **grant picker UI** (server action `setDocumentGrants`
+      ready) and full **browser/Bedrock** run-through — needs a live run (see below).
 
-**Exit:** a user logs in, picks allowed docs, asks a question, sees streamed answer
-with citations, clicks a citation → visualizer highlights the passage/row. A
-second user sees only *their* documents.
+**Exit:** ✅ chat UI + visualizer build green; scoped picker; citations open the
+source. Live browser + Bedrock walkthrough pending credentials.
 
 ---
 
@@ -172,15 +225,25 @@ second user sees only *their* documents.
 
 **Goal:** production on Fargate.
 
-- [ ] IaC (`infra/iac/`): VPC, RDS Postgres+pgvector, S3, SQS, ALB, ECS cluster.
-- [ ] ECR repos; CI builds 2 images (web, ai), path-filtered.
-- [ ] 3 Fargate services: web, agent (internal), worker (no inbound).
-- [ ] Secrets in Secrets Manager / SSM; task IAM roles (Bedrock, S3, SQS, DB).
-- [ ] Enable Bedrock model access in the chosen region.
-- [ ] ALB routing + HTTPS (ACM cert); health checks.
-- [ ] Smoke test: upload → ingest → chat → cite, end-to-end in AWS.
+Approach: **plain AWS CLI runbook** (no IaC for now — see the end of this doc for
+the "revisit IaC" note). Uses the account's default VPC to stay simple.
 
-**Exit:** the full flow works in AWS; only one AWS bill; no Vercel/Supabase deps.
+- [x] `infra/aws/DEPLOY.md`: ordered CLI runbook — default VPC, security groups,
+      ECR ×2 + image push, S3 (private), SQS (+DLQ), RDS Postgres 16 (pgvector),
+      Secrets Manager, IAM (2 roles), CloudWatch, ECS cluster, Cloud Map (web→agent),
+      ALB + target group + listener, 3 Fargate services, DB migrate, first admin, smoke test.
+- [x] IAM policy JSONs (`infra/aws/iam/`): exec trust + secrets-read; task trust +
+      S3/SQS/Bedrock (Bedrock `*`, noted to scope to model ARNs).
+- [x] ECS task-def JSONs (`infra/aws/ecs/`, envsubst placeholders): web/agent/worker.
+- [x] CI (`.github/workflows/deploy.yml`): path-filtered build+push to ECR + roll services.
+- [x] `next.config` standalone output; gateway env override (AGENT_MODEL/EMBED_MODEL
+      → Bedrock in prod, Gemini yaml locally).
+- [ ] **Run pending your AWS account**: enable Bedrock model access (us-east-2),
+      execute `infra/aws/DEPLOY.md`, migrate DB + RLS SQL, smoke test. **Phase 3b
+      done** ✅ (web task def injects no Supabase env).
+
+**Exit (code):** ✅ deploy runbook + task defs + IAM + CI authored. **Exit (live):**
+pending your run.
 
 ---
 
@@ -211,3 +274,15 @@ P0 ─▶ P1 ─▶ P3 ─▶ P4 ─▶ P5 ─▶ P6 ─▶ P7 ─▶ P8
 2. AWS region: **`us-east-2` (Ohio)** — closest to Texas, native Llama 3.3 70B.
 3. Agent model: **Llama 3.3 70B Instruct** (`us.meta.llama3-3-70b-instruct-v1:0`).
 4. Embeddings: **Titan Text Embeddings v2** (`amazon.titan-embed-text-v2:0`), 1024-dim.
+
+## Future — revisit Infrastructure-as-Code (Terraform / CDK)
+Deployment is intentionally a **plain AWS CLI runbook** (`infra/aws/DEPLOY.md`) for
+v1 — simplest to understand and run by hand while the footprint is small. Once the
+infra is stable and changes more often, port it to IaC for repeatability,
+drift-detection, and easy teardown/rebuild:
+- **Terraform** — portable, declarative, single source of truth (a first cut was
+  written then removed by request; the resource shapes in DEPLOY.md map 1:1).
+- **AWS CDK (TypeScript)** — likely the better fit for this TS-heavy repo
+  (same language, typed, testable); needs `cdk bootstrap`.
+Trigger to do this: more than one environment (staging/prod), or manual drift
+becoming painful. Until then the runbook + task-def JSONs + CI are enough.

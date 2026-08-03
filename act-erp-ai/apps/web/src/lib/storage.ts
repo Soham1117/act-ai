@@ -81,3 +81,15 @@ export function signedUrlForKey(key: string, expiresInSeconds = 3600) {
     { expiresIn: expiresInSeconds },
   );
 }
+
+/** Stream an object by raw key — used to proxy files same-origin (browser fetches
+ *  to S3/LocalStack would need CORS; proxying through the app avoids it and keeps
+ *  every read behind the caller's auth check). */
+export async function getObjectStream(key: string) {
+  const obj = await s3().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+  return {
+    stream: obj.Body!.transformToWebStream(),
+    contentType: obj.ContentType ?? "application/octet-stream",
+    contentLength: obj.ContentLength,
+  };
+}

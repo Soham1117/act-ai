@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { AssistantNav } from "@/components/assistant-nav";
 import {
   Activity,
   Banknote,
@@ -26,10 +27,12 @@ import {
   FileText,
   Home,
   LayoutGrid,
+  Library,
   Plane,
   Receipt,
   Settings,
   Shield,
+  Sparkles,
   Tags,
   Users,
 } from "lucide-react";
@@ -40,7 +43,10 @@ const NAV: Array<{
 }> = [
   {
     group: "Overview",
-    items: [{ href: "/admin", label: "Dashboard", icon: Home }],
+    items: [
+      { href: "/admin", label: "Dashboard", icon: Home },
+      { href: "/admin/chat", label: "Assistant", icon: Sparkles },
+    ],
   },
   {
     group: "People",
@@ -66,6 +72,7 @@ const NAV: Array<{
     group: "Workspace",
     items: [
       { href: "/admin/documents", label: "Documents", icon: FileText },
+      { href: "/admin/knowledge", label: "Knowledge base", icon: Library },
       { href: "/admin/activity", label: "Activity", icon: Activity },
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
       { href: "/admin/kiosks", label: "Kiosks", icon: LayoutGrid },
@@ -94,6 +101,8 @@ export function AdminSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {section.items.map((item) => {
+                  if (item.href === "/admin/chat")
+                    return <AssistantNav key={item.href} basePath={item.href} />;
                   const active =
                     pathname === item.href ||
                     (item.href !== "/admin" && pathname.startsWith(item.href));

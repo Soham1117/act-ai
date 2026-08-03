@@ -14,6 +14,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { AssistantNav } from "@/components/assistant-nav";
 import {
   Banknote,
   Bell,
@@ -25,6 +26,7 @@ import {
   Plane,
   Receipt,
   Settings,
+  Sparkles,
   User,
   Users,
 } from "lucide-react";
@@ -35,7 +37,10 @@ const NAV: Array<{
 }> = [
   {
     group: "Overview",
-    items: [{ href: "/dashboard", label: "Home", icon: Home }],
+    items: [
+      { href: "/dashboard", label: "Home", icon: Home },
+      { href: "/dashboard/chat", label: "Assistant", icon: Sparkles },
+    ],
   },
   {
     group: "Time",
@@ -81,6 +86,8 @@ export function EmployeeSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {section.items.map((item) => {
+                  if (item.href === "/dashboard/chat")
+                    return <AssistantNav key={item.href} basePath={item.href} />;
                   const active =
                     pathname === item.href ||
                     (item.href !== "/dashboard" && pathname.startsWith(item.href));
