@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAgentChat } from "@/hooks/use-agent-chat";
-import type { CitationInfo } from "@/lib/chat/types";
+import type { CitationInfo, Turn } from "@/lib/chat/types";
 import { AssistantMessageView } from "./assistant-message";
 import { ChatComposer } from "./chat-composer";
 import { DocumentPickerButton, type PickerDoc } from "./document-picker";
@@ -15,8 +15,14 @@ import { EvidencePanel } from "./evidence-panel";
  * parent layout adds p-4/md:p-6 and a sticky h-14 topbar — negative margins
  * cancel the padding so the workspace is exactly 100svh with no page scroll.
  */
-export function ChatWorkspace({ docs }: { docs: PickerDoc[] }) {
-  const { turns, busy, send, stop } = useAgentChat();
+export function ChatWorkspace({
+  docs,
+  initialSession,
+}: {
+  docs: PickerDoc[];
+  initialSession?: { sessionId: string; turns: Turn[] };
+}) {
+  const { turns, busy, send, stop } = useAgentChat(initialSession);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [citation, setCitation] = useState<CitationInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -81,7 +87,7 @@ export function ChatWorkspace({ docs }: { docs: PickerDoc[] }) {
       </section>
 
       {citation && (
-        <aside className="w-[42%] min-w-[360px] shrink-0">
+        <aside className="w-[clamp(320px,38vw,560px)] shrink-0">
           <EvidencePanel citation={citation} onClose={() => setCitation(null)} />
         </aside>
       )}

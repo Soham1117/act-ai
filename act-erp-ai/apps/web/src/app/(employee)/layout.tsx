@@ -16,11 +16,11 @@ export default async function EmployeeLayout({
         .catch(() => 0)
     : 0;
   return (
-    <SidebarProvider defaultOpen>
+    <SidebarProvider defaultOpen style={{ "--sidebar-width": "13.5rem" } as React.CSSProperties}>
       <EmployeeSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <AppTopbar user={user} initialUnread={initialUnread} />
-        <div className="flex-1 p-4 md:p-6">{children}</div>
+        <div className="min-w-0 flex-1 p-4 md:p-6">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

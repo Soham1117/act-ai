@@ -44,10 +44,38 @@ model User {
   knowledgeOwned   KnowledgeDocument[] @relation("KnowledgeOwned")
   documentGrants   DocumentGrant[]     @relation("KnowledgeGrants")
   agentRuns        AgentRun[]          @relation("AgentRuns")
+  chatSessions     ChatSession[]       @relation("ChatSessions")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@index([email])
+}
+
+/// A saved Assistant conversation (one per chat thread, per user).
+model ChatSession {
+  id        String        @id @default(cuid())
+  userId    String        @db.Uuid
+  user      User          @relation("ChatSessions", fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// "user" | "assistant"
+  role      String
+  content   String      @db.Text
+  /// Assistant turns: { [eid]: CitationInfo } so citation chips keep working on reload.
+  citations Json?
+  createdAt DateTime    @default(now())
+
+  @@index([sessionId, createdAt])
 }
 
 // ──────────────────────────────────────────────────────────────────────

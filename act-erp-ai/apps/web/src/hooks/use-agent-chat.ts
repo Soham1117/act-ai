@@ -3,19 +3,26 @@
 import { useCallback, useRef, useState } from "react";
 import { streamChat } from "@/lib/chat/sse";
 import { emptyAssistant, reduce } from "@/lib/chat/reducer";
+import { saveChatTurn } from "@/server/actions/chat-sessions";
 import type { AssistantMessage, Turn } from "@/lib/chat/types";
+
+/** Fired after a turn is persisted so the sidebar history list can refresh. */
+export const CHAT_SAVED_EVENT = "act:chat-saved";
 
 /**
  * Stateless chat: the agent service keeps no history, so we hold turns client-side
  * and resend the full conversation each send. `live` is the in-flight turn; folding
  * it into `history` on the next send keeps streaming from being clobbered.
+ * Completed turns are persisted to the user's ChatSession (created on first turn)
+ * so conversations survive reloads and appear under "Assistant" in the sidebar.
  */
-export function useAgentChat() {
-  const [history, setHistory] = useState<Turn[]>([]);
+export function useAgentChat(initial?: { sessionId: string; turns: Turn[] }) {
+  const [history, setHistory] = useState<Turn[]>(initial?.turns ?? []);
   const [live, setLive] = useState<Turn | null>(null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const liveRef = useRef<Turn | null>(null);
+  const sessionRef = useRef<string | null>(initial?.sessionId ?? null);
 
   const send = useCallback(async (message: string, selectedDocIds: string[] | null) => {
     setBusy(true);
@@ -63,6 +70,28 @@ export function useAgentChat() {
     } finally {
       applyLive((a) => (a.running = false));
       setBusy(false);
+
+      // Persist the completed turn (fire-and-forget; chat keeps working if it fails).
+      const done = liveRef.current;
+      const assistantText = done
+        ? done.assistant.blocks
+            .filter((b) => b.kind === "text")
+            .map((b) => (b as { text: string }).text)
+            .join("")
+        : "";
+      if (done && assistantText.trim()) {
+        saveChatTurn({
+          sessionId: sessionRef.current,
+          userText: done.user,
+          assistantText,
+          citations: done.assistant.citations,
+        })
+          .then((r) => {
+            sessionRef.current = r.sessionId;
+            window.dispatchEvent(new CustomEvent(CHAT_SAVED_EVENT));
+          })
+          .catch(() => {});
+      }
     }
   }, [history]);
 

@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { AssistantNav } from "@/components/assistant-nav";
 import {
   Activity,
   Banknote,
@@ -100,6 +101,8 @@ export function AdminSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {section.items.map((item) => {
+                  if (item.href === "/admin/chat")
+                    return <AssistantNav key={item.href} basePath={item.href} />;
                   const active =
                     pathname === item.href ||
                     (item.href !== "/admin" && pathname.startsWith(item.href));
