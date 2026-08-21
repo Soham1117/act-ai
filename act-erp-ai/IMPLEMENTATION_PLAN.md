@@ -20,7 +20,7 @@ retrieval path that isn't scoped — not even "temporarily for testing."
 - [x] `infra/docker-compose.yml`: postgres(pgvector), web, ai-agent, ai-worker, localstack.
 - [x] `Dockerfile.web`, `Dockerfile.ai` (one ai image; agent vs worker = different CMD).
 - [x] `infra/localstack/init-aws.sh` (creates S3 bucket + SQS queue locally).
-- [ ] Port from `relearn` — deferred into the phases that use them (agent/retrieval in
+- [ ] Port from the v1 reference implementation — deferred into the phases that use them (agent/retrieval in
       P5–P6, frontend visualizer/chat in P7). Not a P0 blocker.
 - [ ] First git commit / push — pending (do when ready to push to GitHub).
 

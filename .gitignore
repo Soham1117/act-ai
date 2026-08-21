@@ -14,3 +14,7 @@ build/
 
 # OS / editor
 .DS_Store
+
+# Local reference folders — never part of the deliverable
+relearn-new/
+relearn-old/

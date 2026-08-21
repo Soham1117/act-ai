@@ -5,7 +5,8 @@ LLM + embeddings go through LiteLLM → Gemini (config in `apps/ai/llm/models.ya
 storage/queue use LocalStack. Swap to Bedrock at deploy time by editing models.yaml.
 
 ## 0. Prerequisites (already running in this dev box)
-- **Postgres** with the `act` database (in the `relearn-postgres-1` pgvector container).
+- **Postgres** (pgvector image) with the `act` database. Commands below use
+  `$PG_CONTAINER` / `$PG_USER` — set them to your local container name and DB user.
 - **LocalStack** (S3 + SQS) on `:4566` (container `act-localstack`).
 
 If LocalStack was restarted, recreate the bucket + queue:
@@ -16,8 +17,8 @@ AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test aws --endpoint-url=http://loca
 
 If you ran `prisma db push` since, **re-apply** the raw SQL (it re-adds tsv/HNSW/RLS):
 ```bash
-docker cp apps/web/prisma/sql/01_rag_pgvector_rls.sql relearn-postgres-1:/tmp/rls.sql
-docker exec relearn-postgres-1 psql -U relearn -d act -f /tmp/rls.sql
+docker cp apps/web/prisma/sql/01_rag_pgvector_rls.sql $PG_CONTAINER:/tmp/rls.sql
+docker exec $PG_CONTAINER psql -U $PG_USER -d act -f /tmp/rls.sql
 ```
 
 ## 1. Set your Gemini key

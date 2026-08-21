@@ -1,6 +1,6 @@
 """The agent loop. No framework: model call → tool calls → results → repeat,
 emitting an SSE event for every transition. The streamer is injected so the loop
-is testable with a scripted fake model (no API key). Ported from relearn.
+is testable with a scripted fake model (no API key). Ported from the v1 reference implementation.
 """
 
 from __future__ import annotations
