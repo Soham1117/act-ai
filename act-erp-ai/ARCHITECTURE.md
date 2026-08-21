@@ -14,7 +14,7 @@ PDF visualizer that highlights cited passages.
 ## 1. Goals & non-negotiables
 
 **Goals**
-- Reuse the strong half of `relearn`: the agent loop, hybrid retrieval, SSE event
+- Reuse the strong half of the v1 reference implementation: the agent loop, hybrid retrieval, SSE event
   model, and PDF visualizer.
 - Add a **scoped SQL tool** so the agent answers from structured records (BOMs,
   tool records), not just prose.
@@ -23,7 +23,7 @@ PDF visualizer that highlights cited passages.
 - Single cloud vendor (**AWS**), single bill, low ops.
 - Keep the existing ERP frontend exactly as-is; chat is one more feature.
 
-**Non-negotiable invariants** (inherited from `relearn`, extended)
+**Non-negotiable invariants** (inherited from the v1 reference implementation, extended)
 1. **Provenance** — every claim cites evidence (`[E#]`) that resolves to a real chunk/row.
 2. **Scope** — the model can never widen its own document scope. Scope is computed
    in `web` and enforced in SQL `WHERE` clauses **and** Postgres RLS.
@@ -42,9 +42,9 @@ PDF visualizer that highlights cited passages.
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| D1 | **Reuse relearn's agent loop + SSE + visualizer**, do **not** adopt pydantic-ai | relearn already has the expensive 80% (SSE taxonomy, evidence/citation model, HITL, pdf.js bbox highlighting) and already does scope-injection via `RunContext`. pydantic-ai would mean rebuilding all that plumbing for a nicer tool syntax. |
+| D1 | **Reuse the v1 agent loop + SSE + visualizer**, do **not** adopt pydantic-ai | v1 already has the expensive 80% (SSE taxonomy, evidence/citation model, HITL, pdf.js bbox highlighting) and already does scope-injection via `RunContext`. pydantic-ai would mean rebuilding all that plumbing for a nicer tool syntax. |
 | D2 | **No LangChain / LangGraph** | Single agent + N tools needs no graph runtime. LangChain's SQL toolkit generates arbitrary SQL — exactly the RBAC hole we forbid. Bloat the user explicitly rejected. |
-| D3 | **LiteLLM gateway → Amazon Bedrock** | Keeps relearn's provider-agnostic model layer; one config swap changes models. Bedrock = single AWS bill, IAM not API keys, data stays in-boundary. |
+| D3 | **LiteLLM gateway → Amazon Bedrock** | Keeps the provider-agnostic model layer; one config swap changes models. Bedrock = single AWS bill, IAM not API keys, data stays in-boundary. |
 | D4 | **Bedrock open-weight model** (Llama 3.3 70B or gpt-oss-120b) + **Bedrock embeddings** (Titan v2 / Cohere, 1024-dim) | Pay-per-token, zero idle cost — fits ~300–500 queries/day. Strong tool-callers (weak models break provenance). Gemma rejected: not on Bedrock → self-host → idle GPU cost. |
 | D5 | **Marker (Datalab) for PDF/DOCX**; **CSV/XLSX parsed directly** | Marker's structured tree is what powers `get_toc`/`read_section`. Structured files are already tabular — they bypass parsing entirely. Single parsing vendor. |
 | D6 | **Async worker (SQS + Fargate), not Lambda** | Ingestion is long-running (Marker polling, batch embeds). Lambda's 15-min cap + cold starts fight that. SQS also lets us drop Redis. |
@@ -96,7 +96,7 @@ Python codebase and one Docker image** (different start command).
 
 ## 4. Repository layout
 
-One repo, sibling services. `relearn` is **reference only** — not copied in; we
+One repo, sibling services. The v1 reference implementation is **reference only** — not copied in; we
 port the specific files we need.
 
 ```
@@ -247,7 +247,7 @@ per unique file. Re-upload of an identical file short-circuits.
 ## 8. LLM & embeddings
 
 - **Gateway:** LiteLLM, configured by a role-based `models.yaml` (ported from
-  relearn) — `roles: { agent, small, embeddings }`. Swapping models = config edit.
+  v1) — `roles: { agent, small, embeddings }`. Swapping models = config edit.
 - **Region:** **`us-east-2` (Ohio)** — closest to Texas (lowest latency) and the
   native Bedrock region for Llama 3.3 70B.
 - **Agent model (locked):** Bedrock **Llama 3.3 70B Instruct** via cross-region
@@ -264,7 +264,7 @@ per unique file. Re-upload of an identical file short-circuits.
 
 ## 9. Agent design
 
-Ported from relearn, extended with the SQL/record tools. **Single agent**, async
+Ported from v1, extended with the SQL/record tools. **Single agent**, async
 event-emitting loop, max ~15 iterations.
 
 ### Tools (all receive `RunContext`, all scope-injected)
@@ -286,7 +286,7 @@ So even if the model crafts a hostile filter, RLS + parameterization bound it to
 allowed rows. This is what makes "agent has an SQL tool" safe.
 
 ### Streaming & provenance
-- Emits the relearn SSE taxonomy: `run_started`, `thinking_delta`, `text_delta`,
+- Emits the v1 SSE taxonomy: `run_started`, `thinking_delta`, `text_delta`,
   `tool_started`, `tool_result`, `evidence_added`, `clarification_required`,
   `citation_map`, `confidence`, `run_completed`, `error`.
 - Each event persisted to `agent_run_event` with monotonic `seq` (reconnect-replay).
@@ -306,7 +306,7 @@ The existing erp UI is untouched except for additions.
   `<ChatWorkspace>`; scope differs by role.
 - **Three-pane layout:** left = access-scoped **document picker**; center = chat +
   agent activity; right = **DocumentVisualizer** (pdf.js, bbox highlight, citation jump).
-- **Ported from relearn frontend** (React 19 compatible): `visualizer/*`, `chat/*`,
+- **Ported from the v1 frontend** (React 19 compatible): `visualizer/*`, `chat/*`,
   `lib/chat-types.ts`, `lib/chat-reducer.ts`, `lib/pdf.ts` — restyled to shadcn tokens.
 - **`/api/chat` route handler** = the gateway: authenticate → compute
   `allowed_doc_ids` → proxy SSE from `agent`. Browser talks only to Next.js.
@@ -319,7 +319,7 @@ The existing erp UI is untouched except for additions.
 - The PDF-centric tree-mapper is an **ingestion** concern; no agent framework helps it.
 - One agent + N tools needs no graph runtime; the loop is ~200 lines and exists.
 - LangChain's SQL toolkit emits **arbitrary SQL** — the precise RBAC hole we forbid.
-- relearn already provides DI-style scoping (`RunContext`), SSE, visualizer, HITL —
+- v1 already provides DI-style scoping (`RunContext`), SSE, visualizer, HITL —
   the things a framework is adopted to get. Reusing it is less code and less bloat.
 
 ---

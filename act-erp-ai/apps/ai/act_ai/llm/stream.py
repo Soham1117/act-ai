@@ -2,7 +2,7 @@
 
 The agent loop consumes `Delta` items and never sees provider quirks. Tool-call
 fragments (streamed piecewise by index) are assembled here and surfaced once on
-the terminal delta. Ported from relearn; the only change is litellm (Bedrock)
+the terminal delta. Ported from the v1 reference implementation; the only change is litellm (Bedrock)
 instead of a raw OpenAI client.
 """
 

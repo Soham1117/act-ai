@@ -18,5 +18,3 @@ that highlights cited passages.
 - **RBAC on retrieval:** scope computed in `web`, enforced in SQL `WHERE` **and**
   Postgres RLS — the model can never widen its own scope.
 
-> `relearn` (sibling folder) is **reference only** — specific files are ported in,
-> the folder is not copied.

@@ -1,6 +1,6 @@
 """Hybrid retrieval — pgvector semantic + tsv lexical, RRF fusion, heading boost.
 
-Ported from relearn, adapted to our Prisma schema (quoted PascalCase tables,
+Ported from the v1 reference implementation, adapted to our Prisma schema (quoted PascalCase tables,
 camelCase columns, text doc ids) and asyncpg. Scoped to the run's allowed
 documents (app-layer WHERE) on top of RLS (defense-in-depth).
 """

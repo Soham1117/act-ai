@@ -1,5 +1,5 @@
 """SSE event taxonomy. The agent loop emits an event for every state transition;
-each carries a monotonic seq for reconnect-replay. Ported from relearn."""
+each carries a monotonic seq for reconnect-replay. Ported from the v1 reference implementation."""
 
 from __future__ import annotations
 
