@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { toastAction } from "@/lib/toast-action";
 import { uploadKnowledgeDocument } from "@/server/actions/knowledge";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,17 +40,16 @@ export function KnowledgeUploadDialog() {
     setBusy(true);
     try {
       const bytes = await file.arrayBuffer();
-      await uploadKnowledgeDocument(
+      const res = await uploadKnowledgeDocument(
         { title: title.trim(), visibility, grantUserIds: [] },
         { name: file.name, type: file.type, bytes },
       );
+      if (!toastAction(res)) return;
       toast.success("Uploaded — ingestion queued");
       setOpen(false);
       setTitle("");
       setFile(null);
       router.refresh();
-    } catch (e) {
-      toast.error((e as Error).message || "Upload failed");
     } finally {
       setBusy(false);
     }

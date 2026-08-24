@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { CheckCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { toastAction } from "@/lib/toast-action";
 import { markAllNotificationsRead } from "@/server/actions/notifications";
 
 export function MarkAllReadButton() {
@@ -15,7 +16,8 @@ export function MarkAllReadButton() {
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          await markAllNotificationsRead();
+          const res = await markAllNotificationsRead();
+          if (!toastAction(res)) return;
           toast.success("Marked all read");
         })
       }

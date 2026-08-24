@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createBenefitPlan, updateBenefitPlan, upsertPlanTiers } from "@/server/actions/benefits";
+import { toastAction } from "@/lib/toast-action";
 import { tierLabel } from "@/lib/benefits";
 
 const TYPES = [
@@ -83,39 +84,41 @@ export function PlanDialog({ plan }: { plan?: PlanForEdit }) {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        const input = {
-          type,
-          name,
-          carrierName,
-          groupNumber: groupNumber || undefined,
-          carrierPhone: carrierPhone || undefined,
-          carrierPortalUrl: carrierPortalUrl || undefined,
-          planYearStart,
-          planYearEnd,
-          costPeriod,
-          matchDescription: matchDescription || undefined,
-          vestingDescription: vestingDescription || undefined,
-          notes: notes || undefined,
-        };
-        const { id } = isEdit ? await updateBenefitPlan(plan.id, input) : await createBenefitPlan(input);
+      const input = {
+        type,
+        name,
+        carrierName,
+        groupNumber: groupNumber || undefined,
+        carrierPhone: carrierPhone || undefined,
+        carrierPortalUrl: carrierPortalUrl || undefined,
+        planYearStart,
+        planYearEnd,
+        costPeriod,
+        matchDescription: matchDescription || undefined,
+        vestingDescription: vestingDescription || undefined,
+        notes: notes || undefined,
+      };
+      const planRes = isEdit
+        ? await updateBenefitPlan(plan.id, input)
+        : await createBenefitPlan(input);
+      if (!toastAction(planRes)) return;
 
-        if (hasTiers) {
-          const rows = TIERS.filter(
-            (t) => tierPrices[t].employeeCost.trim() !== "" || tierPrices[t].employerCost.trim() !== "",
-          ).map((t) => ({
-            tier: t,
-            employeeCost: Number(tierPrices[t].employeeCost || 0),
-            employerCost: Number(tierPrices[t].employerCost || 0),
-          }));
-          if (rows.length > 0) await upsertPlanTiers(id, rows);
+      if (hasTiers) {
+        const rows = TIERS.filter(
+          (t) => tierPrices[t].employeeCost.trim() !== "" || tierPrices[t].employerCost.trim() !== "",
+        ).map((t) => ({
+          tier: t,
+          employeeCost: Number(tierPrices[t].employeeCost || 0),
+          employerCost: Number(tierPrices[t].employerCost || 0),
+        }));
+        if (rows.length > 0) {
+          const tierRes = await upsertPlanTiers(planRes.id, rows);
+          if (!toastAction(tierRes)) return;
         }
-
-        toast.success(isEdit ? "Plan updated" : "Plan created");
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
       }
+
+      toast.success(isEdit ? "Plan updated" : "Plan created");
+      setOpen(false);
     });
   }
 

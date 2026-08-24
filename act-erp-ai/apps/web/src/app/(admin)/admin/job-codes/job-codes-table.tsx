@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { deleteJobCode, toggleJobCodeActive } from "@/server/actions/job-codes";
+import { toastAction } from "@/lib/toast-action";
 import { JobCodeDialog } from "./job-code-dialog";
 import { getDepartmentConfig } from "@/lib/departments";
 
@@ -116,12 +117,9 @@ export function JobCodesTable({ rows, departments }: Props) {
                       <DropdownMenuItem
                         onClick={() =>
                           startTransition(async () => {
-                            try {
-                              await toggleJobCodeActive(j.id);
-                              toast.success(j.isActive ? "Deactivated" : "Activated");
-                            } catch (e) {
-                              toast.error(e instanceof Error ? e.message : "Failed");
-                            }
+                            const res = await toggleJobCodeActive(j.id);
+                            if (!toastAction(res)) return;
+                            toast.success(j.isActive ? "Deactivated" : "Activated");
                           })
                         }
                       >
@@ -136,12 +134,9 @@ export function JobCodesTable({ rows, departments }: Props) {
                         className="text-destructive focus:text-destructive"
                         onClick={() =>
                           startTransition(async () => {
-                            try {
-                              await deleteJobCode(j.id);
-                              toast.success("Deleted");
-                            } catch (e) {
-                              toast.error(e instanceof Error ? e.message : "Failed");
-                            }
+                            const res = await deleteJobCode(j.id);
+                            if (!toastAction(res)) return;
+                            toast.success("Deleted");
                           })
                         }
                       >

@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { rollForwardPlanYear } from "@/server/actions/benefits";
+import { toastAction } from "@/lib/toast-action";
 import { tierLabel } from "@/lib/benefits";
 
 const TIERS = [
@@ -52,22 +53,19 @@ export function RollForwardDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        const tiers = hasTiers
-          ? TIERS.filter(
-              (t) => tierPrices[t].employeeCost.trim() !== "" || tierPrices[t].employerCost.trim() !== "",
-            ).map((t) => ({
-              tier: t,
-              employeeCost: Number(tierPrices[t].employeeCost || 0),
-              employerCost: Number(tierPrices[t].employerCost || 0),
-            }))
-          : undefined;
-        await rollForwardPlanYear({ oldPlanId: plan.id, planYearStart, planYearEnd, tiers });
-        toast.success(`Rolled forward — ${plan.openEnrollmentCount} enrollment(s) mirrored to the new plan year`);
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const tiers = hasTiers
+        ? TIERS.filter(
+            (t) => tierPrices[t].employeeCost.trim() !== "" || tierPrices[t].employerCost.trim() !== "",
+          ).map((t) => ({
+            tier: t,
+            employeeCost: Number(tierPrices[t].employeeCost || 0),
+            employerCost: Number(tierPrices[t].employerCost || 0),
+          }))
+        : undefined;
+      const res = await rollForwardPlanYear({ oldPlanId: plan.id, planYearStart, planYearEnd, tiers });
+      if (!toastAction(res)) return;
+      toast.success(`Rolled forward — ${plan.openEnrollmentCount} enrollment(s) mirrored to the new plan year`);
+      setOpen(false);
     });
   }
 

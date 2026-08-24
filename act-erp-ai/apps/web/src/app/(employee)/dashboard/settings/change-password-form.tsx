@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toastAction } from "@/lib/toast-action";
 import { changeMyPassword } from "@/server/actions/auth";
 
 export function ChangePasswordForm() {
@@ -20,10 +21,7 @@ export function ChangePasswordForm() {
     if (pw.length < 8) return toast.error("Min 8 characters");
     startTransition(async () => {
       const res = await changeMyPassword(current, pw);
-      if (!res.ok) {
-        toast.error(res.error ?? "Could not update password");
-        return;
-      }
+      if (!toastAction(res)) return;
       toast.success("Password updated — please sign in again");
       setCurrent("");
       setPw("");

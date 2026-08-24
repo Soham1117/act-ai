@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toastAction } from "@/lib/toast-action";
 import { updateMyPersonalEmail } from "@/server/actions/employees";
 
 export function PersonalEmailForm({ current }: { current: string }) {
@@ -17,10 +18,7 @@ export function PersonalEmailForm({ current }: { current: string }) {
     e.preventDefault();
     startTransition(async () => {
       const res = await updateMyPersonalEmail(password, email);
-      if (!res.ok) {
-        toast.error(res.error ?? "Could not update");
-        return;
-      }
+      if (!toastAction(res)) return;
       toast.success("Personal email updated");
       setPassword("");
     });

@@ -8,11 +8,13 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { sendLoginCode } from "@/lib/email";
 import { rateLimited } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
+import { ok, fail, type ActionResult } from "@/lib/action-result";
 
 export type LoginResult = { ok: true } | { ok: false; error: string };
 
 const CHALLENGE_TTL_MS = 10 * 60_000;
-const GENERIC_ERROR = "Invalid email/username or password.";
+const GENERIC_ERROR =
+  "Invalid email/username or password. Check both and try again.";
 
 /**
  * Step 1 of login. Verifies the identifier (email OR username) + password,
@@ -119,18 +121,20 @@ export async function signOut() {
 export async function changeMyPassword(
   current: string,
   next: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const user = await getSessionUser();
-  if (!user) return { ok: false, error: "Not signed in" };
-  if (next.length < 8) return { ok: false, error: "Min 8 characters" };
+  if (!user) return fail("You are not signed in. Sign in again, then change your password.");
+  if (next.length < 8) {
+    return fail("New password must be at least 8 characters. Choose a longer password.");
+  }
 
   const row = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
   if (!row?.passwordHash || !(await verifyPassword(current, row.passwordHash))) {
-    return { ok: false, error: "Current password is incorrect" };
+    return fail("Current password is incorrect. Re-enter it and try again.");
   }
   await db.user.update({
     where: { id: user.id },
     data: { passwordHash: await hashPassword(next), tokenVersion: { increment: 1 } },
   });
-  return { ok: true };
+  return ok();
 }

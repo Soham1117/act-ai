@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { broadcastNotification } from "@/server/actions/notifications";
+import { toastAction } from "@/lib/toast-action";
 
 const TYPES = ["PAYROLL", "COMPANY", "ANNOUNCEMENT", "POLICY", "OTHER"] as const;
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
@@ -47,22 +48,19 @@ export function BroadcastDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        const r = await broadcastNotification({
-          type,
-          priority,
-          title,
-          message,
-          link: link || undefined,
-          departmentIds: scope === "departments" ? selectedDepts : undefined,
-        });
-        toast.success(`Sent to ${r.recipientCount} recipient(s)`);
-        setOpen(false);
-        setTitle(""); setMessage(""); setLink("");
-        setSelectedDepts([]); setScope("all");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const r = await broadcastNotification({
+        type,
+        priority,
+        title,
+        message,
+        link: link || undefined,
+        departmentIds: scope === "departments" ? selectedDepts : undefined,
+      });
+      if (!toastAction(r)) return;
+      toast.success(`Sent to ${r.recipientCount} recipient(s)`);
+      setOpen(false);
+      setTitle(""); setMessage(""); setLink("");
+      setSelectedDepts([]); setScope("all");
     });
   }
 

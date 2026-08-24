@@ -8,34 +8,46 @@ import { requireAdmin } from "@/lib/auth";
 import { hashPassword } from "@/lib/auth/password";
 import { uploadFile } from "@/lib/storage";
 import { audit } from "@/lib/audit";
+import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 
 const INVITE_TTL_DAYS = 7;
 
 /** Admin: create a new onboarding invite. Returns token + full URL. */
-export async function createOnboardingInvite(input: { email?: string }) {
+export async function createOnboardingInvite(
+  input: { email?: string },
+): Promise<ActionResult<{ id: string; token: string }>> {
   const admin = await requireAdmin();
-  const token = randomUUID();
-  const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
-  const invite = await db.onboardingInvite.create({
-    data: {
-      token,
-      email: input.email || null,
-      expiresAt,
-      createdById: admin.id,
-    },
-  });
-  revalidatePath("/admin/onboarding");
-  return invite;
+  try {
+    const token = randomUUID();
+    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const invite = await db.onboardingInvite.create({
+      data: {
+        token,
+        email: input.email || null,
+        expiresAt,
+        createdById: admin.id,
+      },
+    });
+    revalidatePath("/admin/onboarding");
+    return ok({ id: invite.id, token: invite.token });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 /** Admin: revoke (mark expired) an outstanding invite. */
-export async function revokeOnboardingInvite(id: string) {
+export async function revokeOnboardingInvite(id: string): Promise<ActionResult> {
   await requireAdmin();
-  await db.onboardingInvite.update({
-    where: { id },
-    data: { status: "EXPIRED", expiresAt: new Date(0) },
-  });
-  revalidatePath("/admin/onboarding");
+  try {
+    await db.onboardingInvite.update({
+      where: { id },
+      data: { status: "EXPIRED", expiresAt: new Date(0) },
+    });
+    revalidatePath("/admin/onboarding");
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const submitSchema = z.object({
@@ -106,100 +118,110 @@ export async function submitOnboarding(
     /** Base64-encoded file bytes (the form encodes via FileReader). */
     base64: string;
   }>,
-) {
-  const invite = await db.onboardingInvite.findUnique({ where: { token } });
-  if (!invite) throw new Error("Invite not found");
-  if (invite.status !== "PENDING") throw new Error("Invite already used");
-  if (invite.expiresAt < new Date()) throw new Error("Invite expired");
+): Promise<ActionResult> {
+  try {
+    const invite = await db.onboardingInvite.findUnique({ where: { token } });
+    if (!invite) {
+      return fail(
+        "This onboarding invite was not found. Ask your admin for a new invite link.",
+      );
+    }
+    if (invite.status !== "PENDING") {
+      return fail(
+        "This onboarding invite was already used. Ask your admin for a new invite if you need to continue.",
+      );
+    }
+    if (invite.expiresAt < new Date()) {
+      return fail(
+        "This onboarding invite has expired. Ask your admin to send a new invite link.",
+      );
+    }
 
-  const data = submitSchema.parse(fields);
+    const data = submitSchema.parse(fields);
 
-  const passwordHash = await hashPassword(data.password);
+    const passwordHash = await hashPassword(data.password);
 
-  // Create profile + employee (credentials user, no Supabase).
-  const employee = await db.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email: data.email ?? null,
-        username: data.username ?? null,
-        name: data.name,
-        role: "EMPLOYEE",
-        passwordHash,
-      },
-    });
-    return tx.employee.create({
-      data: {
-        employeeId: data.employeeId,
-        userId: user.id,
-        name: data.name,
-        email: data.email ?? null,
-        personalEmail: data.personalEmail,
-        gender: data.gender,
-        maritalStatus: data.maritalStatus ?? null,
-        phoneNumber: data.phoneNumber ?? null,
-        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
-        address: data.address ?? null,
-        city: data.city ?? null,
-        state: data.state ?? null,
-        zipCode: data.zipCode ?? null,
-        nationality: data.nationality ?? null,
-        educationLevel: data.educationLevel ?? null,
-        ssnLast4: data.ssnLast4,
-        emergencyName: data.emergencyName ?? null,
-        emergencyPhone: data.emergencyPhone ?? null,
-        departmentId: data.departmentId || null,
-        jobTitle: data.jobTitle ?? null,
-        position: data.position ?? null,
-        dateOfHire: data.dateOfHire ? new Date(data.dateOfHire) : null,
-        employmentType: data.employmentType,
-        employmentStatus: "ACTIVE",
-        compensationType: data.compensationType,
-        compensationValue: data.compensationValue ?? null,
-      },
-    });
-  });
-
-  // Upload document files (best-effort; don't fail the whole submission if
-  // individual uploads fail).
-  for (const f of files) {
-    try {
-      const bytes = Buffer.from(f.base64, "base64");
-      const path = `${employee.id}/${Date.now()}-${f.fileName.replace(/[^\w.-]/g, "_")}`;
-      // Stored as a Document row (below), so it lives under the "documents"
-      // prefix like every other document — /api/documents/[id]/file expects it there.
-      const { key } = await uploadFile("documents", path, bytes, {
-        contentType: f.contentType,
-      });
-      await db.document.create({
+    const employee = await db.$transaction(async (tx) => {
+      const user = await tx.user.create({
         data: {
-          title: f.title,
-          fileName: path,
-          fileType: f.contentType,
-          fileUrl: key,
-          documentType: f.documentType,
-          employeeId: employee.id,
+          email: data.email ?? null,
+          username: data.username ?? null,
+          name: data.name,
+          role: "EMPLOYEE",
+          passwordHash,
         },
       });
-    } catch (err) {
-      console.error("Onboarding document upload failed", f.fileName, err);
+      return tx.employee.create({
+        data: {
+          employeeId: data.employeeId,
+          userId: user.id,
+          name: data.name,
+          email: data.email ?? null,
+          personalEmail: data.personalEmail,
+          gender: data.gender,
+          maritalStatus: data.maritalStatus ?? null,
+          phoneNumber: data.phoneNumber ?? null,
+          dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+          address: data.address ?? null,
+          city: data.city ?? null,
+          state: data.state ?? null,
+          zipCode: data.zipCode ?? null,
+          nationality: data.nationality ?? null,
+          educationLevel: data.educationLevel ?? null,
+          ssnLast4: data.ssnLast4,
+          emergencyName: data.emergencyName ?? null,
+          emergencyPhone: data.emergencyPhone ?? null,
+          departmentId: data.departmentId || null,
+          jobTitle: data.jobTitle ?? null,
+          position: data.position ?? null,
+          dateOfHire: data.dateOfHire ? new Date(data.dateOfHire) : null,
+          employmentType: data.employmentType,
+          employmentStatus: "ACTIVE",
+          compensationType: data.compensationType,
+          compensationValue: data.compensationValue ?? null,
+        },
+      });
+    });
+
+    for (const f of files) {
+      try {
+        const bytes = Buffer.from(f.base64, "base64");
+        const path = `${employee.id}/${Date.now()}-${f.fileName.replace(/[^\w.-]/g, "_")}`;
+        const { key } = await uploadFile("documents", path, bytes, {
+          contentType: f.contentType,
+        });
+        await db.document.create({
+          data: {
+            title: f.title,
+            fileName: path,
+            fileType: f.contentType,
+            fileUrl: key,
+            documentType: f.documentType,
+            employeeId: employee.id,
+          },
+        });
+      } catch (err) {
+        console.error("Onboarding document upload failed", f.fileName, err);
+      }
     }
+
+    await db.onboardingInvite.update({
+      where: { id: invite.id },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+        completedByEmployeeId: employee.id,
+      },
+    });
+
+    await audit({
+      action: "onboarding.complete",
+      resource: `Employee:${employee.id}`,
+      diff: { employeeId: data.employeeId, email: data.email },
+    });
+
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
   }
-
-  // Mark invite completed.
-  await db.onboardingInvite.update({
-    where: { id: invite.id },
-    data: {
-      status: "COMPLETED",
-      completedAt: new Date(),
-      completedByEmployeeId: employee.id,
-    },
-  });
-
-  await audit({
-    action: "onboarding.complete",
-    resource: `Employee:${employee.id}`,
-    diff: { employeeId: data.employeeId, email: data.email },
-  });
-
-  return { ok: true };
 }

@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { toastAction } from "@/lib/toast-action";
 import { deleteDocument } from "@/server/actions/documents";
 
 export function DeleteDocumentButton({
@@ -19,12 +20,9 @@ export function DeleteDocumentButton({
   function onClick() {
     if (!confirm(`Delete${title ? ` "${title}"` : " this document"}? This cannot be undone.`)) return;
     startTransition(async () => {
-      try {
-        await deleteDocument(id);
-        toast.success("Document deleted");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Delete failed");
-      }
+      const res = await deleteDocument(id);
+      if (!toastAction(res)) return;
+      toast.success("Document deleted");
     });
   }
 

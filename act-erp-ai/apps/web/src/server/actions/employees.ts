@@ -7,6 +7,8 @@ import { requireAdmin, requireUser } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { audit } from "@/lib/audit";
 import { uploadFile } from "@/lib/storage";
+import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
+import { resolveEmailHireMode } from "@/lib/employee-create";
 
 const employeeSchema = z.object({
   name: z.string().min(2),
@@ -28,53 +30,91 @@ const employeeSchema = z.object({
   password: z.string().min(8),
 });
 
-export async function createEmployee(input: z.infer<typeof employeeSchema>) {
+export async function createEmployee(
+  input: z.infer<typeof employeeSchema>,
+): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const data = employeeSchema.parse(input);
+  try {
+    const data = employeeSchema.parse(input);
 
-  const passwordHash = await hashPassword(data.password);
-
-  // Auto-generate EMP-YYYY-NNNN.
-  const year = new Date().getFullYear();
-  const count = await db.employee.count({
-    where: { employeeId: { startsWith: `EMP-${year}-` } },
-  });
-  const employeeId = `EMP-${year}-${String(count + 1).padStart(4, "0")}`;
-
-  const employee = await db.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email: data.email,
-        username: data.username ?? null,
-        name: data.name,
-        role: "EMPLOYEE",
-        passwordHash,
-      },
+    const existing = await db.user.findUnique({
+      where: { email: data.email },
+      select: { id: true, role: true, employee: { select: { id: true } } },
     });
-    return tx.employee.create({
-      data: {
-        employeeId,
-        userId: user.id,
-        name: data.name,
-        email: data.email,
-        personalEmail: data.personalEmail,
-        ssnLast4: data.ssnLast4 ?? null,
-        gender: data.gender,
-        departmentId: data.departmentId || null,
-        jobTitle: data.jobTitle || null,
-        phoneNumber: data.phoneNumber || null,
-        employmentType: data.employmentType,
-        compensationType: data.compensationType,
-        compensationValue: data.compensationValue ?? null,
-      },
-    });
-  });
+    const mode = resolveEmailHireMode(
+      existing ? { employeeId: existing.employee?.id ?? null } : null,
+    );
+    if (mode === "conflict") {
+      return fail(
+        "That company email already belongs to an employee. Use a different login email.",
+      );
+    }
 
-  await audit({ action: "employee.create", resource: `Employee:${employee.id}`, diff: { employeeId, email: data.email } });
-  revalidatePath("/admin/employees");
-  // Plain object only — Employee rows carry Decimals (compensationValue,
-  // defaultHourlyRate) that can't cross the server-action boundary.
-  return { id: employee.id };
+    const passwordHash = await hashPassword(data.password);
+
+    // Auto-generate EMP-YYYY-NNNN.
+    const year = new Date().getFullYear();
+    const count = await db.employee.count({
+      where: { employeeId: { startsWith: `EMP-${year}-` } },
+    });
+    const employeeId = `EMP-${year}-${String(count + 1).padStart(4, "0")}`;
+
+    const employee = await db.$transaction(async (tx) => {
+      let userId: string;
+      if (mode === "link" && existing) {
+        // Bootstrap admin (or any auth-only user) becoming an employee —
+        // keep their role (do not demote ADMIN → EMPLOYEE) and refresh
+        // password/name/username from the form.
+        await tx.user.update({
+          where: { id: existing.id },
+          data: {
+            name: data.name,
+            username: data.username ?? undefined,
+            passwordHash,
+          },
+        });
+        userId = existing.id;
+      } else {
+        const user = await tx.user.create({
+          data: {
+            email: data.email,
+            username: data.username ?? null,
+            name: data.name,
+            role: "EMPLOYEE",
+            passwordHash,
+          },
+        });
+        userId = user.id;
+      }
+      return tx.employee.create({
+        data: {
+          employeeId,
+          userId,
+          name: data.name,
+          email: data.email,
+          personalEmail: data.personalEmail,
+          ssnLast4: data.ssnLast4 ?? null,
+          gender: data.gender,
+          departmentId: data.departmentId || null,
+          jobTitle: data.jobTitle || null,
+          phoneNumber: data.phoneNumber || null,
+          employmentType: data.employmentType,
+          compensationType: data.compensationType,
+          compensationValue: data.compensationValue ?? null,
+        },
+      });
+    });
+
+    await audit({
+      action: "employee.create",
+      resource: `Employee:${employee.id}`,
+      diff: { employeeId, email: data.email, linkedExistingUser: mode === "link" },
+    });
+    revalidatePath("/admin/employees");
+    return ok({ id: employee.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const updateSchema = z.object({
@@ -112,29 +152,32 @@ const updateSchema = z.object({
 export async function updateEmployee(
   employeeId: string,
   input: z.infer<typeof updateSchema>,
-) {
+): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const parsed = updateSchema.parse(input);
-  const data: Record<string, unknown> = { ...parsed };
-  // Coerce date strings to Date.
-  if (typeof parsed.dateOfBirth === "string" && parsed.dateOfBirth) {
-    data.dateOfBirth = new Date(parsed.dateOfBirth);
-  } else if (parsed.dateOfBirth === "") {
-    data.dateOfBirth = null;
+  try {
+    const parsed = updateSchema.parse(input);
+    const data: Record<string, unknown> = { ...parsed };
+    if (typeof parsed.dateOfBirth === "string" && parsed.dateOfBirth) {
+      data.dateOfBirth = new Date(parsed.dateOfBirth);
+    } else if (parsed.dateOfBirth === "") {
+      data.dateOfBirth = null;
+    }
+    if (typeof parsed.dateOfHire === "string" && parsed.dateOfHire) {
+      data.dateOfHire = new Date(parsed.dateOfHire);
+    } else if (parsed.dateOfHire === "") {
+      data.dateOfHire = null;
+    }
+    const updated = await db.employee.update({
+      where: { id: employeeId },
+      data,
+    });
+    await audit({ action: "employee.update", resource: `Employee:${employeeId}`, diff: data });
+    revalidatePath("/admin/employees");
+    revalidatePath(`/admin/employees/${employeeId}`);
+    return ok({ id: updated.id });
+  } catch (err) {
+    return failFromUnknown(err);
   }
-  if (typeof parsed.dateOfHire === "string" && parsed.dateOfHire) {
-    data.dateOfHire = new Date(parsed.dateOfHire);
-  } else if (parsed.dateOfHire === "") {
-    data.dateOfHire = null;
-  }
-  const updated = await db.employee.update({
-    where: { id: employeeId },
-    data,
-  });
-  await audit({ action: "employee.update", resource: `Employee:${employeeId}`, diff: data });
-  revalidatePath("/admin/employees");
-  revalidatePath(`/admin/employees/${employeeId}`);
-  return { id: updated.id };
 }
 
 const passwordSchema = z.object({
@@ -144,172 +187,206 @@ const passwordSchema = z.object({
 export async function changeEmployeePassword(
   employeeId: string,
   input: z.infer<typeof passwordSchema>,
-) {
+): Promise<ActionResult> {
   await requireAdmin();
-  const { password } = passwordSchema.parse(input);
-  const employee = await db.employee.findUnique({
-    where: { id: employeeId },
-    select: { userId: true, name: true },
-  });
-  if (!employee) throw new Error("Employee not found");
-  // Set the new hash and revoke existing sessions (bump tokenVersion).
-  await db.user.update({
-    where: { id: employee.userId },
-    data: { passwordHash: await hashPassword(password), tokenVersion: { increment: 1 } },
-  });
-  await audit({
-    action: "employee.password_change",
-    resource: `Employee:${employeeId}`,
-    diff: { name: employee.name },
-  });
-  return { ok: true };
+  try {
+    const { password } = passwordSchema.parse(input);
+    const employee = await db.employee.findUnique({
+      where: { id: employeeId },
+      select: { userId: true, name: true },
+    });
+    if (!employee) {
+      return fail("That employee was not found. Refresh the page and try again.");
+    }
+    await db.user.update({
+      where: { id: employee.userId },
+      data: { passwordHash: await hashPassword(password), tokenVersion: { increment: 1 } },
+    });
+    await audit({
+      action: "employee.password_change",
+      resource: `Employee:${employeeId}`,
+      diff: { name: employee.name },
+    });
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 export async function setEmploymentStatus(
   employeeId: string,
   status: "ACTIVE" | "ON_LEAVE" | "TERMINATED",
   reason?: string,
-) {
+): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const updated = await db.employee.update({
-    where: { id: employeeId },
-    data: {
-      employmentStatus: status,
-      terminationDate: status === "TERMINATED" ? new Date() : null,
-      terminationReason: status === "TERMINATED" ? (reason ?? null) : null,
-    },
-  });
-  revalidatePath("/admin/employees");
-  revalidatePath(`/admin/employees/${employeeId}`);
-  return { id: updated.id };
+  try {
+    const updated = await db.employee.update({
+      where: { id: employeeId },
+      data: {
+        employmentStatus: status,
+        terminationDate: status === "TERMINATED" ? new Date() : null,
+        terminationReason: status === "TERMINATED" ? (reason ?? null) : null,
+      },
+    });
+    revalidatePath("/admin/employees");
+    revalidatePath(`/admin/employees/${employeeId}`);
+    return ok({ id: updated.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 export async function updateEmployeeProfilePic(
   employeeId: string,
   file: { name: string; type: string; bytes: ArrayBuffer },
-) {
+): Promise<ActionResult<{ url: string }>> {
   await requireAdmin();
-  // Fixed key per employee (not timestamped) — the proxy route derives the
-  // object key from employeeId alone, and each upload overwrites the last.
-  const path = `${employeeId}/avatar`;
-  await uploadFile("profile-pics", path, file.bytes, {
-    contentType: file.type,
-    upsert: true,
-  });
-  // Store the proxy path, not a presigned S3 URL — it never expires and every
-  // read re-checks the caller is authenticated (see /api/employees/[id]/profile-pic).
-  const url = `/api/employees/${employeeId}/profile-pic`;
-  await db.employee.update({
-    where: { id: employeeId },
-    data: { profilePic: url },
-  });
-  await audit({
-    action: "employee.profile_pic_update",
-    resource: `Employee:${employeeId}`,
-  });
-  revalidatePath(`/admin/employees/${employeeId}`);
-  revalidatePath("/admin/employees");
-  return { url };
+  try {
+    const path = `${employeeId}/avatar`;
+    await uploadFile("profile-pics", path, file.bytes, {
+      contentType: file.type,
+      upsert: true,
+    });
+    const url = `/api/employees/${employeeId}/profile-pic`;
+    await db.employee.update({
+      where: { id: employeeId },
+      data: { profilePic: url },
+    });
+    await audit({
+      action: "employee.profile_pic_update",
+      resource: `Employee:${employeeId}`,
+    });
+    revalidatePath(`/admin/employees/${employeeId}`);
+    revalidatePath("/admin/employees");
+    return ok({ url });
+  } catch (err) {
+    return failFromUnknown(
+      err,
+      "Could not upload the photo. Check the file and try again.",
+    );
+  }
 }
+
+const NO_EMPLOYEE =
+  "Your account has no employee profile yet. Ask an admin to create one before you can change this.";
 
 /** Self-service: update the personal email 2FA codes are sent to. Requires
  *  the current password, same as changing it — this controls login access. */
 export async function updateMyPersonalEmail(
   currentPassword: string,
   personalEmail: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<ActionResult> {
   const user = await requireUser();
-  if (!user.employeeId) return { ok: false, error: "No employee record" };
+  if (!user.employeeId) return fail(NO_EMPLOYEE);
   const parsed = z.string().email().safeParse(personalEmail);
-  if (!parsed.success) return { ok: false, error: "Enter a valid email" };
-
-  const row = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
-  if (!row?.passwordHash || !(await verifyPassword(currentPassword, row.passwordHash))) {
-    return { ok: false, error: "Current password is incorrect" };
+  if (!parsed.success) {
+    return fail("Enter a valid personal email address (codes are sent here for sign-in).");
   }
-  await db.employee.update({
-    where: { id: user.employeeId },
-    data: { personalEmail: parsed.data },
-  });
-  await audit({ action: "employee.personal_email_update", resource: `Employee:${user.employeeId}` });
-  return { ok: true };
+
+  try {
+    const row = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
+    if (!row?.passwordHash || !(await verifyPassword(currentPassword, row.passwordHash))) {
+      return fail("Current password is incorrect. Re-enter it and try again.");
+    }
+    await db.employee.update({
+      where: { id: user.employeeId },
+      data: { personalEmail: parsed.data },
+    });
+    await audit({ action: "employee.personal_email_update", resource: `Employee:${user.employeeId}` });
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 /**
  * IRS Treas. Reg. 31.6051-1 electronic W-2 consent — self-service.
- * `consentToElectronicW2` is the affirmative, electronically-confirmed
- * consent the regulation requires (the timestamp itself is the record).
- * `withdrawW2Consent` reverts to paper-only; per the regulation this takes
- * effect immediately and doesn't require a password (withdrawing consent
- * should never be harder than giving it).
  */
-export async function consentToElectronicW2(): Promise<{ ok: boolean; error?: string }> {
+export async function consentToElectronicW2(): Promise<ActionResult> {
   const user = await requireUser();
-  if (!user.employeeId) return { ok: false, error: "No employee record" };
-  await db.employee.update({
-    where: { id: user.employeeId },
-    data: { w2ConsentAt: new Date() },
-  });
-  await audit({ action: "employee.w2_consent_given", resource: `Employee:${user.employeeId}` });
-  return { ok: true };
+  if (!user.employeeId) return fail(NO_EMPLOYEE);
+  try {
+    await db.employee.update({
+      where: { id: user.employeeId },
+      data: { w2ConsentAt: new Date() },
+    });
+    await audit({ action: "employee.w2_consent_given", resource: `Employee:${user.employeeId}` });
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
-export async function withdrawW2Consent(): Promise<{ ok: boolean; error?: string }> {
+export async function withdrawW2Consent(): Promise<ActionResult> {
   const user = await requireUser();
-  if (!user.employeeId) return { ok: false, error: "No employee record" };
-  await db.employee.update({
-    where: { id: user.employeeId },
-    data: { w2ConsentAt: null },
-  });
-  await audit({ action: "employee.w2_consent_withdrawn", resource: `Employee:${user.employeeId}` });
-  return { ok: true };
+  if (!user.employeeId) return fail(NO_EMPLOYEE);
+  try {
+    await db.employee.update({
+      where: { id: user.employeeId },
+      data: { w2ConsentAt: null },
+    });
+    await audit({ action: "employee.w2_consent_withdrawn", resource: `Employee:${user.employeeId}` });
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 /**
  * 29 CFR 2520.104b-1(c) electronic delivery consent for health & welfare
- * plan documents (SPDs/SMMs/SBCs) — see the `///` comment on
- * `Employee.benefitsEConsentAt` for why this is scoped to health & welfare
- * only, not the separate 401(k) notice-and-access safe harbor. Same pattern
- * as the W-2 pair above: withdrawal never requires a password, because
- * withdrawing consent must never be harder than giving it.
+ * plan documents — see schema comment on Employee.benefitsEConsentAt.
  */
-export async function consentToBenefitsEDelivery(): Promise<{ ok: boolean; error?: string }> {
+export async function consentToBenefitsEDelivery(): Promise<ActionResult> {
   const user = await requireUser();
-  if (!user.employeeId) return { ok: false, error: "No employee record" };
-  await db.employee.update({
-    where: { id: user.employeeId },
-    data: { benefitsEConsentAt: new Date() },
-  });
-  await audit({ action: "employee.benefits_econsent_given", resource: `Employee:${user.employeeId}` });
-  return { ok: true };
+  if (!user.employeeId) return fail(NO_EMPLOYEE);
+  try {
+    await db.employee.update({
+      where: { id: user.employeeId },
+      data: { benefitsEConsentAt: new Date() },
+    });
+    await audit({ action: "employee.benefits_econsent_given", resource: `Employee:${user.employeeId}` });
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
-export async function withdrawBenefitsEConsent(): Promise<{ ok: boolean; error?: string }> {
+export async function withdrawBenefitsEConsent(): Promise<ActionResult> {
   const user = await requireUser();
-  if (!user.employeeId) return { ok: false, error: "No employee record" };
-  await db.employee.update({
-    where: { id: user.employeeId },
-    data: { benefitsEConsentAt: null },
-  });
-  await audit({ action: "employee.benefits_econsent_withdrawn", resource: `Employee:${user.employeeId}` });
-  return { ok: true };
+  if (!user.employeeId) return fail(NO_EMPLOYEE);
+  try {
+    await db.employee.update({
+      where: { id: user.employeeId },
+      data: { benefitsEConsentAt: null },
+    });
+    await audit({ action: "employee.benefits_econsent_withdrawn", resource: `Employee:${user.employeeId}` });
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
-export async function bulkDeleteEmployees(ids: string[]) {
+export async function bulkDeleteEmployees(
+  ids: string[],
+): Promise<ActionResult<{ count: number }>> {
   await requireAdmin();
-  if (ids.length === 0) return 0;
-  const employees = await db.employee.findMany({
-    where: { id: { in: ids } },
-    select: { userId: true },
-  });
-  const userIds = employees.map((e) => e.userId);
-  const { count } = await db.employee.deleteMany({ where: { id: { in: ids } } });
-  // Disable login for the removed users (null the hash + revoke sessions). We keep
-  // the User row so audit logs / uploaded-doc provenance stay intact.
-  await db.user.updateMany({
-    where: { id: { in: userIds } },
-    data: { passwordHash: null, tokenVersion: { increment: 1 } },
-  });
-  revalidatePath("/admin/employees");
-  return count;
+  if (ids.length === 0) {
+    return fail("Select at least one employee to delete.");
+  }
+  try {
+    const employees = await db.employee.findMany({
+      where: { id: { in: ids } },
+      select: { userId: true },
+    });
+    const userIds = employees.map((e) => e.userId);
+    const { count } = await db.employee.deleteMany({ where: { id: { in: ids } } });
+    await db.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { passwordHash: null, tokenVersion: { increment: 1 } },
+    });
+    revalidatePath("/admin/employees");
+    return ok({ count });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }

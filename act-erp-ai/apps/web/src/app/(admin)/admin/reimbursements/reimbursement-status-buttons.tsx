@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toastAction } from "@/lib/toast-action";
 import { reviewReimbursement } from "@/server/actions/reimbursements";
 
 type Status = "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "PAID";
@@ -26,16 +27,13 @@ export function ReimbursementStatusButtons({
   const [pending, startTransition] = useTransition();
   function run(status: "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "PAID") {
     startTransition(async () => {
-      try {
-        await reviewReimbursement({
-          reimbursementId: id,
-          status,
-          paidAmount: status === "PAID" ? amount : undefined,
-        });
-        toast.success(status.replace("_", " "));
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
-      }
+      const res = await reviewReimbursement({
+        reimbursementId: id,
+        status,
+        paidAmount: status === "PAID" ? amount : undefined,
+      });
+      if (!toastAction(res)) return;
+      toast.success(status.replace("_", " "));
     });
   }
   return (

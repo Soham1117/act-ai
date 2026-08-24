@@ -31,6 +31,7 @@ import {
   upsertRetirementElection,
   endRetirementElection,
 } from "@/server/actions/benefits";
+import { toastAction } from "@/lib/toast-action";
 import { benefitTypeLabel, tierLabel, coverageState, utcToday } from "@/lib/benefits";
 import { formatCurrency, formatDateOnly } from "@/lib/format";
 
@@ -200,23 +201,20 @@ function EnrollDialog({ employeeId, plans }: { employeeId: string; plans: PlanOp
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await upsertEnrollment({
-          employeeId,
-          planId,
-          tier: status === "WAIVED" ? null : (tier || null),
-          status,
-          effectiveDate,
-          memberId: memberId || undefined,
-          employeeCostOverride: employeeCostOverride ? Number(employeeCostOverride) : null,
-          employerCostOverride: employerCostOverride ? Number(employerCostOverride) : null,
-          notes: notes || undefined,
-        });
-        toast.success("Enrollment saved");
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await upsertEnrollment({
+        employeeId,
+        planId,
+        tier: status === "WAIVED" ? null : (tier || null),
+        status,
+        effectiveDate,
+        memberId: memberId || undefined,
+        employeeCostOverride: employeeCostOverride ? Number(employeeCostOverride) : null,
+        employerCostOverride: employerCostOverride ? Number(employerCostOverride) : null,
+        notes: notes || undefined,
+      });
+      if (!toastAction(res)) return;
+      toast.success("Enrollment saved");
+      setOpen(false);
     });
   }
 
@@ -313,18 +311,15 @@ function ChangeTierDialog({ enrollment, plans }: { enrollment: EnrollmentRow; pl
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await changeEnrollmentTier({
-          enrollmentId: enrollment.id,
-          newTier,
-          effectiveDate,
-          memberId: memberId || undefined,
-        });
-        toast.success("Tier changed — old row ended, new row created");
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await changeEnrollmentTier({
+        enrollmentId: enrollment.id,
+        newTier,
+        effectiveDate,
+        memberId: memberId || undefined,
+      });
+      if (!toastAction(res)) return;
+      toast.success("Tier changed — old row ended, new row created");
+      setOpen(false);
     });
   }
 
@@ -383,13 +378,10 @@ function EndEnrollmentDialog({ enrollmentId }: { enrollmentId: string }) {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await endEnrollment({ enrollmentId, endDate, notes: notes || undefined });
-        toast.success("Enrollment ended");
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await endEnrollment({ enrollmentId, endDate, notes: notes || undefined });
+      if (!toastAction(res)) return;
+      toast.success("Enrollment ended");
+      setOpen(false);
     });
   }
 
@@ -441,22 +433,19 @@ function ElectionDialog({ employeeId, plans }: { employeeId: string; plans: Plan
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await upsertRetirementElection({
-          employeeId,
-          planId,
-          status,
-          preTaxPercent: mode === "percent" && preTaxPercent ? Number(preTaxPercent) : null,
-          rothPercent: mode === "percent" && rothPercent ? Number(rothPercent) : null,
-          flatAmountPerPay: mode === "flat" && flatAmountPerPay ? Number(flatAmountPerPay) : null,
-          effectiveDate,
-          notes: notes || undefined,
-        });
-        toast.success("Election saved");
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await upsertRetirementElection({
+        employeeId,
+        planId,
+        status,
+        preTaxPercent: mode === "percent" && preTaxPercent ? Number(preTaxPercent) : null,
+        rothPercent: mode === "percent" && rothPercent ? Number(rothPercent) : null,
+        flatAmountPerPay: mode === "flat" && flatAmountPerPay ? Number(flatAmountPerPay) : null,
+        effectiveDate,
+        notes: notes || undefined,
+      });
+      if (!toastAction(res)) return;
+      toast.success("Election saved");
+      setOpen(false);
     });
   }
 
@@ -550,13 +539,10 @@ function EndElectionDialog({ electionId }: { electionId: string }) {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await endRetirementElection({ electionId, endDate });
-        toast.success("Election ended");
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await endRetirementElection({ electionId, endDate });
+      if (!toastAction(res)) return;
+      toast.success("Election ended");
+      setOpen(false);
     });
   }
 

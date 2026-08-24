@@ -3,8 +3,8 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, MonitorCheck } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { toastAction } from "@/lib/toast-action";
 import { activateKiosk } from "@/server/actions/kiosk";
 
 export function ActivateForm({ slug }: { slug: string }) {
@@ -17,15 +17,12 @@ export function ActivateForm({ slug }: { slug: string }) {
       disabled={pending}
       onClick={() => {
         startTransition(async () => {
-          try {
-            const res = await activateKiosk(slug);
-            // Cookie was set by the server action; refresh + navigate so the
-            // kiosk terminal sees the active session on the same browser.
-            router.refresh();
-            router.push(res.redirectTo);
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Failed");
-          }
+          const res = await activateKiosk(slug);
+          if (!toastAction(res)) return;
+          // Cookie was set by the server action; refresh + navigate so the
+          // kiosk terminal sees the active session on the same browser.
+          router.refresh();
+          router.push(res.redirectTo);
         });
       }}
     >

@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { toastAction } from "@/lib/toast-action";
 import { generatePayrollSlipCsv } from "./actions";
 
 export function DownloadCsvButton({
@@ -21,19 +22,16 @@ export function DownloadCsvButton({
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          try {
-            const csv = await generatePayrollSlipCsv(periodId);
-            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `payroll-slip-${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-            toast.success("CSV downloaded");
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Failed");
-          }
+          const res = await generatePayrollSlipCsv(periodId);
+          if (!toastAction(res)) return;
+          const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `payroll-slip-${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success("CSV downloaded");
         })
       }
     >

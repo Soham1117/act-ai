@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createKiosk } from "@/server/actions/kiosk";
+import { toastAction } from "@/lib/toast-action";
 
 function slugify(s: string) {
   return s
@@ -71,14 +72,11 @@ export function CreateKioskDialog() {
               return;
             }
             startTransition(async () => {
-              try {
-                await createKiosk({ slug: cleaned, label: label.trim() });
-                toast.success("Kiosk created");
-                setOpen(false);
-                reset();
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : "Failed");
-              }
+              const res = await createKiosk({ slug: cleaned, label: label.trim() });
+              if (!toastAction(res)) return;
+              toast.success("Kiosk created");
+              setOpen(false);
+              reset();
             });
           }}
           className="space-y-4"

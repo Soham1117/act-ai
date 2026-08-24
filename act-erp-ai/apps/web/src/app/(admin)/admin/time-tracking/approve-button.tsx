@@ -4,18 +4,16 @@ import { useTransition } from "react";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { toastAction } from "@/lib/toast-action";
 import { reviewTimeEntry } from "@/server/actions/time-clock";
 
 export function ApproveButton({ id }: { id: string }) {
   const [pending, startTransition] = useTransition();
   function run(decision: "APPROVED" | "REJECTED") {
     startTransition(async () => {
-      try {
-        await reviewTimeEntry({ timeEntryId: id, decision });
-        toast.success(decision === "APPROVED" ? "Approved" : "Rejected");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
-      }
+      const res = await reviewTimeEntry({ timeEntryId: id, decision });
+      if (!toastAction(res)) return;
+      toast.success(decision === "APPROVED" ? "Approved" : "Rejected");
     });
   }
   return (

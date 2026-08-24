@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { toastAction } from "@/lib/toast-action";
 import { createDepartment } from "@/server/actions/departments";
 
 export function DepartmentDialog() {
@@ -27,14 +28,11 @@ export function DepartmentDialog() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await createDepartment({ name, code: code || null, description: description || null });
-        toast.success(`Created ${name}`);
-        setOpen(false);
-        setName(""); setCode(""); setDescription("");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await createDepartment({ name, code: code || null, description: description || null });
+      if (!toastAction(res)) return;
+      toast.success(`Created ${name}`);
+      setOpen(false);
+      setName(""); setCode(""); setDescription("");
     });
   }
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 
 const dateRe = /^\d{4}-\d{2}-\d{2}$/;
 const timeRe = /^\d{2}:\d{2}$/;
@@ -24,34 +25,42 @@ function overlaps(
   return !(a.endTime <= b.startTime || a.startTime >= b.endTime);
 }
 
-export async function createSchedule(input: z.infer<typeof scheduleSchema>) {
+export async function createSchedule(
+  input: z.infer<typeof scheduleSchema>,
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
-  const data = scheduleSchema.parse(input);
-  if (data.endTime <= data.startTime) {
-    throw new Error("End time must be after start time.");
-  }
+  try {
+    const data = scheduleSchema.parse(input);
+    if (data.endTime <= data.startTime) {
+      return fail("End time must be after start time. Adjust the times and try again.");
+    }
 
-  const conflicts = await db.schedule.findMany({
-    where: { employeeId: data.employeeId, date: new Date(data.date) },
-  });
-  if (conflicts.some((s) => overlaps(data, s))) {
-    throw new Error("Time conflicts with an existing shift on this date.");
-  }
+    const conflicts = await db.schedule.findMany({
+      where: { employeeId: data.employeeId, date: new Date(data.date) },
+    });
+    if (conflicts.some((s) => overlaps(data, s))) {
+      return fail(
+        "This shift overlaps an existing shift on that date. Pick a different time window or edit the other shift first.",
+      );
+    }
 
-  const created = await db.schedule.create({
-    data: {
-      employeeId: data.employeeId,
-      date: new Date(data.date),
-      jobCode: data.jobCode,
-      startTime: data.startTime,
-      endTime: data.endTime,
-      notes: data.notes ?? null,
-      createdById: admin.id,
-    },
-  });
-  revalidatePath("/admin/schedules");
-  revalidatePath("/dashboard/schedule");
-  return created;
+    const created = await db.schedule.create({
+      data: {
+        employeeId: data.employeeId,
+        date: new Date(data.date),
+        jobCode: data.jobCode,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        notes: data.notes ?? null,
+        createdById: admin.id,
+      },
+    });
+    revalidatePath("/admin/schedules");
+    revalidatePath("/dashboard/schedule");
+    return ok({ id: created.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const updateSchema = z.object({
@@ -63,53 +72,67 @@ const updateSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
-export async function updateSchedule(input: z.infer<typeof updateSchema>) {
+export async function updateSchedule(
+  input: z.infer<typeof updateSchema>,
+): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const data = updateSchema.parse(input);
-  const existing = await db.schedule.findUnique({ where: { id: data.id } });
-  if (!existing) throw new Error("Shift not found");
+  try {
+    const data = updateSchema.parse(input);
+    const existing = await db.schedule.findUnique({ where: { id: data.id } });
+    if (!existing) {
+      return fail("That shift no longer exists. Refresh the page and try again.");
+    }
 
-  const next = {
-    date: data.date ? new Date(data.date) : existing.date,
-    startTime: data.startTime ?? existing.startTime,
-    endTime: data.endTime ?? existing.endTime,
-  };
-  if (next.endTime <= next.startTime) {
-    throw new Error("End time must be after start time.");
+    const next = {
+      date: data.date ? new Date(data.date) : existing.date,
+      startTime: data.startTime ?? existing.startTime,
+      endTime: data.endTime ?? existing.endTime,
+    };
+    if (next.endTime <= next.startTime) {
+      return fail("End time must be after start time. Adjust the times and try again.");
+    }
+
+    const sameDay = await db.schedule.findMany({
+      where: {
+        employeeId: existing.employeeId,
+        date: next.date,
+        NOT: { id: data.id },
+      },
+    });
+    if (sameDay.some((s) => overlaps(next, s))) {
+      return fail(
+        "This shift overlaps an existing shift on that date. Pick a different time window or edit the other shift first.",
+      );
+    }
+
+    const updated = await db.schedule.update({
+      where: { id: data.id },
+      data: {
+        date: next.date,
+        startTime: next.startTime,
+        endTime: next.endTime,
+        jobCode: data.jobCode ?? existing.jobCode,
+        notes: data.notes === undefined ? existing.notes : data.notes,
+      },
+    });
+    revalidatePath("/admin/schedules");
+    revalidatePath("/dashboard/schedule");
+    return ok({ id: updated.id });
+  } catch (err) {
+    return failFromUnknown(err);
   }
-
-  // Conflict check excluding the entry itself.
-  const sameDay = await db.schedule.findMany({
-    where: {
-      employeeId: existing.employeeId,
-      date: next.date,
-      NOT: { id: data.id },
-    },
-  });
-  if (sameDay.some((s) => overlaps(next, s))) {
-    throw new Error("Time conflicts with an existing shift on this date.");
-  }
-
-  const updated = await db.schedule.update({
-    where: { id: data.id },
-    data: {
-      date: next.date,
-      startTime: next.startTime,
-      endTime: next.endTime,
-      jobCode: data.jobCode ?? existing.jobCode,
-      notes: data.notes === undefined ? existing.notes : data.notes,
-    },
-  });
-  revalidatePath("/admin/schedules");
-  revalidatePath("/dashboard/schedule");
-  return updated;
 }
 
-export async function deleteSchedule(id: string) {
+export async function deleteSchedule(id: string): Promise<ActionResult> {
   await requireAdmin();
-  await db.schedule.delete({ where: { id } });
-  revalidatePath("/admin/schedules");
-  revalidatePath("/dashboard/schedule");
+  try {
+    await db.schedule.delete({ where: { id } });
+    revalidatePath("/admin/schedules");
+    revalidatePath("/dashboard/schedule");
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const bulkSchema = z.object({
@@ -126,39 +149,45 @@ const bulkSchema = z.object({
  * skipped silently; the response reports created vs skipped counts so the
  * UI can show a useful summary.
  */
-export async function createSchedulesBulk(input: z.infer<typeof bulkSchema>) {
+export async function createSchedulesBulk(
+  input: z.infer<typeof bulkSchema>,
+): Promise<ActionResult<{ created: number; skipped: number }>> {
   const admin = await requireAdmin();
-  const data = bulkSchema.parse(input);
-  if (data.endTime <= data.startTime) {
-    throw new Error("End time must be after start time.");
-  }
-
-  let created = 0;
-  let skipped = 0;
-  for (const employeeId of data.employeeIds) {
-    for (const dateStr of data.dates) {
-      const conflicts = await db.schedule.findMany({
-        where: { employeeId, date: new Date(dateStr) },
-      });
-      if (conflicts.some((s) => overlaps(data, s))) {
-        skipped++;
-        continue;
-      }
-      await db.schedule.create({
-        data: {
-          employeeId,
-          date: new Date(dateStr),
-          jobCode: data.jobCode,
-          startTime: data.startTime,
-          endTime: data.endTime,
-          notes: data.notes ?? null,
-          createdById: admin.id,
-        },
-      });
-      created++;
+  try {
+    const data = bulkSchema.parse(input);
+    if (data.endTime <= data.startTime) {
+      return fail("End time must be after start time. Adjust the times and try again.");
     }
+
+    let created = 0;
+    let skipped = 0;
+    for (const employeeId of data.employeeIds) {
+      for (const dateStr of data.dates) {
+        const conflicts = await db.schedule.findMany({
+          where: { employeeId, date: new Date(dateStr) },
+        });
+        if (conflicts.some((s) => overlaps(data, s))) {
+          skipped++;
+          continue;
+        }
+        await db.schedule.create({
+          data: {
+            employeeId,
+            date: new Date(dateStr),
+            jobCode: data.jobCode,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            notes: data.notes ?? null,
+            createdById: admin.id,
+          },
+        });
+        created++;
+      }
+    }
+    revalidatePath("/admin/schedules");
+    revalidatePath("/dashboard/schedule");
+    return ok({ created, skipped });
+  } catch (err) {
+    return failFromUnknown(err);
   }
-  revalidatePath("/admin/schedules");
-  revalidatePath("/dashboard/schedule");
-  return { created, skipped };
 }

@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toastAction } from "@/lib/toast-action";
 import { updateRequestStatus } from "@/server/actions/requests";
 
 export function RequestStatusButtons({
@@ -22,12 +23,9 @@ export function RequestStatusButtons({
   const [pending, startTransition] = useTransition();
   function run(status: "PROCESSING" | "COMPLETED" | "REJECTED") {
     startTransition(async () => {
-      try {
-        await updateRequestStatus({ requestId: id, status });
-        toast.success(status);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
-      }
+      const res = await updateRequestStatus({ requestId: id, status });
+      if (!toastAction(res)) return;
+      toast.success(status);
     });
   }
   return (

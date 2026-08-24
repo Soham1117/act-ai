@@ -25,8 +25,20 @@ import {
 } from "@/server/actions/kiosk";
 import { getAvatarUrl } from "@/lib/format";
 import { toast } from "sonner";
+import { toastAction } from "@/lib/toast-action";
+import type { ActionOk } from "@/lib/action-result";
 
-type LookupResult = Awaited<ReturnType<typeof kioskLookup>>;
+type LookupMatch = ActionOk<{
+  id: string;
+  employeeId: string;
+  name: string;
+  email: string | null;
+  profilePic: string | null;
+  jobTitle: string | null;
+  hasPin: boolean;
+  status: "ACTIVE" | "ON_BREAK" | "OUT";
+  activeEntryId: string | null;
+}>;
 
 export function KioskScreen({
   slug,
@@ -37,7 +49,7 @@ export function KioskScreen({
 }) {
   const [now, setNow] = useState(new Date());
   const [input, setInput] = useState("");
-  const [match, setMatch] = useState<LookupResult | null>(null);
+  const [match, setMatch] = useState<LookupMatch | null>(null);
   const [pin, setPin] = useState("");
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,14 +79,10 @@ export function KioskScreen({
     const trimmed = value.trim().toUpperCase();
     if (!trimmed) return;
     startTransition(async () => {
-      try {
-        const r = await kioskLookup(slug, trimmed);
-        setMatch(r);
-        setInput("");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Unknown employee ID");
-        setInput("");
-      }
+      const r = await kioskLookup(slug, trimmed);
+      setInput("");
+      if (!toastAction(r)) return;
+      setMatch(r);
     });
   }
 
@@ -85,21 +93,20 @@ export function KioskScreen({
       return;
     }
     startTransition(async () => {
-      try {
-        await kioskAction({ slug, employeeId: match.employeeId, pin, action });
-        const labels: Record<typeof action, string> = {
-          CLOCK_IN: "Clocked in",
-          CLOCK_OUT: "Clocked out",
-          START_BREAK: "Break started",
-          END_BREAK: "Break ended",
-        };
-        toast.success(`${labels[action]} · ${match.name}`);
-        setMatch(null);
+      const res = await kioskAction({ slug, employeeId: match.employeeId, pin, action });
+      if (!toastAction(res)) {
         setPin("");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
-        setPin("");
+        return;
       }
+      const labels: Record<typeof action, string> = {
+        CLOCK_IN: "Clocked in",
+        CLOCK_OUT: "Clocked out",
+        START_BREAK: "Break started",
+        END_BREAK: "Break ended",
+      };
+      toast.success(`${labels[action]} · ${match.name}`);
+      setMatch(null);
+      setPin("");
     });
   }
 

@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toastAction } from "@/lib/toast-action";
 import { consentToElectronicW2, withdrawW2Consent } from "@/server/actions/employees";
 
 export function W2ConsentForm({ consented }: { consented: boolean }) {
@@ -13,10 +14,7 @@ export function W2ConsentForm({ consented }: { consented: boolean }) {
   function give() {
     startTransition(async () => {
       const res = await consentToElectronicW2();
-      if (!res.ok) {
-        toast.error(res.error ?? "Could not save consent");
-        return;
-      }
+      if (!toastAction(res)) return;
       toast.success("Electronic W-2 delivery enabled");
     });
   }
@@ -24,10 +22,7 @@ export function W2ConsentForm({ consented }: { consented: boolean }) {
   function withdraw() {
     startTransition(async () => {
       const res = await withdrawW2Consent();
-      if (!res.ok) {
-        toast.error(res.error ?? "Could not withdraw");
-        return;
-      }
+      if (!toastAction(res)) return;
       toast.success("Reverted to paper W-2 delivery");
     });
   }

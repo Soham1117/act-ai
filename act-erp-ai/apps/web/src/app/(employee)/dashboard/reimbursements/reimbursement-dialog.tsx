@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { submitReimbursement } from "@/server/actions/reimbursements";
+import { toastAction } from "@/lib/toast-action";
 
 const CATEGORIES = [
   "TRAVEL", "MEALS", "OFFICE_SUPPLIES", "TRAINING", "EQUIPMENT",
@@ -41,22 +42,19 @@ export function ReimbursementDialog() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await submitReimbursement({
-          title,
-          category,
-          amount: Number(amount),
-          currency: "USD",
-          description,
-          expenseDate,
-          priority: "MEDIUM",
-        });
-        toast.success("Claim submitted");
-        setOpen(false);
-        setTitle(""); setAmount(""); setDescription("");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await submitReimbursement({
+        title,
+        category,
+        amount: Number(amount),
+        currency: "USD",
+        description,
+        expenseDate,
+        priority: "MEDIUM",
+      });
+      if (!toastAction(res)) return;
+      toast.success("Claim submitted");
+      setOpen(false);
+      setTitle(""); setAmount(""); setDescription("");
     });
   }
 

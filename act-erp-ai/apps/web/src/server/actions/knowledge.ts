@@ -9,6 +9,7 @@ import { aiEnabled } from "@/lib/features";
 import { uploadFile } from "@/lib/storage";
 import { enqueueIngestion } from "@/lib/queue";
 import { audit } from "@/lib/audit";
+import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 
 const MIME_TO_KIND: Record<string, "PDF" | "DOCX" | "CSV" | "XLSX"> = {
   "application/pdf": "PDF",
@@ -47,104 +48,119 @@ const uploadSchema = z.object({
 export async function uploadKnowledgeDocument(
   input: z.input<typeof uploadSchema>,
   file: { name: string; type: string; bytes: ArrayBuffer },
-) {
-  // Unreachable while the knowledge UI is hidden, but fail loudly rather than
-  // uploading bytes we can never ingest (no worker, no queue) if it ever is.
+): Promise<ActionResult<{ id: string }>> {
   if (!aiEnabled) {
-    throw new Error("The knowledge base is not enabled on this deployment.");
+    return fail(
+      "The knowledge base is not enabled on this deployment. Contact an admin if you expected it to be available.",
+    );
   }
   const user = await requireUser();
-  const data = uploadSchema.parse(input);
-  const isAdmin = user.role === "ADMIN";
+  try {
+    const data = uploadSchema.parse(input);
+    const isAdmin = user.role === "ADMIN";
 
-  const fileKind = detectKind(file.name, file.type);
-  if (!fileKind) throw new Error("Unsupported file type (allowed: PDF, DOCX, CSV, XLSX)");
-
-  // Employees can only create PRIVATE docs owned by themselves, with no grants.
-  const visibility = isAdmin ? data.visibility : "PRIVATE";
-  const ownerUserId = isAdmin ? null : user.id;
-  const grantUserIds = isAdmin && visibility === "PRIVATE" ? data.grantUserIds : [];
-
-  const buf = Buffer.from(file.bytes);
-  const checksum = createHash("sha256").update(buf).digest("hex");
-
-  // Dedup: identical bytes already ingested → reuse, just (optionally) add grants.
-  const existing = await db.knowledgeDocument.findUnique({ where: { checksum } });
-  if (existing) {
-    if (grantUserIds.length) {
-      await db.documentGrant.createMany({
-        data: grantUserIds.map((uid) => ({
-          documentId: existing.id,
-          userId: uid,
-          grantedById: user.id,
-        })),
-        skipDuplicates: true,
-      });
+    const fileKind = detectKind(file.name, file.type);
+    if (!fileKind) {
+      return fail(
+        "Unsupported file type. Upload a PDF, DOCX, CSV, or XLSX file and try again.",
+      );
     }
-    await audit({
-      action: "knowledge.upload_dedup",
-      resource: `KnowledgeDocument:${existing.id}`,
-      diff: { checksum, addedGrants: grantUserIds.length },
+
+    const visibility = isAdmin ? data.visibility : "PRIVATE";
+    const ownerUserId = isAdmin ? null : user.id;
+    const grantUserIds = isAdmin && visibility === "PRIVATE" ? data.grantUserIds : [];
+
+    const buf = Buffer.from(file.bytes);
+    const checksum = createHash("sha256").update(buf).digest("hex");
+
+    const existing = await db.knowledgeDocument.findUnique({ where: { checksum } });
+    if (existing) {
+      if (grantUserIds.length) {
+        await db.documentGrant.createMany({
+          data: grantUserIds.map((uid) => ({
+            documentId: existing.id,
+            userId: uid,
+            grantedById: user.id,
+          })),
+          skipDuplicates: true,
+        });
+      }
+      await audit({
+        action: "knowledge.upload_dedup",
+        resource: `KnowledgeDocument:${existing.id}`,
+        diff: { checksum, addedGrants: grantUserIds.length },
+      });
+      revalidatePath("/admin/knowledge");
+      return ok({ id: existing.id });
+    }
+
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+    const path = `${checksum}.${ext}`;
+    const { key } = await uploadFile("knowledge", path, file.bytes, { contentType: file.type });
+
+    const doc = await db.knowledgeDocument.create({
+      data: {
+        title: data.title,
+        sourceFilename: file.name,
+        mimeType: file.type,
+        fileKind,
+        s3Key: key,
+        checksum,
+        uploadedById: user.id,
+        ownerUserId,
+        visibility,
+        status: "QUEUED",
+        grants: grantUserIds.length
+          ? {
+              create: grantUserIds.map((uid) => ({ userId: uid, grantedById: user.id })),
+            }
+          : undefined,
+      },
     });
+
+    await audit({
+      action: "knowledge.upload",
+      resource: `KnowledgeDocument:${doc.id}`,
+      diff: { title: data.title, fileKind, visibility, grants: grantUserIds.length },
+    });
+
+    await enqueueIngestion(doc.id);
+
     revalidatePath("/admin/knowledge");
-    return existing;
+    revalidatePath("/dashboard/knowledge");
+    return ok({ id: doc.id });
+  } catch (err) {
+    return failFromUnknown(err);
   }
-
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
-  const path = `${checksum}.${ext}`;
-  const { key } = await uploadFile("knowledge", path, file.bytes, { contentType: file.type });
-
-  const doc = await db.knowledgeDocument.create({
-    data: {
-      title: data.title,
-      sourceFilename: file.name,
-      mimeType: file.type,
-      fileKind,
-      s3Key: key,
-      checksum,
-      uploadedById: user.id,
-      ownerUserId,
-      visibility,
-      status: "QUEUED",
-      grants: grantUserIds.length
-        ? {
-            create: grantUserIds.map((uid) => ({ userId: uid, grantedById: user.id })),
-          }
-        : undefined,
-    },
-  });
-
-  await audit({
-    action: "knowledge.upload",
-    resource: `KnowledgeDocument:${doc.id}`,
-    diff: { title: data.title, fileKind, visibility, grants: grantUserIds.length },
-  });
-
-  await enqueueIngestion(doc.id);
-
-  revalidatePath("/admin/knowledge");
-  revalidatePath("/dashboard/knowledge");
-  return doc;
 }
 
 /** Update grants for a document (admin). Frontend expands departments to user IDs. */
-export async function setDocumentGrants(documentId: string, userIds: string[]) {
+export async function setDocumentGrants(
+  documentId: string,
+  userIds: string[],
+): Promise<ActionResult> {
   const user = await requireUser();
-  if (user.role !== "ADMIN") throw new Error("Forbidden");
+  if (user.role !== "ADMIN") {
+    return fail("Only admins can change knowledge document access. Ask an admin for help.");
+  }
 
-  await db.$transaction([
-    db.documentGrant.deleteMany({ where: { documentId } }),
-    db.documentGrant.createMany({
-      data: userIds.map((uid) => ({ documentId, userId: uid, grantedById: user.id })),
-      skipDuplicates: true,
-    }),
-  ]);
+  try {
+    await db.$transaction([
+      db.documentGrant.deleteMany({ where: { documentId } }),
+      db.documentGrant.createMany({
+        data: userIds.map((uid) => ({ documentId, userId: uid, grantedById: user.id })),
+        skipDuplicates: true,
+      }),
+    ]);
 
-  await audit({
-    action: "knowledge.set_grants",
-    resource: `KnowledgeDocument:${documentId}`,
-    diff: { grantCount: userIds.length },
-  });
-  revalidatePath("/admin/knowledge");
-  return { ok: true };
+    await audit({
+      action: "knowledge.set_grants",
+      resource: `KnowledgeDocument:${documentId}`,
+      diff: { grantCount: userIds.length },
+    });
+    revalidatePath("/admin/knowledge");
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }

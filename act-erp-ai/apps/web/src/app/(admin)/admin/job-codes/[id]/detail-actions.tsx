@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { JobCodeDialog } from "../job-code-dialog";
 import { assignJobCode, unassignJobCode } from "@/server/actions/job-codes";
+import { toastAction } from "@/lib/toast-action";
 
 type Existing = {
   id: string;
@@ -59,14 +60,11 @@ export function JobCodeDetailActions({
     e.preventDefault();
     if (!employeeId) return;
     startTransition(async () => {
-      try {
-        await assignJobCode(jobCode.id, employeeId, isPrimary, rate || "NA");
-        toast.success("Assigned");
-        setAssignOpen(false);
-        setEmployeeId(""); setRate(jobCode.rate); setIsPrimary(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await assignJobCode(jobCode.id, employeeId, isPrimary, rate || "NA");
+      if (!toastAction(res)) return;
+      toast.success("Assigned");
+      setAssignOpen(false);
+      setEmployeeId(""); setRate(jobCode.rate); setIsPrimary(false);
     });
   }
 
@@ -148,12 +146,9 @@ export function UnassignButton({ jobCodeId, employeeId }: { jobCodeId: string; e
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          try {
-            await unassignJobCode(jobCodeId, employeeId);
-            toast.success("Unassigned");
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed");
-          }
+          const res = await unassignJobCode(jobCodeId, employeeId);
+          if (!toastAction(res)) return;
+          toast.success("Unassigned");
         })
       }
     >

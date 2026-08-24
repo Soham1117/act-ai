@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toastAction } from "@/lib/toast-action";
 import { submitOnboarding, type OnboardingSubmit } from "@/server/actions/onboarding";
 
 type Department = { id: string; name: string };
@@ -120,29 +121,26 @@ export function OnboardingForm({
       return;
     }
     startTransition(async () => {
-      try {
-        const fileEntries = await Promise.all(
-          DOCUMENT_SLOTS.flatMap((slot) => {
-            const f = files[slot.id];
-            if (!f) return [];
-            return [readFile(f).then((b64) => ({
-              fileName: f.name,
-              title: slot.label,
-              documentType: slot.type,
-              contentType: f.type || "application/octet-stream",
-              base64: b64,
-            }))];
-          }),
-        );
+      const fileEntries = await Promise.all(
+        DOCUMENT_SLOTS.flatMap((slot) => {
+          const f = files[slot.id];
+          if (!f) return [];
+          return [readFile(f).then((b64) => ({
+            fileName: f.name,
+            title: slot.label,
+            documentType: slot.type,
+            contentType: f.type || "application/octet-stream",
+            base64: b64,
+          }))];
+        }),
+      );
 
-        const { confirmPassword, ...payload } = form;
-        void confirmPassword;
-        await submitOnboarding(token, payload, fileEntries);
-        toast.success("Onboarding complete!");
-        router.push("/login");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const { confirmPassword, ...payload } = form;
+      void confirmPassword;
+      const res = await submitOnboarding(token, payload, fileEntries);
+      if (!toastAction(res)) return;
+      toast.success("Onboarding complete!");
+      router.push("/login");
     });
   }
 

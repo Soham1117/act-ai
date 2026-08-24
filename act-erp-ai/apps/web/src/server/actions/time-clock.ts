@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import type { TimeEntryStatus } from "@prisma/client";
+import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 
 /** Pick the best job code for an employee using the legacy 5-tier resolver. */
 async function resolveJobCode(employeeId: string): Promise<string> {
@@ -36,130 +37,156 @@ async function resolveJobCode(employeeId: string): Promise<string> {
 // kiosks only. The internal `_clockIn`/`_clockOut`/`_startBreak`/`_endBreak`
 // helpers below remain for the kiosk action handler in `kiosk.ts`.
 
-// Internal — used by kiosk endpoints.
 export async function _clockIn(
   employeeId: string,
   jobCode?: string,
   source: "WEB" | "KIOSK" = "WEB",
   kiosk?: { kioskSlug?: string | null; kioskLabel?: string | null },
-) {
-  const existing = await db.timeEntry.findFirst({
-    where: { employeeId, status: { in: ["ACTIVE", "ON_BREAK"] } },
-  });
-  if (existing) throw new Error("Already clocked in");
-  const code = jobCode ?? (await resolveJobCode(employeeId));
-  const entry = await db.timeEntry.create({
-    data: {
-      employeeId,
-      date: new Date(),
-      clockIn: new Date(),
-      jobCode: code,
-      status: "ACTIVE" as TimeEntryStatus,
-      source,
-      kioskSlug: kiosk?.kioskSlug ?? null,
-      kioskLabel: kiosk?.kioskLabel ?? null,
-    },
-  });
-  revalidatePath("/dashboard/time-tracking");
-  revalidatePath("/admin/time-tracking");
-  return entry;
+): Promise<ActionResult<{ id: string; status: string }>> {
+  try {
+    const existing = await db.timeEntry.findFirst({
+      where: { employeeId, status: { in: ["ACTIVE", "ON_BREAK"] } },
+    });
+    if (existing) {
+      return fail("You are already clocked in. Clock out first, or refresh if this looks wrong.");
+    }
+    const code = jobCode ?? (await resolveJobCode(employeeId));
+    const entry = await db.timeEntry.create({
+      data: {
+        employeeId,
+        date: new Date(),
+        clockIn: new Date(),
+        jobCode: code,
+        status: "ACTIVE" as TimeEntryStatus,
+        source,
+        kioskSlug: kiosk?.kioskSlug ?? null,
+        kioskLabel: kiosk?.kioskLabel ?? null,
+      },
+    });
+    revalidatePath("/dashboard/time-tracking");
+    revalidatePath("/admin/time-tracking");
+    return ok({ id: entry.id, status: entry.status });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 export async function _clockOut(
   employeeId: string,
   notes?: string,
   kiosk?: { kioskSlug?: string | null; kioskLabel?: string | null },
-) {
-  const entry = await db.timeEntry.findFirst({
-    where: { employeeId, status: { in: ["ACTIVE", "ON_BREAK"] } },
-    include: { breaks: true },
-  });
-  if (!entry) throw new Error("No active session");
-
-  const now = new Date();
-  // Close any open break
-  let totalBreakMin = entry.totalBreakMin;
-  for (const b of entry.breaks) {
-    if (!b.endTime) {
-      const dur = Math.floor((now.getTime() - b.startTime.getTime()) / 60_000);
-      await db.timeBreak.update({
-        where: { id: b.id },
-        data: { endTime: now, durationMin: dur },
-      });
-      totalBreakMin += dur;
+): Promise<ActionResult<{ id: string; status: string }>> {
+  try {
+    const entry = await db.timeEntry.findFirst({
+      where: { employeeId, status: { in: ["ACTIVE", "ON_BREAK"] } },
+      include: { breaks: true },
+    });
+    if (!entry) {
+      return fail("You are not clocked in. Refresh the kiosk and try again.");
     }
-  }
-  const totalMs = now.getTime() - entry.clockIn.getTime();
-  const totalWorkMin = Math.max(0, Math.floor(totalMs / 60_000) - totalBreakMin);
 
-  const updated = await db.timeEntry.update({
-    where: { id: entry.id },
-    data: {
-      clockOut: now,
-      status: "COMPLETED" as TimeEntryStatus,
-      approvalStatus: "PENDING",
-      totalBreakMin,
-      totalWorkMin,
-      timesheetNotes: notes ?? entry.timesheetNotes,
-      // If a kiosk closes the entry, record which one. Don't overwrite an
-      // existing kioskSlug if absent here.
-      kioskSlug: kiosk?.kioskSlug ?? entry.kioskSlug,
-      kioskLabel: kiosk?.kioskLabel ?? entry.kioskLabel,
-    },
-  });
-  revalidatePath("/dashboard/time-tracking");
-  revalidatePath("/admin/time-tracking");
-  return updated;
-}
+    const now = new Date();
+    let totalBreakMin = entry.totalBreakMin;
+    for (const b of entry.breaks) {
+      if (!b.endTime) {
+        const dur = Math.floor((now.getTime() - b.startTime.getTime()) / 60_000);
+        await db.timeBreak.update({
+          where: { id: b.id },
+          data: { endTime: now, durationMin: dur },
+        });
+        totalBreakMin += dur;
+      }
+    }
+    const totalMs = now.getTime() - entry.clockIn.getTime();
+    const totalWorkMin = Math.max(0, Math.floor(totalMs / 60_000) - totalBreakMin);
 
-export async function _startBreak(employeeId: string) {
-  const entry = await db.timeEntry.findFirst({
-    where: { employeeId, status: "ACTIVE" },
-  });
-  if (!entry) throw new Error("Not currently clocked in");
-
-  const updated = await db.$transaction(async (tx) => {
-    await tx.timeBreak.create({
-      data: { timeEntryId: entry.id, startTime: new Date(), type: "BREAK" },
-    });
-    return tx.timeEntry.update({
-      where: { id: entry.id },
-      data: { status: "ON_BREAK" as TimeEntryStatus },
-    });
-  });
-  revalidatePath("/dashboard/time-tracking");
-  revalidatePath("/admin/time-tracking");
-  return updated;
-}
-
-export async function _endBreak(employeeId: string) {
-  const entry = await db.timeEntry.findFirst({
-    where: { employeeId, status: "ON_BREAK" },
-    include: { breaks: { where: { endTime: null } } },
-  });
-  if (!entry) throw new Error("Not on break");
-
-  const open = entry.breaks[0];
-  if (!open) throw new Error("No open break");
-  const now = new Date();
-  const dur = Math.floor((now.getTime() - open.startTime.getTime()) / 60_000);
-
-  const updated = await db.$transaction(async (tx) => {
-    await tx.timeBreak.update({
-      where: { id: open.id },
-      data: { endTime: now, durationMin: dur },
-    });
-    return tx.timeEntry.update({
+    const updated = await db.timeEntry.update({
       where: { id: entry.id },
       data: {
-        status: "ACTIVE" as TimeEntryStatus,
-        totalBreakMin: { increment: dur },
+        clockOut: now,
+        status: "COMPLETED" as TimeEntryStatus,
+        approvalStatus: "PENDING",
+        totalBreakMin,
+        totalWorkMin,
+        timesheetNotes: notes ?? entry.timesheetNotes,
+        kioskSlug: kiosk?.kioskSlug ?? entry.kioskSlug,
+        kioskLabel: kiosk?.kioskLabel ?? entry.kioskLabel,
       },
     });
-  });
-  revalidatePath("/dashboard/time-tracking");
-  revalidatePath("/admin/time-tracking");
-  return updated;
+    revalidatePath("/dashboard/time-tracking");
+    revalidatePath("/admin/time-tracking");
+    return ok({ id: updated.id, status: updated.status });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+export async function _startBreak(
+  employeeId: string,
+): Promise<ActionResult<{ id: string; status: string }>> {
+  try {
+    const entry = await db.timeEntry.findFirst({
+      where: { employeeId, status: "ACTIVE" },
+    });
+    if (!entry) {
+      return fail("You are not currently clocked in. Clock in first, then start a break.");
+    }
+
+    const updated = await db.$transaction(async (tx) => {
+      await tx.timeBreak.create({
+        data: { timeEntryId: entry.id, startTime: new Date(), type: "BREAK" },
+      });
+      return tx.timeEntry.update({
+        where: { id: entry.id },
+        data: { status: "ON_BREAK" as TimeEntryStatus },
+      });
+    });
+    revalidatePath("/dashboard/time-tracking");
+    revalidatePath("/admin/time-tracking");
+    return ok({ id: updated.id, status: updated.status });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+export async function _endBreak(
+  employeeId: string,
+): Promise<ActionResult<{ id: string; status: string }>> {
+  try {
+    const entry = await db.timeEntry.findFirst({
+      where: { employeeId, status: "ON_BREAK" },
+      include: { breaks: { where: { endTime: null } } },
+    });
+    if (!entry) {
+      return fail("You are not on break. Refresh the kiosk and try again.");
+    }
+
+    const open = entry.breaks[0];
+    if (!open) {
+      return fail("No open break was found on this session. Refresh the kiosk and try again.");
+    }
+    const now = new Date();
+    const dur = Math.floor((now.getTime() - open.startTime.getTime()) / 60_000);
+
+    const updated = await db.$transaction(async (tx) => {
+      await tx.timeBreak.update({
+        where: { id: open.id },
+        data: { endTime: now, durationMin: dur },
+      });
+      return tx.timeEntry.update({
+        where: { id: entry.id },
+        data: {
+          status: "ACTIVE" as TimeEntryStatus,
+          totalBreakMin: { increment: dur },
+        },
+      });
+    });
+    revalidatePath("/dashboard/time-tracking");
+    revalidatePath("/admin/time-tracking");
+    return ok({ id: updated.id, status: updated.status });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const approveSchema = z.object({
@@ -168,22 +195,30 @@ const approveSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function reviewTimeEntry(input: z.infer<typeof approveSchema>) {
+export async function reviewTimeEntry(
+  input: z.infer<typeof approveSchema>,
+): Promise<ActionResult<{ id: string; approvalStatus: string }>> {
   const admin = await requireAdmin();
-  const data = approveSchema.parse(input);
-  if (!admin.employeeId) throw new Error("Admin must have an employee record to approve.");
-  const updated = await db.timeEntry.update({
-    where: { id: data.timeEntryId },
-    data: {
-      approvalStatus: data.decision,
-      status: data.decision === "APPROVED" ? "APPROVED" : "REJECTED",
-      approvedById: admin.employeeId,
-      approvalDate: new Date(),
-      approvalNotes: data.notes ?? null,
-    },
-  });
-  revalidatePath("/admin/time-tracking");
-  // Plain object only — raw rows carry a Decimal (`rate`) that can't cross the
-  // server-action boundary to client components.
-  return { id: updated.id, approvalStatus: updated.approvalStatus };
+  if (!admin.employeeId) {
+    return fail(
+      "Your admin account has no employee profile linked. Ask another admin to link one before you can approve time entries.",
+    );
+  }
+  try {
+    const data = approveSchema.parse(input);
+    const updated = await db.timeEntry.update({
+      where: { id: data.timeEntryId },
+      data: {
+        approvalStatus: data.decision,
+        status: data.decision === "APPROVED" ? "APPROVED" : "REJECTED",
+        approvedById: admin.employeeId,
+        approvalDate: new Date(),
+        approvalNotes: data.notes ?? null,
+      },
+    });
+    revalidatePath("/admin/time-tracking");
+    return ok({ id: updated.id, approvalStatus: updated.approvalStatus });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }

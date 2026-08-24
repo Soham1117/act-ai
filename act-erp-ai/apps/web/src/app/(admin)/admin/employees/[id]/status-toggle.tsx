@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toastAction } from "@/lib/toast-action";
 import { setEmploymentStatus } from "@/server/actions/employees";
 
 export function StatusToggle({
@@ -61,14 +62,11 @@ export function StatusToggle({
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
-                  try {
-                    await setEmploymentStatus(employeeId, "TERMINATED", reason || undefined);
-                    toast.success("Employee deactivated");
-                    setOpen(false);
-                    setReason("");
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Failed");
-                  }
+                  const res = await setEmploymentStatus(employeeId, "TERMINATED", reason || undefined);
+                  if (!toastAction(res)) return;
+                  toast.success("Employee deactivated");
+                  setOpen(false);
+                  setReason("");
                 })
               }
             >
@@ -88,12 +86,9 @@ export function StatusToggle({
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          try {
-            await setEmploymentStatus(employeeId, "ACTIVE");
-            toast.success("Employee reactivated");
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed");
-          }
+          const res = await setEmploymentStatus(employeeId, "ACTIVE");
+          if (!toastAction(res)) return;
+          toast.success("Employee reactivated");
         })
       }
     >

@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { toastAction } from "@/lib/toast-action";
 import { resetEmployeeKioskPin } from "@/server/actions/kiosk";
 
 export function ResetKioskPinButton({ employeeId }: { employeeId: string }) {
@@ -12,12 +13,9 @@ export function ResetKioskPinButton({ employeeId }: { employeeId: string }) {
   function onClick() {
     if (!confirm("Clear this employee's kiosk PIN? They'll need to set a new one in Settings before clocking in/out at a kiosk again.")) return;
     startTransition(async () => {
-      try {
-        await resetEmployeeKioskPin(employeeId);
-        toast.success("Kiosk PIN cleared");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to clear PIN");
-      }
+      const res = await resetEmployeeKioskPin(employeeId);
+      if (!toastAction(res)) return;
+      toast.success("Kiosk PIN cleared");
     });
   }
 

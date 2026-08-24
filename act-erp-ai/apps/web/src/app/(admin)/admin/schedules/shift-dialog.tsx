@@ -45,6 +45,7 @@ import {
   deleteSchedule,
   updateSchedule,
 } from "@/server/actions/schedules";
+import { toastAction } from "@/lib/toast-action";
 
 type Employee = { id: string; name: string; email: string | null };
 
@@ -200,75 +201,71 @@ function ShiftForm({
     }
 
     startTransition(async () => {
-      try {
-        if (isEdit && edit) {
-          await updateSchedule({
-            id: edit.id,
-            date,
-            jobCode,
-            startTime,
-            endTime,
-            notes: notes || null,
-          });
-          toast.success("Shift updated");
-          onClose();
-          return;
-        }
+      if (isEdit && edit) {
+        const res = await updateSchedule({
+          id: edit.id,
+          date,
+          jobCode,
+          startTime,
+          endTime,
+          notes: notes || null,
+        });
+        if (!toastAction(res)) return;
+        toast.success("Shift updated");
+        onClose();
+        return;
+      }
 
-        if (selected.length === 0) {
-          toast.error("Pick at least one employee.");
-          return;
-        }
+      if (selected.length === 0) {
+        toast.error("Pick at least one employee.");
+        return;
+      }
 
-        if (mode === "single" && selected.length === 1) {
-          await createSchedule({
-            employeeId: selected[0],
-            date,
-            jobCode,
-            startTime,
-            endTime,
-            notes: notes || undefined,
-          });
-          toast.success("Shift created");
-          onClose();
-          return;
-        }
-
-        if (expandedDates.length === 0) {
-          toast.error("No dates match the selected days of the week.");
-          return;
-        }
-
-        const result = await createSchedulesBulk({
-          employeeIds: selected,
-          dates: expandedDates,
+      if (mode === "single" && selected.length === 1) {
+        const res = await createSchedule({
+          employeeId: selected[0],
+          date,
           jobCode,
           startTime,
           endTime,
           notes: notes || undefined,
         });
-        toast.success(
-          `Created ${result.created} shift${result.created === 1 ? "" : "s"}` +
-            (result.skipped ? ` · ${result.skipped} skipped (conflicts)` : ""),
-        );
+        if (!toastAction(res)) return;
+        toast.success("Shift created");
         onClose();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
+        return;
       }
+
+      if (expandedDates.length === 0) {
+        toast.error("No dates match the selected days of the week.");
+        return;
+      }
+
+      const result = await createSchedulesBulk({
+        employeeIds: selected,
+        dates: expandedDates,
+        jobCode,
+        startTime,
+        endTime,
+        notes: notes || undefined,
+      });
+      if (!toastAction(result)) return;
+      toast.success(
+        `Created ${result.created} shift${result.created === 1 ? "" : "s"}` +
+          (result.skipped ? ` · ${result.skipped} skipped (conflicts)` : ""),
+      );
+      onClose();
     });
   }
 
   function onDelete() {
     if (!edit) return;
     startTransition(async () => {
-      try {
-        await deleteSchedule(edit.id);
-        toast.success("Shift deleted");
-        setConfirmDelete(false);
-        onClose();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await deleteSchedule(edit.id);
+      if (!toastAction(res)) return;
+      toast.success("Shift deleted");
+      setConfirmDelete(false);
+      onClose();
     });
   }
 

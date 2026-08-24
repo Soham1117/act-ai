@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { submitLeaveRequest } from "@/server/actions/leave";
+import { toastAction } from "@/lib/toast-action";
 
 const TYPES = [
   "ANNUAL", "SICK", "PERSONAL", "EMERGENCY", "MATERNITY", "PATERNITY",
@@ -41,19 +42,16 @@ export function LeaveRequestDialog({ remaining }: { remaining: number }) {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await submitLeaveRequest({
-          leaveType: type,
-          startDate,
-          endDate,
-          description: description || undefined,
-        });
-        toast.success("Leave request submitted");
-        setOpen(false);
-        setStartDate(""); setEndDate(""); setDescription("");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await submitLeaveRequest({
+        leaveType: type,
+        startDate,
+        endDate,
+        description: description || undefined,
+      });
+      if (!toastAction(res)) return;
+      toast.success("Leave request submitted");
+      setOpen(false);
+      setStartDate(""); setEndDate(""); setDescription("");
     });
   }
 

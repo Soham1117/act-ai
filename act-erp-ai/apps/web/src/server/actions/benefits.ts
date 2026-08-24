@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import type { BenefitType, Prisma } from "@prisma/client";
+import { ok, fail, failFromUnknown, type ActionFail, type ActionResult } from "@/lib/action-result";
 
 /**
  * Admin CRUD for the benefits mirror (medical/dental/vision/401(k)). Every
@@ -40,19 +41,22 @@ const enrollmentStatusEnum = z.enum(["PENDING", "ENROLLED", "WAIVED"]);
  * and refused with a sharper message when its last 4 digits also match the
  * SSN this system already has on file for the employee.
  */
-function checkMemberId(memberId: string | null | undefined, ssnLast4: string | null) {
-  if (!memberId) return;
+function failBadMemberId(
+  memberId: string | null | undefined,
+  ssnLast4: string | null,
+): ActionFail | null {
+  if (!memberId) return null;
   const trimmed = memberId.trim();
   const looksLikeSSN = /^\d{9}$/.test(trimmed);
-  if (!looksLikeSSN) return;
+  if (!looksLikeSSN) return null;
   const last4 = trimmed.slice(-4);
   if (ssnLast4 && last4 === ssnLast4) {
-    throw new Error(
+    return fail(
       "This member ID is a 9-digit number whose last 4 digits match this employee's SSN on file. " +
         "This system stores last-4 SSN only, never the full number — re-enter the carrier's actual member ID.",
     );
   }
-  throw new Error(
+  return fail(
     "This member ID is 9 all-numeric digits, which looks like a Social Security Number rather than " +
       "a carrier member ID. Please verify and re-enter the carrier's actual member ID.",
   );
@@ -65,6 +69,9 @@ const FAR_FUTURE = new Date(8640000000000000);
  * `@@unique` can express — enforced here instead. Violating it double-counts
  * the cost tile and renders two medical cards. Scoped by plan *type*, not
  * plan id, since a renewal creates a new plan row of the same type.
+ *
+ * Throws a plain Error with a user-facing message so callers can map via
+ * failFromUnknown / Error.message when aborting a transaction.
  */
 async function assertNoOverlap(
   tx: Prisma.TransactionClient,
@@ -122,66 +129,83 @@ function revalidateBenefits() {
   revalidatePath("/admin/benefits");
 }
 
-export async function createBenefitPlan(input: z.infer<typeof planSchema>) {
+export async function createBenefitPlan(
+  input: z.infer<typeof planSchema>,
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
-  const data = planSchema.parse(input);
-  const plan = await db.benefitPlan.create({
-    data: {
-      type: data.type,
-      name: data.name,
-      carrierName: data.carrierName,
-      groupNumber: data.groupNumber || null,
-      carrierPhone: data.carrierPhone || null,
-      carrierPortalUrl: data.carrierPortalUrl || null,
-      planYearStart: new Date(data.planYearStart),
-      planYearEnd: new Date(data.planYearEnd),
-      costPeriod: data.costPeriod,
-      matchDescription: data.matchDescription || null,
-      vestingDescription: data.vestingDescription || null,
-      notes: data.notes || null,
-      createdById: admin.id,
-    },
-  });
-  await audit({
-    action: "benefits.create_plan",
-    resource: `BenefitPlan:${plan.id}`,
-    diff: { type: data.type, name: data.name },
-  });
-  revalidateBenefits();
-  return { id: plan.id };
+  try {
+    const data = planSchema.parse(input);
+    const plan = await db.benefitPlan.create({
+      data: {
+        type: data.type,
+        name: data.name,
+        carrierName: data.carrierName,
+        groupNumber: data.groupNumber || null,
+        carrierPhone: data.carrierPhone || null,
+        carrierPortalUrl: data.carrierPortalUrl || null,
+        planYearStart: new Date(data.planYearStart),
+        planYearEnd: new Date(data.planYearEnd),
+        costPeriod: data.costPeriod,
+        matchDescription: data.matchDescription || null,
+        vestingDescription: data.vestingDescription || null,
+        notes: data.notes || null,
+        createdById: admin.id,
+      },
+    });
+    await audit({
+      action: "benefits.create_plan",
+      resource: `BenefitPlan:${plan.id}`,
+      diff: { type: data.type, name: data.name },
+    });
+    revalidateBenefits();
+    return ok({ id: plan.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
-export async function updateBenefitPlan(id: string, input: z.infer<typeof planSchema>) {
+export async function updateBenefitPlan(
+  id: string,
+  input: z.infer<typeof planSchema>,
+): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const data = planSchema.parse(input);
-  const plan = await db.benefitPlan.update({
-    where: { id },
-    data: {
-      type: data.type,
-      name: data.name,
-      carrierName: data.carrierName,
-      groupNumber: data.groupNumber || null,
-      carrierPhone: data.carrierPhone || null,
-      carrierPortalUrl: data.carrierPortalUrl || null,
-      planYearStart: new Date(data.planYearStart),
-      planYearEnd: new Date(data.planYearEnd),
-      costPeriod: data.costPeriod,
-      matchDescription: data.matchDescription || null,
-      vestingDescription: data.vestingDescription || null,
-      notes: data.notes || null,
-    },
-  });
-  await audit({ action: "benefits.update_plan", resource: `BenefitPlan:${plan.id}` });
-  revalidateBenefits();
-  return { id: plan.id };
+  try {
+    const data = planSchema.parse(input);
+    const plan = await db.benefitPlan.update({
+      where: { id },
+      data: {
+        type: data.type,
+        name: data.name,
+        carrierName: data.carrierName,
+        groupNumber: data.groupNumber || null,
+        carrierPhone: data.carrierPhone || null,
+        carrierPortalUrl: data.carrierPortalUrl || null,
+        planYearStart: new Date(data.planYearStart),
+        planYearEnd: new Date(data.planYearEnd),
+        costPeriod: data.costPeriod,
+        matchDescription: data.matchDescription || null,
+        vestingDescription: data.vestingDescription || null,
+        notes: data.notes || null,
+      },
+    });
+    await audit({ action: "benefits.update_plan", resource: `BenefitPlan:${plan.id}` });
+    revalidateBenefits();
+    return ok({ id: plan.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
-export async function deactivateBenefitPlan(id: string) {
+export async function deactivateBenefitPlan(id: string): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const plan = await db.benefitPlan.update({ where: { id }, data: { isActive: false } });
-  await audit({ action: "benefits.deactivate_plan", resource: `BenefitPlan:${id}` });
-  revalidateBenefits();
-  return { id: plan.id };
+  try {
+    const plan = await db.benefitPlan.update({ where: { id }, data: { isActive: false } });
+    await audit({ action: "benefits.deactivate_plan", resource: `BenefitPlan:${id}` });
+    revalidateBenefits();
+    return ok({ id: plan.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const tierPriceSchema = z.object({
@@ -190,25 +214,32 @@ const tierPriceSchema = z.object({
   employerCost: z.coerce.number().min(0),
 });
 
-export async function upsertPlanTiers(planId: string, tiers: z.infer<typeof tierPriceSchema>[]) {
+export async function upsertPlanTiers(
+  planId: string,
+  tiers: z.infer<typeof tierPriceSchema>[],
+): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const data = z.array(tierPriceSchema).min(1).parse(tiers);
-  await db.$transaction(
-    data.map((t) =>
-      db.benefitPlanTier.upsert({
-        where: { planId_tier: { planId, tier: t.tier } },
-        create: { planId, tier: t.tier, employeeCost: t.employeeCost, employerCost: t.employerCost },
-        update: { employeeCost: t.employeeCost, employerCost: t.employerCost },
-      }),
-    ),
-  );
-  await audit({
-    action: "benefits.upsert_plan_tiers",
-    resource: `BenefitPlan:${planId}`,
-    diff: { tierCount: data.length },
-  });
-  revalidateBenefits();
-  return { id: planId };
+  try {
+    const data = z.array(tierPriceSchema).min(1).parse(tiers);
+    await db.$transaction(
+      data.map((t) =>
+        db.benefitPlanTier.upsert({
+          where: { planId_tier: { planId, tier: t.tier } },
+          create: { planId, tier: t.tier, employeeCost: t.employeeCost, employerCost: t.employerCost },
+          update: { employeeCost: t.employeeCost, employerCost: t.employerCost },
+        }),
+      ),
+    );
+    await audit({
+      action: "benefits.upsert_plan_tiers",
+      resource: `BenefitPlan:${planId}`,
+      diff: { tierCount: data.length },
+    });
+    revalidateBenefits();
+    return ok({ id: planId });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 // ── Enrollments ────────────────────────────────────────────────────────
@@ -239,64 +270,77 @@ const enrollmentSchema = z
  * UI only ever exposes this as create, plus "Change tier" as a separate
  * action.
  */
-export async function upsertEnrollment(input: z.infer<typeof enrollmentSchema>) {
+export async function upsertEnrollment(
+  input: z.infer<typeof enrollmentSchema>,
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
-  const data = enrollmentSchema.parse(input);
-  const effectiveDate = new Date(data.effectiveDate);
+  try {
+    const data = enrollmentSchema.parse(input);
+    const effectiveDate = new Date(data.effectiveDate);
 
-  const [employee, plan] = await Promise.all([
-    db.employee.findUniqueOrThrow({ where: { id: data.employeeId }, select: { ssnLast4: true } }),
-    db.benefitPlan.findUniqueOrThrow({ where: { id: data.planId }, select: { type: true } }),
-  ]);
-  checkMemberId(data.memberId, employee.ssnLast4);
+    const [employee, plan] = await Promise.all([
+      db.employee.findUnique({ where: { id: data.employeeId }, select: { ssnLast4: true } }),
+      db.benefitPlan.findUnique({ where: { id: data.planId }, select: { type: true } }),
+    ]);
+    if (!employee) {
+      return fail("That employee no longer exists. Refresh the page and pick another employee.");
+    }
+    if (!plan) {
+      return fail("That benefit plan no longer exists. Refresh the page and pick another plan.");
+    }
+    const memberFail = failBadMemberId(data.memberId, employee.ssnLast4);
+    if (memberFail) return memberFail;
 
-  const row = await db.$transaction(async (tx) => {
-    await assertNoOverlap(tx, "benefitEnrollment", {
-      employeeId: data.employeeId,
-      planType: plan.type,
-      effectiveDate,
-      endDate: null,
-      excludeId: data.id,
-    });
+    const row = await db.$transaction(async (tx) => {
+      await assertNoOverlap(tx, "benefitEnrollment", {
+        employeeId: data.employeeId,
+        planType: plan.type,
+        effectiveDate,
+        endDate: null,
+        excludeId: data.id,
+      });
 
-    if (data.id) {
-      return tx.benefitEnrollment.update({
-        where: { id: data.id },
+      if (data.id) {
+        return tx.benefitEnrollment.update({
+          where: { id: data.id },
+          data: {
+            tier: data.tier,
+            status: data.status,
+            memberId: data.memberId || null,
+            employeeCostOverride: data.employeeCostOverride ?? null,
+            employerCostOverride: data.employerCostOverride ?? null,
+            notes: data.notes || null,
+            confirmedAsOf: new Date(),
+          },
+        });
+      }
+      return tx.benefitEnrollment.create({
         data: {
+          employeeId: data.employeeId,
+          planId: data.planId,
           tier: data.tier,
           status: data.status,
+          effectiveDate,
           memberId: data.memberId || null,
           employeeCostOverride: data.employeeCostOverride ?? null,
           employerCostOverride: data.employerCostOverride ?? null,
           notes: data.notes || null,
           confirmedAsOf: new Date(),
+          createdById: admin.id,
         },
       });
-    }
-    return tx.benefitEnrollment.create({
-      data: {
-        employeeId: data.employeeId,
-        planId: data.planId,
-        tier: data.tier,
-        status: data.status,
-        effectiveDate,
-        memberId: data.memberId || null,
-        employeeCostOverride: data.employeeCostOverride ?? null,
-        employerCostOverride: data.employerCostOverride ?? null,
-        notes: data.notes || null,
-        confirmedAsOf: new Date(),
-        createdById: admin.id,
-      },
     });
-  });
 
-  await audit({
-    action: data.id ? "benefits.update_enrollment" : "benefits.create_enrollment",
-    resource: `BenefitEnrollment:${row.id}`,
-    diff: { employeeId: data.employeeId, planId: data.planId, status: data.status },
-  });
-  revalidateBenefits();
-  return { id: row.id };
+    await audit({
+      action: data.id ? "benefits.update_enrollment" : "benefits.create_enrollment",
+      resource: `BenefitEnrollment:${row.id}`,
+      diff: { employeeId: data.employeeId, planId: data.planId, status: data.status },
+    });
+    revalidateBenefits();
+    return ok({ id: row.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const changeTierSchema = z.object({
@@ -312,58 +356,76 @@ const changeTierSchema = z.object({
  * because they'd destroy the record of what the employee was paying before
  * the change — the one thing a payroll-deduction mirror exists to preserve.
  */
-export async function changeEnrollmentTier(input: z.infer<typeof changeTierSchema>) {
+export async function changeEnrollmentTier(
+  input: z.infer<typeof changeTierSchema>,
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
-  const data = changeTierSchema.parse(input);
-  const newEffectiveDate = new Date(data.effectiveDate);
+  try {
+    const data = changeTierSchema.parse(input);
+    const newEffectiveDate = new Date(data.effectiveDate);
 
-  const created = await db.$transaction(async (tx) => {
-    const old = await tx.benefitEnrollment.findUniqueOrThrow({
+    const old = await db.benefitEnrollment.findUnique({
       where: { id: data.enrollmentId },
       include: { plan: { select: { type: true } } },
     });
+    if (!old) {
+      return fail("That enrollment no longer exists. Refresh the page and try again.");
+    }
     if (newEffectiveDate <= old.effectiveDate) {
-      throw new Error("The new tier's effective date must be after the current enrollment's effective date.");
+      return fail(
+        "The new tier's effective date must be after the current enrollment's effective date. Pick a later date and try again.",
+      );
     }
 
-    const employee = await tx.employee.findUniqueOrThrow({
+    const employee = await db.employee.findUnique({
       where: { id: old.employeeId },
       select: { ssnLast4: true },
     });
+    if (!employee) {
+      return fail("That employee no longer exists. Refresh the page and try again.");
+    }
     const memberId = data.memberId ?? old.memberId ?? undefined;
-    checkMemberId(memberId, employee.ssnLast4);
+    const memberFail = failBadMemberId(memberId, employee.ssnLast4);
+    if (memberFail) return memberFail;
 
-    await tx.benefitEnrollment.update({ where: { id: old.id }, data: { endDate: newEffectiveDate } });
+    const created = await db.$transaction(async (tx) => {
+      await tx.benefitEnrollment.update({
+        where: { id: old.id },
+        data: { endDate: newEffectiveDate },
+      });
 
-    await assertNoOverlap(tx, "benefitEnrollment", {
-      employeeId: old.employeeId,
-      planType: old.plan.type,
-      effectiveDate: newEffectiveDate,
-      endDate: null,
-      excludeId: old.id,
-    });
-
-    return tx.benefitEnrollment.create({
-      data: {
+      await assertNoOverlap(tx, "benefitEnrollment", {
         employeeId: old.employeeId,
-        planId: old.planId,
-        tier: data.newTier,
-        status: "ENROLLED",
+        planType: old.plan.type,
         effectiveDate: newEffectiveDate,
-        memberId: memberId || null,
-        confirmedAsOf: new Date(),
-        createdById: admin.id,
-      },
-    });
-  });
+        endDate: null,
+        excludeId: old.id,
+      });
 
-  await audit({
-    action: "benefits.change_enrollment_tier",
-    resource: `BenefitEnrollment:${created.id}`,
-    diff: { previousEnrollmentId: data.enrollmentId, newTier: data.newTier },
-  });
-  revalidateBenefits();
-  return { id: created.id };
+      return tx.benefitEnrollment.create({
+        data: {
+          employeeId: old.employeeId,
+          planId: old.planId,
+          tier: data.newTier,
+          status: "ENROLLED",
+          effectiveDate: newEffectiveDate,
+          memberId: memberId || null,
+          confirmedAsOf: new Date(),
+          createdById: admin.id,
+        },
+      });
+    });
+
+    await audit({
+      action: "benefits.change_enrollment_tier",
+      resource: `BenefitEnrollment:${created.id}`,
+      diff: { previousEnrollmentId: data.enrollmentId, newTier: data.newTier },
+    });
+    revalidateBenefits();
+    return ok({ id: created.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const endEnrollmentSchema = z.object({
@@ -372,24 +434,30 @@ const endEnrollmentSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function endEnrollment(input: z.infer<typeof endEnrollmentSchema>) {
+export async function endEnrollment(
+  input: z.infer<typeof endEnrollmentSchema>,
+): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const data = endEnrollmentSchema.parse(input);
-  const row = await db.benefitEnrollment.update({
-    where: { id: data.enrollmentId },
-    data: {
-      endDate: new Date(data.endDate),
-      notes: data.notes || undefined,
-      confirmedAsOf: new Date(),
-    },
-  });
-  await audit({
-    action: "benefits.end_enrollment",
-    resource: `BenefitEnrollment:${row.id}`,
-    diff: { endDate: data.endDate },
-  });
-  revalidateBenefits();
-  return { id: row.id };
+  try {
+    const data = endEnrollmentSchema.parse(input);
+    const row = await db.benefitEnrollment.update({
+      where: { id: data.enrollmentId },
+      data: {
+        endDate: new Date(data.endDate),
+        notes: data.notes || undefined,
+        confirmedAsOf: new Date(),
+      },
+    });
+    await audit({
+      action: "benefits.end_enrollment",
+      resource: `BenefitEnrollment:${row.id}`,
+      diff: { endDate: data.endDate },
+    });
+    revalidateBenefits();
+    return ok({ id: row.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 // ── Retirement (401(k)) ──────────────────────────────────────────────
@@ -418,56 +486,62 @@ const retirementSchema = z
     },
   );
 
-export async function upsertRetirementElection(input: z.infer<typeof retirementSchema>) {
+export async function upsertRetirementElection(
+  input: z.infer<typeof retirementSchema>,
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
-  const data = retirementSchema.parse(input);
-  const effectiveDate = new Date(data.effectiveDate);
+  try {
+    const data = retirementSchema.parse(input);
+    const effectiveDate = new Date(data.effectiveDate);
 
-  const row = await db.$transaction(async (tx) => {
-    await assertNoOverlap(tx, "retirementElection", {
-      employeeId: data.employeeId,
-      planType: "RETIREMENT_401K",
-      effectiveDate,
-      endDate: null,
-      excludeId: data.id,
-    });
+    const row = await db.$transaction(async (tx) => {
+      await assertNoOverlap(tx, "retirementElection", {
+        employeeId: data.employeeId,
+        planType: "RETIREMENT_401K",
+        effectiveDate,
+        endDate: null,
+        excludeId: data.id,
+      });
 
-    if (data.id) {
-      return tx.retirementElection.update({
-        where: { id: data.id },
+      if (data.id) {
+        return tx.retirementElection.update({
+          where: { id: data.id },
+          data: {
+            status: data.status,
+            preTaxPercent: data.preTaxPercent ?? null,
+            rothPercent: data.rothPercent ?? null,
+            flatAmountPerPay: data.flatAmountPerPay ?? null,
+            notes: data.notes || null,
+            confirmedAsOf: new Date(),
+          },
+        });
+      }
+      return tx.retirementElection.create({
         data: {
+          employeeId: data.employeeId,
+          planId: data.planId,
           status: data.status,
           preTaxPercent: data.preTaxPercent ?? null,
           rothPercent: data.rothPercent ?? null,
           flatAmountPerPay: data.flatAmountPerPay ?? null,
+          effectiveDate,
           notes: data.notes || null,
           confirmedAsOf: new Date(),
+          createdById: admin.id,
         },
       });
-    }
-    return tx.retirementElection.create({
-      data: {
-        employeeId: data.employeeId,
-        planId: data.planId,
-        status: data.status,
-        preTaxPercent: data.preTaxPercent ?? null,
-        rothPercent: data.rothPercent ?? null,
-        flatAmountPerPay: data.flatAmountPerPay ?? null,
-        effectiveDate,
-        notes: data.notes || null,
-        confirmedAsOf: new Date(),
-        createdById: admin.id,
-      },
     });
-  });
 
-  await audit({
-    action: data.id ? "benefits.update_retirement_election" : "benefits.create_retirement_election",
-    resource: `RetirementElection:${row.id}`,
-    diff: { employeeId: data.employeeId, status: data.status },
-  });
-  revalidateBenefits();
-  return { id: row.id };
+    await audit({
+      action: data.id ? "benefits.update_retirement_election" : "benefits.create_retirement_election",
+      resource: `RetirementElection:${row.id}`,
+      diff: { employeeId: data.employeeId, status: data.status },
+    });
+    revalidateBenefits();
+    return ok({ id: row.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const endElectionSchema = z.object({
@@ -476,24 +550,30 @@ const endElectionSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function endRetirementElection(input: z.infer<typeof endElectionSchema>) {
+export async function endRetirementElection(
+  input: z.infer<typeof endElectionSchema>,
+): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
-  const data = endElectionSchema.parse(input);
-  const row = await db.retirementElection.update({
-    where: { id: data.electionId },
-    data: {
-      endDate: new Date(data.endDate),
-      notes: data.notes || undefined,
-      confirmedAsOf: new Date(),
-    },
-  });
-  await audit({
-    action: "benefits.end_retirement_election",
-    resource: `RetirementElection:${row.id}`,
-    diff: { endDate: data.endDate },
-  });
-  revalidateBenefits();
-  return { id: row.id };
+  try {
+    const data = endElectionSchema.parse(input);
+    const row = await db.retirementElection.update({
+      where: { id: data.electionId },
+      data: {
+        endDate: new Date(data.endDate),
+        notes: data.notes || undefined,
+        confirmedAsOf: new Date(),
+      },
+    });
+    await audit({
+      action: "benefits.end_retirement_election",
+      resource: `RetirementElection:${row.id}`,
+      diff: { endDate: data.endDate },
+    });
+    revalidateBenefits();
+    return ok({ id: row.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 // ── Annual renewal ────────────────────────────────────────────────────
@@ -513,104 +593,129 @@ const rollForwardSchema = z.object({
  * against a specific year's rate; carrying it forward silently is worse
  * than losing it.
  */
-export async function rollForwardPlanYear(input: z.infer<typeof rollForwardSchema>) {
+export async function rollForwardPlanYear(
+  input: z.infer<typeof rollForwardSchema>,
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
-  const data = rollForwardSchema.parse(input);
+  try {
+    const data = rollForwardSchema.parse(input);
 
-  const result = await db.$transaction(async (tx) => {
-    const oldPlan = await tx.benefitPlan.findUniqueOrThrow({ where: { id: data.oldPlanId } });
+    const result = await db.$transaction(async (tx) => {
+      const oldPlan = await tx.benefitPlan.findUnique({ where: { id: data.oldPlanId } });
+      if (!oldPlan) {
+        throw new Error("That benefit plan no longer exists. Refresh the page and try again.");
+      }
 
-    const newPlan = await tx.benefitPlan.create({
-      data: {
-        type: oldPlan.type,
-        name: oldPlan.name,
-        carrierName: oldPlan.carrierName,
-        groupNumber: oldPlan.groupNumber,
-        carrierPhone: oldPlan.carrierPhone,
-        carrierPortalUrl: oldPlan.carrierPortalUrl,
-        planYearStart: new Date(data.planYearStart),
-        planYearEnd: new Date(data.planYearEnd),
-        costPeriod: oldPlan.costPeriod,
-        matchDescription: oldPlan.matchDescription,
-        vestingDescription: oldPlan.vestingDescription,
-        createdById: admin.id,
-      },
-    });
-
-    if (data.tiers && data.tiers.length > 0) {
-      await tx.benefitPlanTier.createMany({
-        data: data.tiers.map((t) => ({
-          planId: newPlan.id,
-          tier: t.tier,
-          employeeCost: t.employeeCost,
-          employerCost: t.employerCost,
-        })),
+      const newPlan = await tx.benefitPlan.create({
+        data: {
+          type: oldPlan.type,
+          name: oldPlan.name,
+          carrierName: oldPlan.carrierName,
+          groupNumber: oldPlan.groupNumber,
+          carrierPhone: oldPlan.carrierPhone,
+          carrierPortalUrl: oldPlan.carrierPortalUrl,
+          planYearStart: new Date(data.planYearStart),
+          planYearEnd: new Date(data.planYearEnd),
+          costPeriod: oldPlan.costPeriod,
+          matchDescription: oldPlan.matchDescription,
+          vestingDescription: oldPlan.vestingDescription,
+          createdById: admin.id,
+        },
       });
-    }
 
-    if (oldPlan.type === "RETIREMENT_401K") {
-      const open = await tx.retirementElection.findMany({ where: { planId: oldPlan.id, endDate: null } });
-      for (const e of open) {
-        await tx.retirementElection.update({ where: { id: e.id }, data: { endDate: oldPlan.planYearEnd } });
-        await tx.retirementElection.create({
-          data: {
-            employeeId: e.employeeId,
+      if (data.tiers && data.tiers.length > 0) {
+        await tx.benefitPlanTier.createMany({
+          data: data.tiers.map((t) => ({
             planId: newPlan.id,
-            status: e.status,
-            preTaxPercent: e.preTaxPercent,
-            rothPercent: e.rothPercent,
-            flatAmountPerPay: e.flatAmountPerPay,
+            tier: t.tier,
+            employeeCost: t.employeeCost,
+            employerCost: t.employerCost,
+          })),
+        });
+      }
+
+      if (oldPlan.type === "RETIREMENT_401K") {
+        const open = await tx.retirementElection.findMany({
+          where: { planId: oldPlan.id, endDate: null },
+        });
+        for (const e of open) {
+          await tx.retirementElection.update({
+            where: { id: e.id },
+            data: { endDate: oldPlan.planYearEnd },
+          });
+          await tx.retirementElection.create({
+            data: {
+              employeeId: e.employeeId,
+              planId: newPlan.id,
+              status: e.status,
+              preTaxPercent: e.preTaxPercent,
+              rothPercent: e.rothPercent,
+              flatAmountPerPay: e.flatAmountPerPay,
+              effectiveDate: newPlan.planYearStart,
+              confirmedAsOf: new Date(),
+              createdById: admin.id,
+            },
+          });
+        }
+        return { planId: newPlan.id, migratedCount: open.length };
+      }
+
+      const open = await tx.benefitEnrollment.findMany({
+        where: { planId: oldPlan.id, endDate: null },
+      });
+      for (const en of open) {
+        await tx.benefitEnrollment.update({
+          where: { id: en.id },
+          data: { endDate: oldPlan.planYearEnd },
+        });
+        await tx.benefitEnrollment.create({
+          data: {
+            employeeId: en.employeeId,
+            planId: newPlan.id,
+            tier: en.tier,
+            status: en.status,
             effectiveDate: newPlan.planYearStart,
+            memberId: en.memberId,
             confirmedAsOf: new Date(),
             createdById: admin.id,
           },
         });
       }
       return { planId: newPlan.id, migratedCount: open.length };
-    }
+    });
 
-    const open = await tx.benefitEnrollment.findMany({ where: { planId: oldPlan.id, endDate: null } });
-    for (const en of open) {
-      await tx.benefitEnrollment.update({ where: { id: en.id }, data: { endDate: oldPlan.planYearEnd } });
-      await tx.benefitEnrollment.create({
-        data: {
-          employeeId: en.employeeId,
-          planId: newPlan.id,
-          tier: en.tier,
-          status: en.status,
-          effectiveDate: newPlan.planYearStart,
-          memberId: en.memberId,
-          confirmedAsOf: new Date(),
-          createdById: admin.id,
-        },
-      });
-    }
-    return { planId: newPlan.id, migratedCount: open.length };
-  });
-
-  await audit({
-    action: "benefits.roll_forward_plan_year",
-    resource: `BenefitPlan:${result.planId}`,
-    diff: { oldPlanId: data.oldPlanId, migratedCount: result.migratedCount },
-  });
-  revalidateBenefits();
-  return { id: result.planId };
+    await audit({
+      action: "benefits.roll_forward_plan_year",
+      resource: `BenefitPlan:${result.planId}`,
+      diff: { oldPlanId: data.oldPlanId, migratedCount: result.migratedCount },
+    });
+    revalidateBenefits();
+    return ok({ id: result.planId });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 /** For after the annual broker audit — stamps confirmedAsOf=now on every
  * currently-open enrollment and election so the freshness StatCard resets. */
-export async function markAllVerifiedToday() {
+export async function markAllVerifiedToday(): Promise<
+  ActionResult<{ enrollments: number; elections: number }>
+> {
   await requireAdmin();
-  const now = new Date();
-  const [enrollments, elections] = await db.$transaction([
-    db.benefitEnrollment.updateMany({ where: { endDate: null }, data: { confirmedAsOf: now } }),
-    db.retirementElection.updateMany({ where: { endDate: null }, data: { confirmedAsOf: now } }),
-  ]);
-  await audit({
-    action: "benefits.mark_all_verified",
-    resource: "BenefitEnrollment:*",
-    diff: { enrollments: enrollments.count, elections: elections.count },
-  });
-  revalidateBenefits();
-  return { enrollments: enrollments.count, elections: elections.count };
+  try {
+    const now = new Date();
+    const [enrollments, elections] = await db.$transaction([
+      db.benefitEnrollment.updateMany({ where: { endDate: null }, data: { confirmedAsOf: now } }),
+      db.retirementElection.updateMany({ where: { endDate: null }, data: { confirmedAsOf: now } }),
+    ]);
+    await audit({
+      action: "benefits.mark_all_verified",
+      resource: "BenefitEnrollment:*",
+      diff: { enrollments: enrollments.count, elections: elections.count },
+    });
+    revalidateBenefits();
+    return ok({ enrollments: enrollments.count, elections: elections.count });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }

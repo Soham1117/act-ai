@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createEmployee } from "@/server/actions/employees";
+import { toastAction } from "@/lib/toast-action";
 
 const schema = z.object({
   name: z.string().min(2, "At least 2 characters"),
@@ -71,20 +72,17 @@ export function AddEmployeeDialog({
 
   function onSubmit(values: Values) {
     startTransition(async () => {
-      try {
-        await createEmployee({
-          ...values,
-          departmentId: values.departmentId || null,
-          jobTitle: values.jobTitle || null,
-          phoneNumber: values.phoneNumber || null,
-          compensationValue: values.compensationValue ? Number(values.compensationValue) : null,
-        });
-        toast.success(`Created ${values.name}`);
-        setOpen(false);
-        form.reset();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to create");
-      }
+      const res = await createEmployee({
+        ...values,
+        departmentId: values.departmentId || null,
+        jobTitle: values.jobTitle || null,
+        phoneNumber: values.phoneNumber || null,
+        compensationValue: values.compensationValue ? Number(values.compensationValue) : null,
+      });
+      if (!toastAction(res)) return;
+      toast.success(`Created ${values.name}`);
+      setOpen(false);
+      form.reset();
     });
   }
 

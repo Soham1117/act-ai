@@ -38,6 +38,7 @@ import { getAvatarUrl } from "@/lib/format";
 import { getDepartmentConfig } from "@/lib/departments";
 import { bulkDeleteEmployees } from "@/server/actions/employees";
 import { toast } from "sonner";
+import { toastAction } from "@/lib/toast-action";
 import { useTransition } from "react";
 
 export type Row = {
@@ -226,13 +227,10 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                try {
-                  const n = await bulkDeleteEmployees(selectedIds);
-                  toast.success(`Deleted ${n} employee${n === 1 ? "" : "s"}`);
-                  setRowSelection({});
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Failed");
-                }
+                const res = await bulkDeleteEmployees(selectedIds);
+                if (!toastAction(res)) return;
+                toast.success(`Deleted ${res.count} employee${res.count === 1 ? "" : "s"}`);
+                setRowSelection({});
               })
             }
           >

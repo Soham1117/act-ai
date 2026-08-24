@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toastAction } from "@/lib/toast-action";
 import { changeEmployeePassword } from "@/server/actions/employees";
 
 export function ChangePasswordModal({
@@ -40,14 +41,11 @@ export function ChangePasswordModal({
       return;
     }
     startTransition(async () => {
-      try {
-        await changeEmployeePassword(employeeId, { password });
-        toast.success(`Password updated for ${employeeName}`);
-        setOpen(false);
-        setPassword(""); setConfirm("");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await changeEmployeePassword(employeeId, { password });
+      if (!toastAction(res)) return;
+      toast.success(`Password updated for ${employeeName}`);
+      setOpen(false);
+      setPassword(""); setConfirm("");
     });
   }
 

@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createJobCode, updateJobCode } from "@/server/actions/job-codes";
+import { toastAction } from "@/lib/toast-action";
 
 type DepartmentOption = { id: string; name: string };
 
@@ -79,28 +80,26 @@ export function JobCodeDialog({ departments, existing, open: controlledOpen, onO
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        const payload = {
-          code,
-          title,
-          description: description || null,
-          rate: rate || "NA",
-          isActive,
-          isDefault,
-          departmentId: departmentId === NONE ? null : departmentId,
-        };
-        if (editing && existing) {
-          await updateJobCode(existing.id, payload);
-          toast.success(`Updated ${code.toUpperCase()}`);
-        } else {
-          await createJobCode(payload);
-          toast.success(`Created ${code.toUpperCase()}`);
-          resetCreate();
-        }
-        setOpen(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
+      const payload = {
+        code,
+        title,
+        description: description || null,
+        rate: rate || "NA",
+        isActive,
+        isDefault,
+        departmentId: departmentId === NONE ? null : departmentId,
+      };
+      if (editing && existing) {
+        const res = await updateJobCode(existing.id, payload);
+        if (!toastAction(res)) return;
+        toast.success(`Updated ${code.toUpperCase()}`);
+      } else {
+        const res = await createJobCode(payload);
+        if (!toastAction(res)) return;
+        toast.success(`Created ${code.toUpperCase()}`);
+        resetCreate();
       }
+      setOpen(false);
     });
   }
 

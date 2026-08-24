@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { uploadDocumentBulk } from "@/server/actions/documents";
+import { toastAction } from "@/lib/toast-action";
 
 const TYPES = ["PERSONAL", "COMPANY", "ONBOARDING", "BENEFITS", "TRAINING"] as const;
 type DocType = (typeof TYPES)[number];
@@ -86,34 +87,31 @@ export function UploadDocumentBulkDialog({
     if (selected.size === 0) return toast.error("Select at least one employee");
 
     startTransition(async () => {
-      try {
-        const bytes = await file.arrayBuffer();
-        const result = await uploadDocumentBulk(
-          {
-            title: title.trim(),
-            description: description.trim() || undefined,
-            documentType: docType,
-            employeeIds: Array.from(selected),
-            erisaDisclosure: docType === "BENEFITS" ? erisaDisclosure : undefined,
-          },
-          { name: file.name, type: file.type || "application/octet-stream", bytes },
+      const bytes = await file.arrayBuffer();
+      const result = await uploadDocumentBulk(
+        {
+          title: title.trim(),
+          description: description.trim() || undefined,
+          documentType: docType,
+          employeeIds: Array.from(selected),
+          erisaDisclosure: docType === "BENEFITS" ? erisaDisclosure : undefined,
+        },
+        { name: file.name, type: file.type || "application/octet-stream", bytes },
+      );
+      if (!toastAction(result)) return;
+      toast.success(`Uploaded to ${result.created} employee${result.created === 1 ? "" : "s"}`);
+      if (result.skippedEmployeeIds.length > 0) {
+        const names = employees
+          .filter((e) => result.skippedEmployeeIds.includes(e.id))
+          .map((e) => e.name)
+          .join(", ");
+        toast.warning(
+          `Not delivered electronically to ${result.skippedEmployeeIds.length} employee(s) without consent on file — give them a paper copy: ${names}`,
+          { duration: 10000 },
         );
-        toast.success(`Uploaded to ${result.created} employee${result.created === 1 ? "" : "s"}`);
-        if (result.skippedEmployeeIds.length > 0) {
-          const names = employees
-            .filter((e) => result.skippedEmployeeIds.includes(e.id))
-            .map((e) => e.name)
-            .join(", ");
-          toast.warning(
-            `Not delivered electronically to ${result.skippedEmployeeIds.length} employee(s) without consent on file — give them a paper copy: ${names}`,
-            { duration: 10000 },
-          );
-        }
-        setOpen(false);
-        reset();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Upload failed");
       }
+      setOpen(false);
+      reset();
     });
   }
 

@@ -8,6 +8,7 @@ import { uploadFile, deleteFile } from "@/lib/storage";
 import { parsePaystub } from "@/lib/paystub-parser";
 import { matchEmployee, type MatchResult } from "@/lib/paystub-match";
 import type { ParsedPaystub } from "@/lib/paystub-parser";
+import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 
 const uploadSchema = z.object({
   employeeId: z.string(),
@@ -31,46 +32,50 @@ function isW2Category(category: string): boolean {
 export async function uploadPayrollDocument(
   input: z.infer<typeof uploadSchema>,
   file: { name: string; type: string; bytes: ArrayBuffer },
-) {
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
-  const data = uploadSchema.parse(input);
+  try {
+    const data = uploadSchema.parse(input);
 
-  if (isW2Category(data.category)) {
-    const employee = await db.employee.findUnique({
-      where: { id: data.employeeId },
-      select: { w2ConsentAt: true },
-    });
-    if (!employee?.w2ConsentAt) {
-      throw new Error(
-        "This employee hasn't consented to electronic W-2 delivery (IRS Treas. Reg. 31.6051-1). " +
-          "Deliver their W-2 on paper instead — it cannot be uploaded here without consent on file.",
-      );
+    if (isW2Category(data.category)) {
+      const employee = await db.employee.findUnique({
+        where: { id: data.employeeId },
+        select: { w2ConsentAt: true },
+      });
+      if (!employee?.w2ConsentAt) {
+        return fail(
+          "This employee hasn't consented to electronic W-2 delivery (IRS Treas. Reg. 31.6051-1). " +
+            "Deliver their W-2 on paper instead — it cannot be uploaded here without consent on file.",
+        );
+      }
     }
-  }
 
-  const path = `${data.employeeId}/${data.payPeriodEnd}-${Date.now()}-${file.name}`;
-  const { key } = await uploadFile("payroll", path, file.bytes, {
-    contentType: file.type,
-  });
-  const doc = await db.payroll.create({
-    data: {
-      employeeId: data.employeeId,
-      title: data.title,
-      description: data.description ?? null,
-      category: data.category,
-      fileName: path,
-      fileType: file.type,
-      // Legacy column — reads go through /api/payroll/[id]/file, never this.
-      fileUrl: key,
-      payPeriodStart: new Date(data.payPeriodStart),
-      payPeriodEnd: new Date(data.payPeriodEnd),
-      uploadedById: admin.id,
-      uploaderEmployeeId: admin.employeeId ?? null,
-    },
-  });
-  revalidatePath("/admin/payroll");
-  revalidatePath("/dashboard/payroll");
-  return doc;
+    const path = `${data.employeeId}/${data.payPeriodEnd}-${Date.now()}-${file.name}`;
+    const { key } = await uploadFile("payroll", path, file.bytes, {
+      contentType: file.type,
+    });
+    const doc = await db.payroll.create({
+      data: {
+        employeeId: data.employeeId,
+        title: data.title,
+        description: data.description ?? null,
+        category: data.category,
+        fileName: path,
+        fileType: file.type,
+        // Legacy column — reads go through /api/payroll/[id]/file, never this.
+        fileUrl: key,
+        payPeriodStart: new Date(data.payPeriodStart),
+        payPeriodEnd: new Date(data.payPeriodEnd),
+        uploadedById: admin.id,
+        uploaderEmployeeId: admin.employeeId ?? null,
+      },
+    });
+    revalidatePath("/admin/payroll");
+    revalidatePath("/dashboard/payroll");
+    return ok({ id: doc.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 export type PaystubPreview = {
@@ -119,13 +124,20 @@ export async function previewPaystub(
   return { fileName: file.name, parsed, match, duplicateOf };
 }
 
-export async function deletePayrollDocument(id: string) {
+export async function deletePayrollDocument(id: string): Promise<ActionResult> {
   await requireAdmin();
-  const doc = await db.payroll.findUnique({ where: { id } });
-  if (!doc) throw new Error("Not found");
-  await deleteFile("payroll", doc.fileName).catch(() => null);
-  await db.payroll.delete({ where: { id } });
-  revalidatePath("/admin/payroll");
+  try {
+    const doc = await db.payroll.findUnique({ where: { id } });
+    if (!doc) {
+      return fail("That payroll document no longer exists. Refresh the page and try again.");
+    }
+    await deleteFile("payroll", doc.fileName).catch(() => null);
+    await db.payroll.delete({ where: { id } });
+    revalidatePath("/admin/payroll");
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
 const calendarSchema = z.object({
@@ -137,26 +149,37 @@ const calendarSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function createPayrollPeriod(input: z.infer<typeof calendarSchema>) {
+export async function createPayrollPeriod(
+  input: z.infer<typeof calendarSchema>,
+): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
-  const data = calendarSchema.parse(input);
-  const period = await db.payrollCalendar.create({
-    data: {
-      title: data.title,
-      payPeriodStart: new Date(data.payPeriodStart),
-      payPeriodEnd: new Date(data.payPeriodEnd),
-      payDate: new Date(data.payDate),
-      status: data.status,
-      notes: data.notes ?? null,
-      createdById: admin.id,
-    },
-  });
-  revalidatePath("/admin/payroll");
-  return period;
+  try {
+    const data = calendarSchema.parse(input);
+    const period = await db.payrollCalendar.create({
+      data: {
+        title: data.title,
+        payPeriodStart: new Date(data.payPeriodStart),
+        payPeriodEnd: new Date(data.payPeriodEnd),
+        payDate: new Date(data.payDate),
+        status: data.status,
+        notes: data.notes ?? null,
+        createdById: admin.id,
+      },
+    });
+    revalidatePath("/admin/payroll");
+    return ok({ id: period.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }
 
-export async function deletePayrollPeriod(id: string) {
+export async function deletePayrollPeriod(id: string): Promise<ActionResult> {
   await requireAdmin();
-  await db.payrollCalendar.delete({ where: { id } });
-  revalidatePath("/admin/payroll");
+  try {
+    await db.payrollCalendar.delete({ where: { id } });
+    revalidatePath("/admin/payroll");
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
 }

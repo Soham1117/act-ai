@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toastAction } from "@/lib/toast-action";
 import {
   createOnboardingInvite,
   revokeOnboardingInvite,
@@ -28,13 +29,10 @@ export function OnboardingActions() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        const invite = await createOnboardingInvite({ email: email || undefined });
-        const url = `${window.location.origin}/onboard/${invite.token}`;
-        setGeneratedUrl(url);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const invite = await createOnboardingInvite({ email: email || undefined });
+      if (!toastAction(invite)) return;
+      const url = `${window.location.origin}/onboard/${invite.token}`;
+      setGeneratedUrl(url);
     });
   }
 
@@ -127,12 +125,9 @@ export function RowActions({ inviteId, token }: { inviteId: string; token: strin
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            try {
-              await revokeOnboardingInvite(inviteId);
-              toast.success("Invite revoked");
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Failed");
-            }
+            const res = await revokeOnboardingInvite(inviteId);
+            if (!toastAction(res)) return;
+            toast.success("Invite revoked");
           })
         }
       >

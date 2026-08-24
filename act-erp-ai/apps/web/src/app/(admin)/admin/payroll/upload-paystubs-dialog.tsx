@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { previewPaystub, uploadPayrollDocument, type PaystubPreview } from "@/server/actions/payroll";
+import { humanizeUnexpectedError } from "@/lib/action-result";
 
 type CalendarPeriod = { id: string; title: string; payPeriodStart: Date; payPeriodEnd: Date };
 type EmployeeOption = { id: string; name: string };
@@ -128,7 +129,7 @@ export function UploadPaystubsDialog({
       } catch (err) {
         updateRow(row.key, {
           status: "ready",
-          errorMessage: err instanceof Error ? err.message : "Couldn't read this file — enter details manually.",
+          errorMessage: humanizeUnexpectedError(err) ?? "Couldn't read this file — enter details manually.",
         });
       }
     });
@@ -149,27 +150,27 @@ export function UploadPaystubsDialog({
     let failed = 0;
     await mapWithConcurrency(readyRows, CONCURRENCY, async (row) => {
       updateRow(row.key, { status: "uploading" });
-      try {
-        const bytes = await row.file.arrayBuffer();
-        await uploadPayrollDocument(
-          {
-            employeeId: row.employeeId!,
-            title: `${category} — ${row.payPeriodEnd}`,
-            category,
-            payPeriodStart: row.payPeriodStart,
-            payPeriodEnd: row.payPeriodEnd,
-          },
-          { name: row.file.name, type: row.file.type || "application/pdf", bytes },
-        );
-        updateRow(row.key, { status: "done" });
-        succeeded++;
-      } catch (err) {
+      const bytes = await row.file.arrayBuffer();
+      const res = await uploadPayrollDocument(
+        {
+          employeeId: row.employeeId!,
+          title: `${category} — ${row.payPeriodEnd}`,
+          category,
+          payPeriodStart: row.payPeriodStart,
+          payPeriodEnd: row.payPeriodEnd,
+        },
+        { name: row.file.name, type: row.file.type || "application/pdf", bytes },
+      );
+      if (!res.ok) {
         updateRow(row.key, {
           status: "error",
-          errorMessage: err instanceof Error ? err.message : "Upload failed",
+          errorMessage: res.error || "Upload failed",
         });
         failed++;
+        return;
       }
+      updateRow(row.key, { status: "done" });
+      succeeded++;
     });
     setUploading(false);
     if (failed === 0) {

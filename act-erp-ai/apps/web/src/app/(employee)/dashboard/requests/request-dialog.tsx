@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { submitRequest } from "@/server/actions/requests";
+import { toastAction } from "@/lib/toast-action";
 
 const TYPES = [
   "DOCUMENT_REQUEST", "DETAILS_CHANGE", "PAYROLL_INQUIRY", "SCHEDULE_CHANGE",
@@ -49,14 +50,11 @@ export function RequestDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      try {
-        await submitRequest({ type, title, description });
-        toast.success("Request submitted");
-        setOpen(false);
-        setTitle(""); setDescription("");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed");
-      }
+      const res = await submitRequest({ type, title, description });
+      if (!toastAction(res)) return;
+      toast.success("Request submitted");
+      setOpen(false);
+      setTitle(""); setDescription("");
     });
   }
 

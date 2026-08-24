@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireUser, requireAdmin } from "@/lib/auth";
 import { uploadFile, deleteFile } from "@/lib/storage";
 import { audit } from "@/lib/audit";
+import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 
 const DOC_TYPES = ["PERSONAL", "COMPANY", "ONBOARDING", "BENEFITS", "TRAINING"] as const;
 
@@ -25,50 +26,58 @@ const uploadSchema = z.object({
 export async function uploadDocument(
   input: z.infer<typeof uploadSchema>,
   file: { name: string; type: string; bytes: ArrayBuffer },
-) {
+): Promise<ActionResult<{ id: string }>> {
   const user = await requireUser();
-  const data = uploadSchema.parse(input);
+  try {
+    const data = uploadSchema.parse(input);
 
-  const targetEmployeeId =
-    user.role === "ADMIN"
-      ? data.employeeId ?? user.employeeId
-      : user.employeeId;
-  if (!targetEmployeeId) throw new Error("No employee context for upload");
-  if (user.role !== "ADMIN" && targetEmployeeId !== user.employeeId) {
-    throw new Error("Forbidden");
+    const targetEmployeeId =
+      user.role === "ADMIN"
+        ? data.employeeId ?? user.employeeId
+        : user.employeeId;
+    if (!targetEmployeeId) {
+      return fail(
+        "No employee profile is linked to your account for this upload. Ask an admin to create one, or pick an employee if you are an admin.",
+      );
+    }
+    if (user.role !== "ADMIN" && targetEmployeeId !== user.employeeId) {
+      return fail("You can only upload documents to your own employee profile.");
+    }
+
+    const path = `${targetEmployeeId}/${Date.now()}-${file.name}`;
+    const { key } = await uploadFile("documents", path, file.bytes, {
+      contentType: file.type,
+    });
+    const doc = await db.document.create({
+      data: {
+        title: data.title,
+        description: data.description ?? null,
+        fileName: path,
+        fileType: file.type,
+        // Legacy column — reads go through /api/documents/[id]/file, never this.
+        fileUrl: key,
+        documentType: data.documentType,
+        employeeId: targetEmployeeId,
+        uploadedById: user.id,
+        uploaderEmployeeId: user.employeeId ?? null,
+      },
+    });
+    await audit({
+      action: "document.upload",
+      resource: `Document:${doc.id}`,
+      diff: {
+        title: data.title,
+        documentType: data.documentType,
+        employeeId: targetEmployeeId,
+      },
+    });
+    revalidatePath("/admin/documents");
+    revalidatePath("/dashboard/documents");
+    revalidatePath(`/admin/employees/${targetEmployeeId}`);
+    return ok({ id: doc.id });
+  } catch (err) {
+    return failFromUnknown(err);
   }
-
-  const path = `${targetEmployeeId}/${Date.now()}-${file.name}`;
-  const { key } = await uploadFile("documents", path, file.bytes, {
-    contentType: file.type,
-  });
-  const doc = await db.document.create({
-    data: {
-      title: data.title,
-      description: data.description ?? null,
-      fileName: path,
-      fileType: file.type,
-      // Legacy column — reads go through /api/documents/[id]/file, never this.
-      fileUrl: key,
-      documentType: data.documentType,
-      employeeId: targetEmployeeId,
-      uploadedById: user.id,
-      uploaderEmployeeId: user.employeeId ?? null,
-    },
-  });
-  await audit({
-    action: "document.upload",
-    resource: `Document:${doc.id}`,
-    diff: {
-      title: data.title,
-      documentType: data.documentType,
-      employeeId: targetEmployeeId,
-    },
-  });
-  revalidatePath("/admin/documents");
-  revalidatePath("/dashboard/documents");
-  revalidatePath(`/admin/employees/${targetEmployeeId}`);
-  return doc;
 }
 
 const bulkSchema = z.object({
@@ -98,101 +107,111 @@ const bulkSchema = z.object({
 export async function uploadDocumentBulk(
   input: z.infer<typeof bulkSchema>,
   file: { name: string; type: string; bytes: ArrayBuffer },
-) {
+): Promise<ActionResult<{ created: number; skippedEmployeeIds: string[] }>> {
   const admin = await requireAdmin();
-  const data = bulkSchema.parse(input);
+  try {
+    const data = bulkSchema.parse(input);
 
-  let targetIds = data.employeeIds;
-  let skippedEmployeeIds: string[] = [];
-  if (data.erisaDisclosure) {
-    const consented = await db.employee.findMany({
-      where: { id: { in: data.employeeIds }, benefitsEConsentAt: { not: null } },
-      select: { id: true },
+    let targetIds = data.employeeIds;
+    let skippedEmployeeIds: string[] = [];
+    if (data.erisaDisclosure) {
+      const consented = await db.employee.findMany({
+        where: { id: { in: data.employeeIds }, benefitsEConsentAt: { not: null } },
+        select: { id: true },
+      });
+      const consentedIds = new Set(consented.map((e) => e.id));
+      targetIds = data.employeeIds.filter((id) => consentedIds.has(id));
+      skippedEmployeeIds = data.employeeIds.filter((id) => !consentedIds.has(id));
+    }
+    if (targetIds.length === 0) {
+      return fail(
+        "None of the selected employees have consented to electronic benefits document delivery. " +
+          "Deliver this document on paper to them instead.",
+      );
+    }
+
+    const path = `_shared/${Date.now()}-${file.name}`;
+    const { key } = await uploadFile("documents", path, file.bytes, {
+      contentType: file.type,
     });
-    const consentedIds = new Set(consented.map((e) => e.id));
-    targetIds = data.employeeIds.filter((id) => consentedIds.has(id));
-    skippedEmployeeIds = data.employeeIds.filter((id) => !consentedIds.has(id));
-  }
-  if (targetIds.length === 0) {
-    throw new Error(
-      "None of the selected employees have consented to electronic benefits document delivery. " +
-        "Deliver this document on paper to them instead.",
+
+    const docs = await db.$transaction(
+      targetIds.map((eid) =>
+        db.document.create({
+          data: {
+            title: data.title,
+            description: data.description ?? null,
+            fileName: path,
+            fileType: file.type,
+            fileUrl: key,
+            documentType: data.documentType,
+            employeeId: eid,
+            uploadedById: admin.id,
+            uploaderEmployeeId: admin.employeeId ?? null,
+          },
+        }),
+      ),
     );
+
+    await audit({
+      action: "document.bulk_upload",
+      resource: `Document:_shared/${path}`,
+      diff: {
+        title: data.title,
+        documentType: data.documentType,
+        employeeCount: targetIds.length,
+        skippedForConsent: skippedEmployeeIds.length,
+      },
+    });
+    revalidatePath("/admin/documents");
+    revalidatePath("/dashboard/documents");
+    for (const eid of targetIds) {
+      revalidatePath(`/admin/employees/${eid}`);
+    }
+    return ok({ created: docs.length, skippedEmployeeIds });
+  } catch (err) {
+    return failFromUnknown(err);
   }
-
-  const path = `_shared/${Date.now()}-${file.name}`;
-  const { key } = await uploadFile("documents", path, file.bytes, {
-    contentType: file.type,
-  });
-
-  const docs = await db.$transaction(
-    targetIds.map((eid) =>
-      db.document.create({
-        data: {
-          title: data.title,
-          description: data.description ?? null,
-          fileName: path,
-          fileType: file.type,
-          fileUrl: key,
-          documentType: data.documentType,
-          employeeId: eid,
-          uploadedById: admin.id,
-          uploaderEmployeeId: admin.employeeId ?? null,
-        },
-      }),
-    ),
-  );
-
-  await audit({
-    action: "document.bulk_upload",
-    resource: `Document:_shared/${path}`,
-    diff: {
-      title: data.title,
-      documentType: data.documentType,
-      employeeCount: targetIds.length,
-      skippedForConsent: skippedEmployeeIds.length,
-    },
-  });
-  revalidatePath("/admin/documents");
-  revalidatePath("/dashboard/documents");
-  for (const eid of targetIds) {
-    revalidatePath(`/admin/employees/${eid}`);
-  }
-  return { created: docs.length, skippedEmployeeIds };
 }
 
 /**
  * Admin can delete any document. Employees may delete documents they
  * uploaded themselves.
  */
-export async function deleteDocument(id: string) {
+export async function deleteDocument(id: string): Promise<ActionResult> {
   const user = await requireUser();
-  const doc = await db.document.findUnique({ where: { id } });
-  if (!doc) throw new Error("Not found");
+  try {
+    const doc = await db.document.findUnique({ where: { id } });
+    if (!doc) {
+      return fail("That document no longer exists. Refresh the page and try again.");
+    }
 
-  const isAdmin = user.role === "ADMIN";
-  const isUploader = doc.uploadedById === user.id;
-  if (!isAdmin && !isUploader) throw new Error("Forbidden");
+    const isAdmin = user.role === "ADMIN";
+    const isUploader = doc.uploadedById === user.id;
+    if (!isAdmin && !isUploader) {
+      return fail("You can only delete documents you uploaded yourself. Ask an admin if you need this removed.");
+    }
 
-  // For shared/bulk objects, only remove from storage if no other Document rows
-  // still reference the same path.
-  const stillReferenced = await db.document.count({
-    where: { fileName: doc.fileName, NOT: { id: doc.id } },
-  });
-  if (stillReferenced === 0) {
-    await deleteFile("documents", doc.fileName).catch(() => null);
+    const stillReferenced = await db.document.count({
+      where: { fileName: doc.fileName, NOT: { id: doc.id } },
+    });
+    if (stillReferenced === 0) {
+      await deleteFile("documents", doc.fileName).catch(() => null);
+    }
+    await db.document.delete({ where: { id } });
+
+    await audit({
+      action: "document.delete",
+      resource: `Document:${id}`,
+      diff: { title: doc.title, employeeId: doc.employeeId },
+    });
+    revalidatePath("/admin/documents");
+    revalidatePath("/dashboard/documents");
+    revalidatePath(`/admin/employees/${doc.employeeId}`);
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
   }
-  await db.document.delete({ where: { id } });
-
-  await audit({
-    action: "document.delete",
-    resource: `Document:${id}`,
-    diff: { title: doc.title, employeeId: doc.employeeId },
-  });
-  revalidatePath("/admin/documents");
-  revalidatePath("/dashboard/documents");
-  revalidatePath(`/admin/employees/${doc.employeeId}`);
-  return { ok: true };
 }
 
 export async function listMyDocuments() {
