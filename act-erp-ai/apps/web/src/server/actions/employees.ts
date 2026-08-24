@@ -3,15 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import { hashPassword } from "@/lib/auth/password";
+import { requireAdmin, requireUser } from "@/lib/auth";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { audit } from "@/lib/audit";
 import { uploadFile } from "@/lib/storage";
 
 const employeeSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
-  ssn: z.string().min(9).max(11),
+  // Only for employees with no company email — they log in with this instead.
+  username: z.string().regex(/^[a-z0-9._-]{3,32}$/).optional(),
+  // Where 2FA sign-in codes go — deliberately separate from the login email
+  // above, since some employees have no company email at all.
+  personalEmail: z.string().email(),
+  // Last 4 digits only — we deliberately never collect the full SSN.
+  ssnLast4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of the SSN").optional(),
   gender: z.enum(["MALE", "FEMALE", "OTHER"]),
   departmentId: z.string().optional().nullable(),
   jobTitle: z.string().optional().nullable(),
@@ -39,6 +45,7 @@ export async function createEmployee(input: z.infer<typeof employeeSchema>) {
     const user = await tx.user.create({
       data: {
         email: data.email,
+        username: data.username ?? null,
         name: data.name,
         role: "EMPLOYEE",
         passwordHash,
@@ -50,7 +57,8 @@ export async function createEmployee(input: z.infer<typeof employeeSchema>) {
         userId: user.id,
         name: data.name,
         email: data.email,
-        ssn: data.ssn,
+        personalEmail: data.personalEmail,
+        ssnLast4: data.ssnLast4 ?? null,
         gender: data.gender,
         departmentId: data.departmentId || null,
         jobTitle: data.jobTitle || null,
@@ -181,14 +189,19 @@ export async function updateEmployeeProfilePic(
   file: { name: string; type: string; bytes: ArrayBuffer },
 ) {
   await requireAdmin();
-  const path = `${employeeId}/${Date.now()}-${file.name}`;
-  const { publicUrl } = await uploadFile("profile-pics", path, file.bytes, {
+  // Fixed key per employee (not timestamped) — the proxy route derives the
+  // object key from employeeId alone, and each upload overwrites the last.
+  const path = `${employeeId}/avatar`;
+  await uploadFile("profile-pics", path, file.bytes, {
     contentType: file.type,
     upsert: true,
   });
+  // Store the proxy path, not a presigned S3 URL — it never expires and every
+  // read re-checks the caller is authenticated (see /api/employees/[id]/profile-pic).
+  const url = `/api/employees/${employeeId}/profile-pic`;
   await db.employee.update({
     where: { id: employeeId },
-    data: { profilePic: publicUrl },
+    data: { profilePic: url },
   });
   await audit({
     action: "employee.profile_pic_update",
@@ -196,7 +209,90 @@ export async function updateEmployeeProfilePic(
   });
   revalidatePath(`/admin/employees/${employeeId}`);
   revalidatePath("/admin/employees");
-  return { url: publicUrl };
+  return { url };
+}
+
+/** Self-service: update the personal email 2FA codes are sent to. Requires
+ *  the current password, same as changing it — this controls login access. */
+export async function updateMyPersonalEmail(
+  currentPassword: string,
+  personalEmail: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!user.employeeId) return { ok: false, error: "No employee record" };
+  const parsed = z.string().email().safeParse(personalEmail);
+  if (!parsed.success) return { ok: false, error: "Enter a valid email" };
+
+  const row = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
+  if (!row?.passwordHash || !(await verifyPassword(currentPassword, row.passwordHash))) {
+    return { ok: false, error: "Current password is incorrect" };
+  }
+  await db.employee.update({
+    where: { id: user.employeeId },
+    data: { personalEmail: parsed.data },
+  });
+  await audit({ action: "employee.personal_email_update", resource: `Employee:${user.employeeId}` });
+  return { ok: true };
+}
+
+/**
+ * IRS Treas. Reg. 31.6051-1 electronic W-2 consent — self-service.
+ * `consentToElectronicW2` is the affirmative, electronically-confirmed
+ * consent the regulation requires (the timestamp itself is the record).
+ * `withdrawW2Consent` reverts to paper-only; per the regulation this takes
+ * effect immediately and doesn't require a password (withdrawing consent
+ * should never be harder than giving it).
+ */
+export async function consentToElectronicW2(): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!user.employeeId) return { ok: false, error: "No employee record" };
+  await db.employee.update({
+    where: { id: user.employeeId },
+    data: { w2ConsentAt: new Date() },
+  });
+  await audit({ action: "employee.w2_consent_given", resource: `Employee:${user.employeeId}` });
+  return { ok: true };
+}
+
+export async function withdrawW2Consent(): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!user.employeeId) return { ok: false, error: "No employee record" };
+  await db.employee.update({
+    where: { id: user.employeeId },
+    data: { w2ConsentAt: null },
+  });
+  await audit({ action: "employee.w2_consent_withdrawn", resource: `Employee:${user.employeeId}` });
+  return { ok: true };
+}
+
+/**
+ * 29 CFR 2520.104b-1(c) electronic delivery consent for health & welfare
+ * plan documents (SPDs/SMMs/SBCs) — see the `///` comment on
+ * `Employee.benefitsEConsentAt` for why this is scoped to health & welfare
+ * only, not the separate 401(k) notice-and-access safe harbor. Same pattern
+ * as the W-2 pair above: withdrawal never requires a password, because
+ * withdrawing consent must never be harder than giving it.
+ */
+export async function consentToBenefitsEDelivery(): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!user.employeeId) return { ok: false, error: "No employee record" };
+  await db.employee.update({
+    where: { id: user.employeeId },
+    data: { benefitsEConsentAt: new Date() },
+  });
+  await audit({ action: "employee.benefits_econsent_given", resource: `Employee:${user.employeeId}` });
+  return { ok: true };
+}
+
+export async function withdrawBenefitsEConsent(): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!user.employeeId) return { ok: false, error: "No employee record" };
+  await db.employee.update({
+    where: { id: user.employeeId },
+    data: { benefitsEConsentAt: null },
+  });
+  await audit({ action: "employee.benefits_econsent_withdrawn", resource: `Employee:${user.employeeId}` });
+  return { ok: true };
 }
 
 export async function bulkDeleteEmployees(ids: string[]) {

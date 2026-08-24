@@ -22,6 +22,7 @@ import {
   ClipboardList,
   Clock,
   FileText,
+  HeartPulse,
   Home,
   Plane,
   Receipt,
@@ -56,6 +57,7 @@ const NAV: Array<{
       { href: "/dashboard/requests", label: "Requests", icon: ClipboardList },
       { href: "/dashboard/reimbursements", label: "Reimbursements", icon: Receipt },
       { href: "/dashboard/payroll", label: "Payroll", icon: Banknote },
+      { href: "/dashboard/benefits", label: "Benefits", icon: HeartPulse },
       { href: "/dashboard/documents", label: "Documents", icon: FileText },
       { href: "/dashboard/team", label: "My team", icon: Users },
     ],
@@ -70,8 +72,17 @@ const NAV: Array<{
   },
 ];
 
-export function EmployeeSidebar() {
+/** Nav entries that only make sense when the AI feature is switched on. */
+const AI_ONLY_HREFS = new Set(["/dashboard/chat"]);
+
+export function EmployeeSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
   const pathname = usePathname();
+  const nav = aiEnabled
+    ? NAV
+    : NAV.map((section) => ({
+        ...section,
+        items: section.items.filter((item) => !AI_ONLY_HREFS.has(item.href)),
+      })).filter((section) => section.items.length > 0);
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -80,7 +91,7 @@ export function EmployeeSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {NAV.map((section) => (
+        {nav.map((section) => (
           <SidebarGroup key={section.group}>
             <SidebarGroupLabel>{section.group}</SidebarGroupLabel>
             <SidebarGroupContent>

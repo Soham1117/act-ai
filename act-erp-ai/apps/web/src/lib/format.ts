@@ -30,11 +30,36 @@ export function formatPhone(phone: string | null | undefined) {
   return phone;
 }
 
-export function maskSSN(ssn: string | null | undefined) {
-  if (!ssn) return "—";
-  const cleaned = ssn.replace(/\D/g, "");
-  if (cleaned.length !== 9) return "***-**-****";
-  return `***-**-${cleaned.slice(-4)}`;
+/**
+ * Render the stored last-4 of an SSN. We never hold the full number, so this
+ * is presentation only — there is nothing here to mask.
+ */
+export function formatSSNLast4(last4: string | null | undefined) {
+  if (!last4) return "—";
+  const cleaned = last4.replace(/\D/g, "");
+  if (cleaned.length !== 4) return "—";
+  return `•••-••-${cleaned}`;
+}
+
+/**
+ * Format a Postgres `@db.Date` column. These come back from Prisma as a JS
+ * `Date` at UTC midnight — `toLocaleDateString()` without a timezone renders
+ * in the *local* zone, so anywhere west of UTC (all of the US) shows the
+ * previous day. A coverage effective date of Jan 1 rendering as Dec 31 reads
+ * as a legal error. Always use this (never the bare `Date`) for a
+ * `@db.Date` value; datetime columns like `createdAt` are unaffected and
+ * should keep using `toLocaleDateString()` directly.
+ */
+export function formatDateOnly(date: Date | string | null | undefined) {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function getInitials(name: string | null | undefined) {

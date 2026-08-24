@@ -27,7 +27,18 @@ datasource db {
 /// either role through, so admins can use the employee dashboard too.
 model User {
   id           String     @id @default(uuid()) @db.Uuid
-  email        String     @unique
+  /// Login email — optional. Some employees (part-time / shop floor hires)
+  /// have no company email at all and log in via `username` instead.
+  email        String?    @unique
+  /// Login identifier for employees with no company email (part-time / shop
+  /// floor hires). Login accepts either this OR email. Null for users who
+  /// sign in with email.
+  username     String?    @unique
+  /// 2FA code destination for users with no Employee record (bootstrap /
+  /// system admin accounts). Employee.personalEmail takes priority when both
+  /// exist — this is only the fallback for admins who aren't also modeled
+  /// as a full HR employee (gender, SSN, etc. don't make sense for those).
+  personalEmail String?
   name         String
   profileImage String?
   role         Role       @default(EMPLOYEE)
@@ -38,6 +49,7 @@ model User {
   /// role change, disable). getSessionUser compares this against the token.
   tokenVersion Int        @default(0)
   employee     Employee?
+  loginChallenges LoginChallenge[]
   auditLogs    AuditLog[] @relation("ActorAuditLogs")
   // Agentic RAG relations (act-erp-ai)
   knowledgeUploads KnowledgeDocument[] @relation("KnowledgeUploads")
@@ -49,6 +61,22 @@ model User {
   updatedAt    DateTime   @updatedAt
 
   @@index([email])
+}
+
+/// A pending email-2FA login. Created after password verification succeeds;
+/// consumed (or expires) before a real session is issued. The code itself is
+/// never stored — only its hash, same principle as passwords/kiosk PINs.
+model LoginChallenge {
+  id         String    @id @default(cuid())
+  userId     String    @db.Uuid
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// A saved Assistant conversation (one per chat thread, per user).
@@ -147,17 +175,51 @@ model Employee {
   gender        Gender
   maritalStatus MaritalStatus?
   profilePic    String?
+  /// bcrypt hash of the employee's kiosk PIN (self-set). Required to clock
+  /// in/out at a shared kiosk terminal — never store the PIN itself.
+  kioskPinHash  String?
   phoneNumber   String?
   dateOfBirth   DateTime?
-  email         String         @unique
+  /// Work/company email. Optional — see User.email.
+  email         String?        @unique
+  /// Where login 2FA codes are sent — deliberately separate from the login
+  /// email/username above, since some employees have no company email at all.
+  /// Always required (every employee has *some* personal email), even when
+  /// email above is null.
+  personalEmail String
+
+  /// IRS Treas. Reg. 31.6051-1 requires affirmative, electronically-confirmed
+  /// consent before a W-2 can be furnished electronically instead of on
+  /// paper — and the employee must be able to withdraw it. Null = no
+  /// consent on file (or withdrawn) → W-2s must go out on paper, never
+  /// through this system. Non-null = currently consented; the timestamp
+  /// itself IS the "confirmed electronically" record the regulation wants.
+  w2ConsentAt DateTime?
+
+  /// Same posture as w2ConsentAt, but scoped to health & welfare plan
+  /// documents (SPDs/SMMs/SBCs) under 29 CFR 2520.104b-1(c) — NOT the 401(k)
+  /// notice-and-access safe harbor (29 CFR 2520.104b-31), which is a
+  /// separate 2020 rule covering retirement plans only. A consent timestamp
+  /// is necessary but not sufficient for that safe harbor: it also requires
+  /// measures reasonably calculated to ensure actual receipt and notice, at
+  /// the time of furnishing, of the document's significance and the right
+  /// to a free paper copy — none of which is a database column. Counsel
+  /// confirms which safe harbor the plan relies on before this is widened
+  /// beyond health & welfare documents.
+  benefitsEConsentAt DateTime?
 
   // Personal
   address        String?
   city           String?
   state          String?
   zipCode        String?
-  /// Stored encrypted at rest by Postgres pgcrypto in production.
-  ssn            String   @unique
+  /// Last 4 digits of the SSN only — the full number is never collected or
+  /// stored. Payroll is processed externally (paystubs are uploaded as
+  /// files), so last-4 is sufficient to reconcile a record against the
+  /// payroll provider. NOT unique: across a few dozen employees last-4
+  /// collisions are likely enough (~6% at n=35) that a unique index would
+  /// eventually reject a legitimate hire.
+  ssnLast4       String?  @db.VarChar(4)
   nationality    String?
   educationLevel String?
   certifications String[] @default([])
@@ -217,6 +279,8 @@ model Employee {
   payrollDocs            Payroll[]
   uploadedPayroll        Payroll[]               @relation("PayrollUploader")
   notifications          NotificationRecipient[]
+  benefitEnrollments     BenefitEnrollment[]
+  retirementElections    RetirementElection[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -589,6 +653,154 @@ model PayrollCalendar {
 
   @@index([payDate])
   @@index([status])
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Benefits — medical / dental / vision / 401(k)
+//
+// This app is a read-only mirror of what the broker/carrier already
+// administers, not a system of record: no in-app elections, no
+// open-enrollment window, no carrier EDI. Three privacy rules apply
+// throughout — no PHI (diagnoses, claims, conditions), no dependent
+// identities (we store the coverage tier, never who the family is), and no
+// 401(k) balances (those live with the recordkeeper).
+// ──────────────────────────────────────────────────────────────────────
+
+/// The benefits catalog, scoped to one plan year. A renewal creates a NEW
+/// row here rather than editing the old one — that is what freezes
+/// historical premiums, since an enrollment resolves its cost against
+/// whichever plan row was active while it was in force. Never edit a plan's
+/// dates or tier prices once enrollments exist against it; roll forward
+/// (clone + re-point) instead.
+model BenefitPlan {
+  id               String  @id @default(cuid())
+  type             BenefitType
+  name             String
+  carrierName      String
+  groupNumber      String?
+  carrierPhone     String?
+  carrierPortalUrl String?
+  planYearStart    DateTime @db.Date
+  planYearEnd      DateTime @db.Date
+  /// Brokers quote monthly; payroll deducts per paycheck. Required and
+  /// load-bearing — a monthly rate typed into a per-paycheck field shows a
+  /// semi-monthly employee ~2.17x what actually leaves their paycheck.
+  costPeriod BenefitCostPeriod @default(PER_PAYCHECK)
+  /// 401(k) only. Free text copied verbatim from the plan document (e.g.
+  /// "100% of the first 3%, then 50% of the next 2%") rather than a
+  /// structured formula — structuring it invites the UI to compute a
+  /// projected match, which an employee will read as a promise. Safe-harbor
+  /// variants, true-up rules, and hours-of-service eligibility mean any
+  /// structured model is wrong for someone.
+  matchDescription   String? @db.Text
+  vestingDescription String? @db.Text
+  isActive           Boolean @default(true)
+  notes              String? @db.Text
+  /// No relation — mirrors PayrollCalendar.createdById.
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tiers       BenefitPlanTier[]
+  enrollments BenefitEnrollment[]
+  elections   RetirementElection[]
+
+  @@unique([type, name, planYearStart])
+  @@index([isActive, type])
+  @@index([planYearEnd])
+}
+
+/// The price list for a plan. Only medical/dental/vision plans have tiers —
+/// a 401(k) plan has none.
+model BenefitPlanTier {
+  id           String       @id @default(cuid())
+  planId       String
+  plan         BenefitPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  tier         CoverageTier
+  /// Always annotate Decimal — a bare Decimal maps to numeric(65,30).
+  employeeCost Decimal @db.Decimal(10, 2)
+  employerCost Decimal @db.Decimal(10, 2)
+
+  @@unique([planId, tier])
+}
+
+/// One employee, one plan, one continuous span of coverage. A tier change is
+/// always END + NEW ROW, never an in-place edit — editing destroys the
+/// record of what the employee was paying before the change, which is the
+/// one thing a payroll-deduction mirror exists to preserve. Whether coverage
+/// is current is always DERIVED from effectiveDate/endDate — there is no
+/// stored ACTIVE/ENDED flag, because a stored flag goes stale the day after
+/// it's written.
+model BenefitEnrollment {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  planId     String
+  /// Restrict, not Cascade — deleting a plan people were covered under must
+  /// fail loudly, not silently erase their coverage history.
+  plan BenefitPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  /// Null when status is WAIVED.
+  tier   CoverageTier?
+  /// WAIVED is not optional to omit: without it, "no rows for this type"
+  /// means both "you declined" and "HR hasn't entered your data yet," and an
+  /// employee who is actually covered would see a page implying otherwise.
+  status BenefitEnrollmentStatus
+
+  effectiveDate DateTime  @db.Date
+  endDate       DateTime? @db.Date
+  memberId      String?
+
+  /// Nullable OVERRIDES, not snapshots. Null = "the standard rate for this
+  /// tier," resolved from BenefitPlanTier at read time. Non-null = a
+  /// deliberate exception (class-based subsidy, grandfathered rate, tobacco
+  /// surcharge). Named `...Override` so nobody later mistakes these for a
+  /// cache and writes a "sync from catalog" job.
+  employeeCostOverride Decimal? @db.Decimal(10, 2)
+  employerCostOverride Decimal? @db.Decimal(10, 2)
+
+  /// Stamped on every mutation, not just create — a timestamp that only
+  /// records first entry looks authoritative while being stale.
+  confirmedAsOf DateTime @db.Date
+  notes         String?  @db.Text
+  createdById   String?  @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([employeeId, planId, effectiveDate])
+  @@index([employeeId, effectiveDate(sort: Desc)])
+  @@index([planId])
+}
+
+/// 401(k) elections — deliberately separate from BenefitEnrollment, since
+/// nothing about the economics matches: no tier, no premium, a percentage of
+/// pay plus an employer formula instead. Folding the two together would
+/// leave several permanently-null columns on every row of one model or the
+/// other, with no expressible invariant.
+model RetirementElection {
+  id         String      @id @default(cuid())
+  employeeId String
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  planId     String
+  plan       BenefitPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status     BenefitEnrollmentStatus
+
+  /// Decimal(5,2), not (10,2) — a percentage is not money. Percent-vs-flat
+  /// exclusivity is enforced in Zod, not the DB.
+  preTaxPercent    Decimal? @db.Decimal(5, 2)
+  rothPercent      Decimal? @db.Decimal(5, 2)
+  flatAmountPerPay Decimal? @db.Decimal(10, 2)
+
+  effectiveDate DateTime  @db.Date
+  endDate       DateTime? @db.Date
+  confirmedAsOf DateTime  @db.Date
+  notes         String?   @db.Text
+  createdById   String?   @db.Uuid
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([employeeId, planId, effectiveDate])
+  @@index([employeeId, effectiveDate(sort: Desc)])
+  @@index([planId])
 }
 
 model CompanyDefault {
@@ -996,6 +1208,7 @@ enum RequestType {
   LOCATION_CHANGE
   TEAM_REQUEST
   PROJECT_REQUEST
+  BENEFITS_INQUIRY
   OTHER
 }
 
@@ -1059,4 +1272,42 @@ enum PayrollPeriodStatus {
   UPCOMING
   CURRENT
   COMPLETED
+}
+
+enum BenefitType {
+  MEDICAL
+  DENTAL
+  VISION
+  RETIREMENT_401K
+  // v1 ships the four above; the rest exist so adding one later is UI work,
+  // not a migration.
+  LIFE
+  DISABILITY_STD
+  DISABILITY_LTD
+  HSA
+  FSA
+  OTHER
+}
+
+enum CoverageTier {
+  EMPLOYEE_ONLY
+  EMPLOYEE_SPOUSE
+  EMPLOYEE_CHILDREN
+  /// Matters because many carriers quote 3-tier (EE / EE+1 / Family) rather
+  /// than 4-tier.
+  EMPLOYEE_PLUS_ONE
+  FAMILY
+  OTHER
+}
+
+enum BenefitEnrollmentStatus {
+  PENDING
+  ENROLLED
+  WAIVED
+}
+
+enum BenefitCostPeriod {
+  PER_PAYCHECK
+  MONTHLY
+  ANNUAL
 }

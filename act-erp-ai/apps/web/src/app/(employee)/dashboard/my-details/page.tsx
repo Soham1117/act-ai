@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Mail,
@@ -6,6 +7,7 @@ import {
   MapPin,
   FileText,
   Globe,
+  HeartPulse,
   MonitorSmartphone,
   Sparkles,
   PenLine,
@@ -13,6 +15,7 @@ import {
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -20,7 +23,7 @@ import {
   formatPhone,
   formatHours,
   getAvatarUrl,
-  maskSSN,
+  formatSSNLast4,
 } from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
@@ -152,7 +155,7 @@ export default async function MyDetailsPage() {
               />
               <Field label="Nationality" value={employee.nationality} />
               <Field label="Education" value={employee.educationLevel} />
-              <Field label="SSN" value={maskSSN(employee.ssn) ?? "—"} />
+              <Field label="SSN" value={formatSSNLast4(employee.ssnLast4)} />
               <Field label="Phone" value={formatPhone(employee.phoneNumber)} />
               <Field
                 label="Address"
@@ -435,7 +438,7 @@ export default async function MyDetailsPage() {
                         </p>
                       </div>
                       <a
-                        href={p.fileUrl}
+                        href={`/api/payroll/${p.id}/file`}
                         target="_blank"
                         rel="noreferrer"
                         className="text-primary hover:underline"
@@ -459,11 +462,17 @@ export default async function MyDetailsPage() {
         </TabsContent>
 
         <TabsContent value="benefits">
-          <DocumentList
-            docs={docsByType("BENEFITS")}
-            emptyHint="No benefits documents yet."
-            title="Benefits"
-          />
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
+              <HeartPulse className="h-6 w-6 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Your medical, dental, vision, and 401(k) info now lives on a dedicated page.
+              </p>
+              <Button asChild size="sm">
+                <Link href="/dashboard/benefits">Go to Benefits</Link>
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="training">
@@ -580,7 +589,7 @@ function DocumentList({
                   </p>
                 </div>
                 <a
-                  href={d.fileUrl}
+                  href={`/api/documents/${d.id}/file`}
                   target="_blank"
                   rel="noreferrer"
                   className="rounded-md border px-2 py-1 text-primary hover:bg-muted"

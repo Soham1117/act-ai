@@ -1,13 +1,26 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ChangePasswordForm } from "./change-password-form";
+import { KioskPinForm } from "./kiosk-pin-form";
+import { PersonalEmailForm } from "./personal-email-form";
+import { W2ConsentForm } from "./w2-consent-form";
+import { BenefitsConsentForm } from "./benefits-consent-form";
 
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   const user = await requireUser();
+  const employeeRow = user.employeeId
+    ? await db.employee.findUnique({
+        where: { id: user.employeeId },
+        select: { personalEmail: true, w2ConsentAt: true, benefitsEConsentAt: true },
+      })
+    : null;
+  const personalEmail = employeeRow?.personalEmail;
   return (
     <>
       <PageHeader title="Settings" description="Account, security, and appearance." />
@@ -16,7 +29,7 @@ export default async function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Account</CardTitle>
-            <CardDescription>{user.email}</CardDescription>
+            <CardDescription>{user.email ?? "(signs in with username)"}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Row label="Name" value={user.name} />
@@ -51,21 +64,65 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Two-factor authentication</CardTitle>
-            <CardDescription>
-              Available in a future release.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              When enabled, you&apos;ll be prompted for a TOTP code from your
-              authenticator app on each login.
-            </p>
-          </CardContent>
-        </Card>
+        {user.employeeId && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Kiosk PIN</CardTitle>
+              <CardDescription>
+                Required to clock in/out at a shared kiosk terminal.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <KioskPinForm />
+            </CardContent>
+          </Card>
+        )}
+
+        {user.employeeId && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Two-factor authentication</CardTitle>
+              <CardDescription>
+                A 6-digit code is emailed here every time you sign in.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PersonalEmailForm current={personalEmail ?? ""} />
+            </CardContent>
+          </Card>
+        )}
+
+        {user.employeeId && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">W-2 delivery</CardTitle>
+              <CardDescription>Paper by default, unless you opt in.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <W2ConsentForm consented={!!employeeRow?.w2ConsentAt} />
+            </CardContent>
+          </Card>
+        )}
+
+        {user.employeeId && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Benefits document delivery</CardTitle>
+              <CardDescription>Paper by default, unless you opt in.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BenefitsConsentForm consented={!!employeeRow?.benefitsEConsentAt} />
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      <p className="mt-6 text-xs text-muted-foreground">
+        <Link href="/privacy" target="_blank" className="hover:underline">
+          Privacy notice
+        </Link>{" "}
+        — what we collect and why.
+      </p>
     </>
   );
 }

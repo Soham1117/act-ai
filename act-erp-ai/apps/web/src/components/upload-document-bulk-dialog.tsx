@@ -31,7 +31,7 @@ type DocType = (typeof TYPES)[number];
 export function UploadDocumentBulkDialog({
   employees,
 }: {
-  employees: { id: string; name: string; email: string }[];
+  employees: { id: string; name: string; email: string | null }[];
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -39,6 +39,7 @@ export function UploadDocumentBulkDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [docType, setDocType] = useState<DocType>("COMPANY");
+  const [erisaDisclosure, setErisaDisclosure] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
 
@@ -47,7 +48,7 @@ export function UploadDocumentBulkDialog({
     if (!s) return employees;
     return employees.filter(
       (e) =>
-        e.name.toLowerCase().includes(s) || e.email.toLowerCase().includes(s),
+        e.name.toLowerCase().includes(s) || (e.email?.toLowerCase().includes(s) ?? false),
     );
   }, [employees, search]);
 
@@ -56,6 +57,7 @@ export function UploadDocumentBulkDialog({
     setTitle("");
     setDescription("");
     setDocType("COMPANY");
+    setErisaDisclosure(false);
     setSelected(new Set());
     setSearch("");
   }
@@ -86,16 +88,27 @@ export function UploadDocumentBulkDialog({
     startTransition(async () => {
       try {
         const bytes = await file.arrayBuffer();
-        await uploadDocumentBulk(
+        const result = await uploadDocumentBulk(
           {
             title: title.trim(),
             description: description.trim() || undefined,
             documentType: docType,
             employeeIds: Array.from(selected),
+            erisaDisclosure: docType === "BENEFITS" ? erisaDisclosure : undefined,
           },
           { name: file.name, type: file.type || "application/octet-stream", bytes },
         );
-        toast.success(`Uploaded to ${selected.size} employee${selected.size === 1 ? "" : "s"}`);
+        toast.success(`Uploaded to ${result.created} employee${result.created === 1 ? "" : "s"}`);
+        if (result.skippedEmployeeIds.length > 0) {
+          const names = employees
+            .filter((e) => result.skippedEmployeeIds.includes(e.id))
+            .map((e) => e.name)
+            .join(", ");
+          toast.warning(
+            `Not delivered electronically to ${result.skippedEmployeeIds.length} employee(s) without consent on file — give them a paper copy: ${names}`,
+            { duration: 10000 },
+          );
+        }
         setOpen(false);
         reset();
       } catch (err) {
@@ -157,6 +170,21 @@ export function UploadDocumentBulkDialog({
               </Select>
             </div>
           </div>
+          {docType === "BENEFITS" && (
+            <div className="flex items-start gap-2 rounded-md border p-3">
+              <Checkbox
+                id="erisa-disclosure"
+                checked={erisaDisclosure}
+                onCheckedChange={(v) => setErisaDisclosure(v === true)}
+              />
+              <label htmlFor="erisa-disclosure" className="text-xs text-muted-foreground">
+                This is a benefits plan document being furnished under ERISA electronic-delivery
+                rules. When checked, this only delivers to employees who have consented to
+                electronic benefits document delivery (Settings) — anyone else is skipped and
+                listed after upload so you can hand them a paper copy.
+              </label>
+            </div>
+          )}
           <div>
             <Label htmlFor="bulk-desc">Description (optional)</Label>
             <Input
@@ -201,7 +229,7 @@ export function UploadDocumentBulkDialog({
                         className="flex-1 cursor-pointer truncate"
                       >
                         <span className="font-medium">{e.name}</span>
-                        <span className="ml-2 text-[11px] text-muted-foreground">{e.email}</span>
+                        <span className="ml-2 text-[11px] text-muted-foreground">{e.email ?? "—"}</span>
                       </label>
                     </li>
                   ))}

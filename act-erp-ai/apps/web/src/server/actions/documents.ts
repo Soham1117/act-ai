@@ -39,7 +39,7 @@ export async function uploadDocument(
   }
 
   const path = `${targetEmployeeId}/${Date.now()}-${file.name}`;
-  const { publicUrl } = await uploadFile("documents", path, file.bytes, {
+  const { key } = await uploadFile("documents", path, file.bytes, {
     contentType: file.type,
   });
   const doc = await db.document.create({
@@ -48,7 +48,8 @@ export async function uploadDocument(
       description: data.description ?? null,
       fileName: path,
       fileType: file.type,
-      fileUrl: publicUrl,
+      // Legacy column — reads go through /api/documents/[id]/file, never this.
+      fileUrl: key,
       documentType: data.documentType,
       employeeId: targetEmployeeId,
       uploadedById: user.id,
@@ -75,6 +76,18 @@ const bulkSchema = z.object({
   description: z.string().optional(),
   documentType: z.enum(DOC_TYPES),
   employeeIds: z.array(z.string()).min(1),
+  /**
+   * Set when this upload is furnishing a benefits plan document under the
+   * 2002 electronic-delivery rule (29 CFR 2520.104b-1(c)) — mirrors
+   * uploadPayrollDocument's W-2 check. When true, employeeIds is filtered
+   * down to those with Employee.benefitsEConsentAt set, and anyone dropped
+   * is returned in skippedEmployeeIds so the admin knows exactly who still
+   * needs a printed copy. NOT required for other document types, and NOT
+   * required just to show an employee their own coverage/member ID on the
+   * Benefits page — that's not "furnishing a plan document" and gating it
+   * would satisfy nothing the regulation asks for.
+   */
+  erisaDisclosure: z.boolean().optional(),
 });
 
 /**
@@ -89,20 +102,38 @@ export async function uploadDocumentBulk(
   const admin = await requireAdmin();
   const data = bulkSchema.parse(input);
 
+  let targetIds = data.employeeIds;
+  let skippedEmployeeIds: string[] = [];
+  if (data.erisaDisclosure) {
+    const consented = await db.employee.findMany({
+      where: { id: { in: data.employeeIds }, benefitsEConsentAt: { not: null } },
+      select: { id: true },
+    });
+    const consentedIds = new Set(consented.map((e) => e.id));
+    targetIds = data.employeeIds.filter((id) => consentedIds.has(id));
+    skippedEmployeeIds = data.employeeIds.filter((id) => !consentedIds.has(id));
+  }
+  if (targetIds.length === 0) {
+    throw new Error(
+      "None of the selected employees have consented to electronic benefits document delivery. " +
+        "Deliver this document on paper to them instead.",
+    );
+  }
+
   const path = `_shared/${Date.now()}-${file.name}`;
-  const { publicUrl } = await uploadFile("documents", path, file.bytes, {
+  const { key } = await uploadFile("documents", path, file.bytes, {
     contentType: file.type,
   });
 
   const docs = await db.$transaction(
-    data.employeeIds.map((eid) =>
+    targetIds.map((eid) =>
       db.document.create({
         data: {
           title: data.title,
           description: data.description ?? null,
           fileName: path,
           fileType: file.type,
-          fileUrl: publicUrl,
+          fileUrl: key,
           documentType: data.documentType,
           employeeId: eid,
           uploadedById: admin.id,
@@ -118,15 +149,16 @@ export async function uploadDocumentBulk(
     diff: {
       title: data.title,
       documentType: data.documentType,
-      employeeCount: data.employeeIds.length,
+      employeeCount: targetIds.length,
+      skippedForConsent: skippedEmployeeIds.length,
     },
   });
   revalidatePath("/admin/documents");
   revalidatePath("/dashboard/documents");
-  for (const eid of data.employeeIds) {
+  for (const eid of targetIds) {
     revalidatePath(`/admin/employees/${eid}`);
   }
-  return docs;
+  return { created: docs.length, skippedEmployeeIds };
 }
 
 /**

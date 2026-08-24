@@ -17,11 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { formatPhone, formatHours, getAvatarUrl, maskSSN } from "@/lib/format";
+import { formatPhone, formatHours, getAvatarUrl, formatSSNLast4 } from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
 import { ChangePasswordModal } from "./change-password-modal";
 import { StatusToggle } from "./status-toggle";
+import { ResetKioskPinButton } from "./reset-kiosk-pin-button";
 import {
   ProfilePicEditor,
   NameEditor,
@@ -31,6 +32,7 @@ import {
 } from "./inline-edit";
 import { UploadDocumentDialog } from "@/components/upload-document-dialog";
 import { DeleteDocumentButton } from "@/components/delete-document-button";
+import { BenefitsCard } from "./benefits-card";
 
 export default async function EmployeeDetailPage({
   params,
@@ -52,6 +54,14 @@ export default async function EmployeeDetailPage({
           take: 30,
         },
         payrollDocs: { orderBy: { payPeriodEnd: "desc" }, take: 20 },
+        benefitEnrollments: {
+          include: { plan: { select: { id: true, type: true, name: true, costPeriod: true } } },
+          orderBy: { effectiveDate: "desc" },
+        },
+        retirementElections: {
+          include: { plan: { select: { id: true, name: true } } },
+          orderBy: { effectiveDate: "desc" },
+        },
         documents: {
           orderBy: { uploadedAt: "desc" },
           select: {
@@ -69,7 +79,7 @@ export default async function EmployeeDetailPage({
 
   if (!employee) notFound();
 
-  const [departments, supervisors, jobCodes] = await Promise.all([
+  const [departments, supervisors, jobCodes, activePlans] = await Promise.all([
     db.department.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.employee.findMany({
       where: { id: { not: id }, employmentStatus: { not: "TERMINATED" } },
@@ -81,7 +91,45 @@ export default async function EmployeeDetailPage({
       orderBy: { code: "asc" },
       select: { id: true, code: true, title: true },
     }),
+    db.benefitPlan.findMany({
+      where: { isActive: true },
+      include: { tiers: true },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
+    }),
   ]);
+
+  const planOptions = activePlans.map((p) => ({
+    id: p.id,
+    type: p.type,
+    name: p.name,
+    carrierName: p.carrierName,
+    costPeriod: p.costPeriod,
+    tiers: p.tiers.map((t) => ({
+      tier: t.tier,
+      employeeCost: Number(t.employeeCost),
+      employerCost: Number(t.employerCost),
+    })),
+  }));
+  const enrollmentRows = employee.benefitEnrollments.map((e) => ({
+    id: e.id,
+    tier: e.tier,
+    status: e.status,
+    effectiveDate: e.effectiveDate.toISOString().slice(0, 10),
+    endDate: e.endDate ? e.endDate.toISOString().slice(0, 10) : null,
+    memberId: e.memberId,
+    confirmedAsOf: e.confirmedAsOf.toISOString().slice(0, 10),
+    plan: { id: e.plan.id, type: e.plan.type, name: e.plan.name, costPeriod: e.plan.costPeriod },
+  }));
+  const electionRows = employee.retirementElections.map((el) => ({
+    id: el.id,
+    status: el.status,
+    effectiveDate: el.effectiveDate.toISOString().slice(0, 10),
+    endDate: el.endDate ? el.endDate.toISOString().slice(0, 10) : null,
+    preTaxPercent: el.preTaxPercent === null ? null : Number(el.preTaxPercent),
+    rothPercent: el.rothPercent === null ? null : Number(el.rothPercent),
+    flatAmountPerPay: el.flatAmountPerPay === null ? null : Number(el.flatAmountPerPay),
+    plan: { id: el.plan.id, name: el.plan.name },
+  }));
 
   const avatar = employee.profilePic ?? getAvatarUrl(employee.email);
   const deptCfg = employee.department ? getDepartmentConfig(employee.department.name) : null;
@@ -100,6 +148,7 @@ export default async function EmployeeDetailPage({
         </Button>
         <div className="flex flex-wrap gap-2">
           <ChangePasswordModal employeeId={employee.id} employeeName={employee.name} />
+          <ResetKioskPinButton employeeId={employee.id} />
           <StatusToggle employeeId={employee.id} status={employee.employmentStatus} />
         </div>
       </div>
@@ -161,7 +210,7 @@ export default async function EmployeeDetailPage({
           <TabsContent value="basic">
             <PersonalEditableCard
               employeeId={employee.id}
-              ssnMasked={maskSSN(employee.ssn) ?? "—"}
+              ssnMasked={formatSSNLast4(employee.ssnLast4)}
               initial={{
                 gender: employee.gender,
                 maritalStatus: employee.maritalStatus ?? "",
@@ -361,7 +410,7 @@ export default async function EmployeeDetailPage({
                             {p.payPeriodStart.toLocaleDateString()} → {p.payPeriodEnd.toLocaleDateString()}
                           </p>
                         </div>
-                        <a href={p.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                        <a href={`/api/payroll/${p.id}/file`} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                           <FileText className="h-4 w-4" />
                         </a>
                       </li>
@@ -382,7 +431,13 @@ export default async function EmployeeDetailPage({
             />
           </TabsContent>
 
-          <TabsContent value="benefits">
+          <TabsContent value="benefits" className="space-y-4">
+            <BenefitsCard
+              employeeId={employee.id}
+              plans={planOptions}
+              enrollments={enrollmentRows}
+              elections={electionRows}
+            />
             <DocumentSection
               employeeId={employee.id}
               docs={docsByType("BENEFITS")}
@@ -481,7 +536,7 @@ function DocumentSection({
                 </div>
                 <div className="flex items-center gap-2">
                   <a
-                    href={d.fileUrl}
+                    href={`/api/documents/${d.id}/file`}
                     target="_blank"
                     rel="noreferrer"
                     className="rounded-md border px-2 py-1 text-primary hover:bg-muted"

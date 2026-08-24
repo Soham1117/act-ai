@@ -9,7 +9,7 @@ const submitSchema = z.object({
   type: z.enum([
     "DOCUMENT_REQUEST", "DETAILS_CHANGE", "LEAVE_REQUEST", "PAYROLL_INQUIRY",
     "SCHEDULE_CHANGE", "ACCESS_REQUEST", "TRAINING_REQUEST", "EQUIPMENT_REQUEST",
-    "LOCATION_CHANGE", "TEAM_REQUEST", "PROJECT_REQUEST", "OTHER",
+    "LOCATION_CHANGE", "TEAM_REQUEST", "PROJECT_REQUEST", "BENEFITS_INQUIRY", "OTHER",
   ]),
   title: z.string().min(2).max(120),
   description: z.string().min(2),

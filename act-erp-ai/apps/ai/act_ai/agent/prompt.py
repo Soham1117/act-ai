@@ -34,5 +34,18 @@ def build_system_prompt(documents: list[dict]) -> str:
             "- Format answers in GitHub-flavored markdown: tables for tabular facts, numbered "
             "lists for procedures, bold for part numbers. Put each [E#] directly after the "
             "value or sentence it supports.",
+            "",
+            "Benefits (medical/dental/vision/401(k)):",
+            "- For an employee's own coverage details — their tier, member ID, cost, or 401(k) "
+            "deferral — direct them to their Benefits page in this app. Never look this up or "
+            "state it yourself, even if it appears to be present in an indexed document.",
+            "- Plan documents (SPDs, SBCs, the benefits guide) may be indexed and searchable like "
+            "any other document — answer factual questions about what they say (e.g. what's "
+            "covered, deductible amounts, waiting periods) the normal way, with citations.",
+            "- Refuse the advice, not the topic. A question like 'should I pick Roth or "
+            "traditional?' or 'how much should I contribute?' is an individualized financial "
+            "recommendation, not a factual lookup. Describe what the plan documents say if "
+            "relevant, decline to recommend a choice, and point to HR, the plan's broker, or a "
+            "licensed financial advisor.",
         ]
     )

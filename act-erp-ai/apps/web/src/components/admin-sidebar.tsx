@@ -25,6 +25,7 @@ import {
   ClipboardList,
   Clock,
   FileText,
+  HeartPulse,
   Home,
   LayoutGrid,
   Library,
@@ -66,6 +67,7 @@ const NAV: Array<{
       { href: "/admin/requests", label: "Requests", icon: ClipboardList },
       { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
       { href: "/admin/payroll", label: "Payroll", icon: Banknote },
+      { href: "/admin/benefits", label: "Benefits", icon: HeartPulse },
     ],
   },
   {
@@ -81,8 +83,17 @@ const NAV: Array<{
   },
 ];
 
-export function AdminSidebar() {
+/** Nav entries that only make sense when the AI feature is switched on. */
+const AI_ONLY_HREFS = new Set(["/admin/chat", "/admin/knowledge"]);
+
+export function AdminSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
   const pathname = usePathname();
+  const nav = aiEnabled
+    ? NAV
+    : NAV.map((section) => ({
+        ...section,
+        items: section.items.filter((item) => !AI_ONLY_HREFS.has(item.href)),
+      })).filter((section) => section.items.length > 0);
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -95,7 +106,7 @@ export function AdminSidebar() {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {NAV.map((section) => (
+        {nav.map((section) => (
           <SidebarGroup key={section.group}>
             <SidebarGroupLabel>{section.group}</SidebarGroupLabel>
             <SidebarGroupContent>

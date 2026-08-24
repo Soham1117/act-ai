@@ -8,9 +8,14 @@ import { formatDistanceToNow } from "date-fns";
 
 export const metadata = { title: "Requests" };
 
-export default async function EmployeeRequestsPage() {
+export default async function EmployeeRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>;
+}) {
   const user = await requireUser();
   if (!user.employeeId) return <p className="text-sm text-muted-foreground">No employee record.</p>;
+  const sp = await searchParams;
 
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
     try { return await p; } catch { return fallback; }
@@ -30,7 +35,11 @@ export default async function EmployeeRequestsPage() {
       <PageHeader
         title="Requests"
         description="Submit requests for documents, equipment, training, schedule changes, etc."
-        actions={<RequestDialog />}
+        actions={
+          <RequestDialog
+            initialType={sp.type === "BENEFITS_INQUIRY" ? "BENEFITS_INQUIRY" : undefined}
+          />
+        }
       />
       <Card>
         <CardHeader><CardTitle className="text-base">My requests ({requests.length})</CardTitle></CardHeader>

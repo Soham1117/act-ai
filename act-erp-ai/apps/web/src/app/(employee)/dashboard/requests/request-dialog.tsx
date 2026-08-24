@@ -27,13 +27,22 @@ import { submitRequest } from "@/server/actions/requests";
 const TYPES = [
   "DOCUMENT_REQUEST", "DETAILS_CHANGE", "PAYROLL_INQUIRY", "SCHEDULE_CHANGE",
   "ACCESS_REQUEST", "TRAINING_REQUEST", "EQUIPMENT_REQUEST", "LOCATION_CHANGE",
-  "TEAM_REQUEST", "PROJECT_REQUEST", "LEAVE_REQUEST", "OTHER",
+  "TEAM_REQUEST", "PROJECT_REQUEST", "LEAVE_REQUEST", "BENEFITS_INQUIRY", "OTHER",
 ] as const;
 
-export function RequestDialog() {
-  const [open, setOpen] = useState(false);
+export function RequestDialog({
+  initialType,
+}: {
+  /** Pre-selects the type and opens the dialog on mount — used by the
+   * "Something look wrong?" link from the Benefits page. */
+  initialType?: (typeof TYPES)[number];
+}) {
+  // Both initialized straight from the prop — it's only ever set once, from
+  // the searchParams-derived value the server passed in on this page load,
+  // so there's no need for an effect to sync it after mount.
+  const [open, setOpen] = useState(!!initialType);
   const [pending, startTransition] = useTransition();
-  const [type, setType] = useState<(typeof TYPES)[number]>("DOCUMENT_REQUEST");
+  const [type, setType] = useState<(typeof TYPES)[number]>(initialType ?? "DOCUMENT_REQUEST");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
