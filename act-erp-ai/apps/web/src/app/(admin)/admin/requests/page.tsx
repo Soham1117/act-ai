@@ -76,7 +76,7 @@ type RequestRow = {
   type: string;
   status: "PENDING" | "PROCESSING" | "COMPLETED" | "REJECTED";
   createdAt: Date;
-  employee: { name: string; email: string; profilePic: string | null };
+  employee: { name: string; email: string | null; profilePic: string | null };
 };
 
 function RequestList({ rows }: { rows: RequestRow[] }) {

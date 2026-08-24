@@ -67,7 +67,7 @@ export default async function EmployeePayrollPage() {
                     {d.uploadedAt.toLocaleDateString()}
                   </span>
                   <Link
-                    href={d.fileUrl}
+                    href={`/api/payroll/${d.id}/file`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="rounded-md border px-2 py-1 text-xs hover:bg-muted"

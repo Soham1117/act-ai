@@ -1,4 +1,6 @@
+import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
+import { aiEnabled } from "@/lib/features";
 import { listAccessibleDocuments } from "@/lib/knowledge/access";
 import { getChatSessionMessages } from "@/server/actions/chat-sessions";
 import { turnsFromMessages } from "@/lib/chat/restore";
@@ -11,6 +13,7 @@ export default async function AdminChatPage({
 }: {
   searchParams: Promise<{ session?: string }>;
 }) {
+  if (!aiEnabled) notFound();
   const user = await requireAdmin();
   const { session: sessionId } = await searchParams;
   const docs = await listAccessibleDocuments(user);

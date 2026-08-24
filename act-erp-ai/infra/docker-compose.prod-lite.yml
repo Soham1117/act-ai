@@ -1,0 +1,59 @@
+# Minimal single-box production stack: web + Postgres + Caddy (TLS).
+# No agent, no worker, no SQS, no Bedrock, no Datalab — the AI/chat feature
+# is not deployed. Everything else (employees, HR, time-tracking, payroll,
+# documents) runs unchanged; adding AI chat later just means bringing the
+# `ai-agent`/`ai-worker` services from infra/docker-compose.yml onto this
+# same box (or a second one) and pointing AGENT_SERVICE_URL at it.
+#
+# Usage on the box:
+#   docker compose -f docker-compose.prod-lite.yml up -d --build
+name: act-erp-lite
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file: ./postgres.env  # POSTGRES_USER/PASSWORD/DB — same password as DATABASE_URL below
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U act"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No published port — only reachable from other containers on this box.
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: ../../infra/Dockerfile.web
+      secrets:
+        - env_prod
+    restart: unless-stopped
+    env_file: ../apps/web/.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No published port either — Caddy is the only public entrypoint.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  env_prod:
+    file: ../apps/web/.env.prod

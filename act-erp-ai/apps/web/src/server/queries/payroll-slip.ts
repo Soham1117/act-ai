@@ -5,7 +5,7 @@ export type PayrollSlipRow = {
   employeeId: string;        // EMP-YYYY-NNNN
   employeeRowId: string;
   name: string;
-  email: string;
+  email: string | null;
   profilePic: string | null;
   department: string | null;
   weeks: Array<{ weekStart: string; weekEnd: string; regular: number; overtime: number }>;
@@ -67,32 +67,34 @@ export async function getPayrollSlipsForPeriod(
   };
   const buckets = new Map<string, Bucket>();
 
-  for (const e of entries) {
-    let b = buckets.get(e.employee.id);
-    if (!b) {
-      b = {
-        employee: {
-          employeeRowId: e.employee.id,
-          employeeId: e.employee.employeeId,
-          name: e.employee.name,
-          email: e.employee.email,
-          profilePic: e.employee.profilePic,
-          department: e.employee.department?.name ?? null,
-          weeks: [],
-          regularHours: 0,
-          overtimeHours: 0,
-          totalHours: 0,
-          daysWorked: 0,
-          firstClockIn: null,
-          lastClockOut: null,
-        },
-        weekly: new Map(),
-        daySet: new Set(),
+  function makeBucket(e: (typeof entries)[number]): Bucket {
+    return {
+      employee: {
+        employeeRowId: e.employee.id,
+        employeeId: e.employee.employeeId,
+        name: e.employee.name,
+        email: e.employee.email,
+        profilePic: e.employee.profilePic,
+        department: e.employee.department?.name ?? null,
+        weeks: [],
+        regularHours: 0,
+        overtimeHours: 0,
+        totalHours: 0,
+        daysWorked: 0,
         firstClockIn: null,
         lastClockOut: null,
-      };
-      buckets.set(e.employee.id, b);
-    }
+      },
+      weekly: new Map(),
+      daySet: new Set(),
+      firstClockIn: null,
+      lastClockOut: null,
+    };
+  }
+
+  for (const e of entries) {
+    if (!buckets.has(e.employee.id)) buckets.set(e.employee.id, makeBucket(e));
+    const b = buckets.get(e.employee.id)!;
+
     const wkKey = startOfWeek(e.date, { weekStartsOn: 1 }).toISOString();
     b.weekly.set(wkKey, (b.weekly.get(wkKey) ?? 0) + e.totalWorkMin);
     b.daySet.add(e.date.toISOString().slice(0, 10));

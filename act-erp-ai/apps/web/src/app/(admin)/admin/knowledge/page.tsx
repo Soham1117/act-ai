@@ -1,4 +1,6 @@
+import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
+import { aiEnabled } from "@/lib/features";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,6 +16,7 @@ import { KnowledgeUploadDialog } from "@/components/knowledge/upload-dialog";
 export const metadata = { title: "Knowledge base" };
 
 export default async function KnowledgePage() {
+  if (!aiEnabled) notFound();
   await requireAdmin();
   const docs = await db.knowledgeDocument.findMany({
     orderBy: { createdAt: "desc" },

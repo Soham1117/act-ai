@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Banknote } from "lucide-react";
 import { CreatePayrollPeriodDialog } from "./create-period-dialog";
+import { UploadPaystubsDialog } from "./upload-paystubs-dialog";
 
 export const metadata = { title: "Payroll" };
 
@@ -14,7 +15,7 @@ export default async function AdminPayrollPage() {
     try { return await p; } catch { return fallback; }
   };
 
-  const [docs, calendar] = await Promise.all([
+  const [docs, calendar, employees] = await Promise.all([
     safe(
       db.payroll.findMany({
         orderBy: { uploadedAt: "desc" },
@@ -25,6 +26,10 @@ export default async function AdminPayrollPage() {
     ),
     safe(
       db.payrollCalendar.findMany({ orderBy: { payDate: "desc" } }),
+      [],
+    ),
+    safe(
+      db.employee.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
       [],
     ),
   ]);
@@ -38,7 +43,12 @@ export default async function AdminPayrollPage() {
       <PageHeader
         title="Payroll"
         description="Manage pay periods and upload pay stubs."
-        actions={<CreatePayrollPeriodDialog />}
+        actions={
+          <div className="flex gap-2">
+            <UploadPaystubsDialog calendarPeriods={calendar} employees={employees} />
+            <CreatePayrollPeriodDialog />
+          </div>
+        }
       />
       <div className="grid gap-3 sm:grid-cols-4">
         <StatCard label="Documents" value={docs.length} icon={<Banknote className="h-4 w-4" />} />

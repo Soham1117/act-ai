@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth";
+import { aiEnabled } from "@/lib/features";
 import { allowedDocumentIds } from "@/lib/knowledge/access";
 import { env } from "@/lib/env";
 
@@ -11,6 +12,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  if (!aiEnabled) {
+    return new Response("AI assistant is not enabled on this deployment", { status: 503 });
+  }
   const user = await getSessionUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 

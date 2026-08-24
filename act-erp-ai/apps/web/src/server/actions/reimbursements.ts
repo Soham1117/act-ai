@@ -32,13 +32,13 @@ export async function submitReimbursement(
   const uploaded = await Promise.all(
     receipts.slice(0, 5).map(async (f) => {
       const path = `${user.employeeId}/${Date.now()}-${f.name}`;
-      const { publicUrl } = await uploadFile("reimbursement-receipts", path, f.bytes, {
+      const { key } = await uploadFile("reimbursement-receipts", path, f.bytes, {
         contentType: f.type,
       });
       return {
         fileName: path,
         originalName: f.name,
-        fileUrl: publicUrl,
+        fileUrl: key,
         fileSize: f.size,
         mimeType: f.type,
       };

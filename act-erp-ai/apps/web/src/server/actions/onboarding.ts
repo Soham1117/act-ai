@@ -41,7 +41,17 @@ export async function revokeOnboardingInvite(id: string) {
 const submitSchema = z.object({
   // Basic
   name: z.string().min(2),
-  email: z.string().email(),
+  // Optional — some hires (part-time / shop floor) have no company email at
+  // all. If omitted, `username` is required instead as the login identifier.
+  email: z.string().email().optional().or(z.literal("").transform(() => undefined)),
+  username: z
+    .string()
+    .regex(/^[a-z0-9._-]{3,32}$/, "Lowercase letters, numbers, . _ - only, 3-32 chars")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  // Where 2FA sign-in codes go — always required, separate from the login
+  // email/username above.
+  personalEmail: z.string().email(),
   password: z.string().min(8),
   phoneNumber: z.string().optional().nullable(),
   dateOfBirth: z.string().optional().nullable(),
@@ -55,7 +65,8 @@ const submitSchema = z.object({
   nationality: z.string().optional().nullable(),
   educationLevel: z.string().optional().nullable(),
   // Identity / emergency
-  ssn: z.string().min(9).max(11),
+  // Last 4 digits only — we deliberately never collect the full SSN.
+  ssnLast4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of your SSN"),
   emergencyName: z.string().optional().nullable(),
   emergencyPhone: z.string().optional().nullable(),
   // Work
@@ -67,6 +78,9 @@ const submitSchema = z.object({
   employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
   compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
   compensationValue: z.coerce.number().optional().nullable(),
+}).refine((v) => v.email || v.username, {
+  message: "Provide either a work email or a username",
+  path: ["username"],
 });
 
 export type OnboardingSubmit = z.infer<typeof submitSchema>;
@@ -106,7 +120,8 @@ export async function submitOnboarding(
   const employee = await db.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
-        email: data.email,
+        email: data.email ?? null,
+        username: data.username ?? null,
         name: data.name,
         role: "EMPLOYEE",
         passwordHash,
@@ -117,7 +132,8 @@ export async function submitOnboarding(
         employeeId: data.employeeId,
         userId: user.id,
         name: data.name,
-        email: data.email,
+        email: data.email ?? null,
+        personalEmail: data.personalEmail,
         gender: data.gender,
         maritalStatus: data.maritalStatus ?? null,
         phoneNumber: data.phoneNumber ?? null,
@@ -128,7 +144,7 @@ export async function submitOnboarding(
         zipCode: data.zipCode ?? null,
         nationality: data.nationality ?? null,
         educationLevel: data.educationLevel ?? null,
-        ssn: data.ssn,
+        ssnLast4: data.ssnLast4,
         emergencyName: data.emergencyName ?? null,
         emergencyPhone: data.emergencyPhone ?? null,
         departmentId: data.departmentId || null,
@@ -149,15 +165,17 @@ export async function submitOnboarding(
     try {
       const bytes = Buffer.from(f.base64, "base64");
       const path = `${employee.id}/${Date.now()}-${f.fileName.replace(/[^\w.-]/g, "_")}`;
-      const { publicUrl } = await uploadFile("onboarding", path, bytes, {
+      // Stored as a Document row (below), so it lives under the "documents"
+      // prefix like every other document — /api/documents/[id]/file expects it there.
+      const { key } = await uploadFile("documents", path, bytes, {
         contentType: f.contentType,
       });
       await db.document.create({
         data: {
           title: f.title,
-          fileName: f.fileName,
+          fileName: path,
           fileType: f.contentType,
-          fileUrl: publicUrl,
+          fileUrl: key,
           documentType: f.documentType,
           employeeId: employee.id,
         },

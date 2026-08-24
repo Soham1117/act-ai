@@ -27,11 +27,16 @@ export default async function AdminDocumentsPage() {
       [] as Array<{
         id: string;
         title: string;
+        description: string | null;
+        fileName: string;
         fileType: string;
         fileUrl: string;
         documentType: string;
+        employeeId: string;
+        uploadedById: string | null;
+        uploaderEmployeeId: string | null;
         uploadedAt: Date;
-        employee: { name: string; email: string };
+        employee: { name: string; email: string | null };
       }>,
     ),
     safe(
@@ -40,7 +45,7 @@ export default async function AdminDocumentsPage() {
         orderBy: { name: "asc" },
         select: { id: true, name: true, email: true },
       }),
-      [] as Array<{ id: string; name: string; email: string }>,
+      [] as Array<{ id: string; name: string; email: string | null }>,
     ),
   ]);
 
@@ -89,7 +94,7 @@ type Doc = {
   fileUrl: string;
   documentType: string;
   uploadedAt: Date;
-  employee: { name: string; email: string };
+  employee: { name: string; email: string | null };
 };
 
 function DocList({ docs }: { docs: Doc[] }) {
@@ -116,7 +121,7 @@ function DocList({ docs }: { docs: Doc[] }) {
               </div>
               <Badge variant="outline" className="text-[10px]">{d.documentType}</Badge>
               <Link
-                href={d.fileUrl}
+                href={`/api/documents/${d.id}/file`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-md border px-2 py-1 text-[10px] hover:bg-muted"

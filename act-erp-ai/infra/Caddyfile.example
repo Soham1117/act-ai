@@ -1,0 +1,5 @@
+# Copy to infra/Caddyfile and set your real domain. Caddy auto-provisions
+# and renews a Let's Encrypt cert for it — no ACM, no ALB, no manual certbot.
+erp.yourcompany.com {
+	reverse_proxy web:3000
+}

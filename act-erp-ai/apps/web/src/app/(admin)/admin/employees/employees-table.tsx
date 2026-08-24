@@ -44,7 +44,7 @@ export type Row = {
   id: string;
   employeeId: string;
   name: string;
-  email: string;
+  email: string | null;
   jobTitle: string | null;
   departmentName: string | null;
   employmentType: "FULL_PART_TIME" | "CONTRACT_HOURLY";

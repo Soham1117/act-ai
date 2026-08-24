@@ -1,0 +1,7 @@
+# TEMPORARY — plain HTTP by IP, no domain/TLS. DNS for
+# persona.americancompletiontools.com isn't set up yet. Swap back to the
+# domain block (see Caddyfile.example) once DNS resolves, so this gets real
+# HTTPS. Employees should not use this IP link once the real domain is live.
+:80 {
+	reverse_proxy web:3000
+}

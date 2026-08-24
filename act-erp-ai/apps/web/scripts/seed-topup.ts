@@ -57,7 +57,7 @@ const MARKER_ACTION = "seed.topup.2026-08-03";
 const GAP_START_OFFSET = -18; // TODAY-18 = 2026-07-16 when TODAY = 2026-08-03
 
 type Emp = {
-  id: string; userId: string; name: string; email: string; deptName: string;
+  id: string; userId: string; name: string; email: string | null; deptName: string;
   jobCode: string; rate: number;
 };
 
@@ -244,7 +244,7 @@ async function main() {
         // Mid-day (~13:30): ~45% currently clocked in, some done early, rest
         // absent / not punched in. Hana Yoshida + Vanessa Chu must be on the clock.
         const asOf = new Date(Math.max(NOW.getTime(), at(day, 11, 30).getTime()));
-        const forced = mustClockInToday.has(emp.email);
+        const forced = mustClockInToday.has(emp.email ?? "");
         const r = forced ? 0 : rnd();
         if (r < 0.45) {
           // Guarantee a couple ON_BREAK: fall back to forcing once enough
@@ -490,7 +490,7 @@ async function main() {
   // ── 6. Notifications (~5 over the gap) ──────────────────────────────
   const allEmpIds = [...employees.map(e => e.id), adminEmp.id];
   const deptIds = (...depts: string[]) => employees.filter(e => depts.includes(e.deptName)).map(e => e.id);
-  const keepUnreadIds = new Set(employees.filter(e => mustClockInToday.has(e.email)).map(e => e.id));
+  const keepUnreadIds = new Set(employees.filter(e => mustClockInToday.has(e.email ?? "")).map(e => e.id));
   const notifSpecs: Array<{ type: Prisma.NotificationCreateInput["type"]; title: string; message: string; priority: Prisma.NotificationCreateInput["priority"]; daysAgo: number; recipients: string[]; keepUnread?: boolean }> = [
     { type: "PAYROLL", title: "July 20 – Aug 2 payroll processed", message: "The Jul 20 – Aug 2 period is closed and direct deposits post Saturday Aug 8. Check your stub in the portal and flag discrepancies to accounting by Wednesday.", priority: "HIGH", daysAgo: 1, recipients: allEmpIds, keepUnread: true },
     { type: "POLICY", title: "Heat safety — mandatory hydration breaks", message: "Heat index is running over 105 this week. Shop floor and field crews: 10-minute shaded water break every 2 hours is mandatory, and buddy-check for heat exhaustion symptoms.", priority: "URGENT", daysAgo: 5, recipients: deptIds("Manufacturing", "Field Services", "Quality Assurance") },
@@ -634,7 +634,7 @@ async function ensureSomeOnBreakToday() {
   }
   // Keep the demo-featured pair (Hana / Vanessa) plainly ACTIVE.
   const featured = new Set(["hana.yoshida@actools.com", "vanessa.chu@actools.com"]);
-  const candidates = open.filter(te => te.status === "ACTIVE" && !featured.has(te.employee.email));
+  const candidates = open.filter(te => te.status === "ACTIVE" && !featured.has(te.employee.email ?? ""));
   let flipped = 0;
   for (const te of candidates.slice(0, 2 - onBreak)) {
     const startedAgo = randInt(4, 16);

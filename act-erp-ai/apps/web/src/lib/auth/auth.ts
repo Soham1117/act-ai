@@ -6,39 +6,63 @@ import { authConfig } from "./auth.config";
 import { verifyPassword } from "./password";
 
 const credsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  challengeId: z.string().min(1),
+  code: z.string().regex(/^\d{6}$/),
 });
 
 /**
  * Full NextAuth instance (Node runtime). Adds the Credentials provider on top
- * of the edge-safe base config. `authorize` verifies email + bcrypt password
- * against the User table and returns the fields the jwt callback needs.
+ * of the edge-safe base config.
+ *
+ * `authorize` does NOT take a password — password verification happens one
+ * step earlier, in `requestLoginChallenge` (src/server/actions/login-challenge.ts),
+ * which creates a `LoginChallenge` row and emails a 6-digit code (2FA). This
+ * provider's only job is to check that code and, if it matches, complete the
+ * sign-in. See LoginChallenge in schema.prisma for why the code itself is
+ * never stored, only its hash.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
-      credentials: { email: {}, password: {} },
+      credentials: { challengeId: {}, code: {} },
       authorize: async (raw) => {
         const parsed = credsSchema.safeParse(raw);
         if (!parsed.success) return null;
-        const { email, password } = parsed.data;
+        const { challengeId, code } = parsed.data;
 
-        const user = await db.user.findUnique({
-          where: { email: email.toLowerCase() },
-          select: { id: true, email: true, role: true, passwordHash: true, tokenVersion: true },
+        const challenge = await db.loginChallenge.findUnique({
+          where: { id: challengeId },
+          include: {
+            user: {
+              select: { id: true, email: true, role: true, tokenVersion: true },
+            },
+          },
         });
-        if (!user?.passwordHash) return null;
+        if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
+          return null;
+        }
+        if (challenge.attempts >= 5) return null;
 
-        const ok = await verifyPassword(password, user.passwordHash);
-        if (!ok) return null;
+        const ok = await verifyPassword(code, challenge.codeHash);
+        if (!ok) {
+          await db.loginChallenge.update({
+            where: { id: challengeId },
+            data: { attempts: { increment: 1 } },
+          });
+          return null;
+        }
+
+        await db.loginChallenge.update({
+          where: { id: challengeId },
+          data: { consumedAt: new Date() },
+        });
 
         return {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          tokenVersion: user.tokenVersion,
+          id: challenge.user.id,
+          email: challenge.user.email,
+          role: challenge.user.role,
+          tokenVersion: challenge.user.tokenVersion,
         };
       },
     }),

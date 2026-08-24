@@ -21,7 +21,7 @@ export function UserMenu({
   profileImage,
 }: {
   name: string;
-  email: string;
+  email: string | null;
   profileImage: string | null;
 }) {
   const avatarSrc = profileImage ?? getAvatarUrl(email);
@@ -51,7 +51,7 @@ export function UserMenu({
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-0.5">
             <p className="text-sm font-medium leading-none">{name}</p>
-            <p className="text-xs leading-none text-muted-foreground">{email}</p>
+            <p className="text-xs leading-none text-muted-foreground">{email ?? "No email on file"}</p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

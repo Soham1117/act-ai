@@ -36,7 +36,7 @@ type Existing = {
   departmentId: string | null;
 };
 
-type Employee = { id: string; employeeId: string; name: string; email: string };
+type Employee = { id: string; employeeId: string; name: string; email: string | null };
 
 export function JobCodeDetailActions({
   jobCode,

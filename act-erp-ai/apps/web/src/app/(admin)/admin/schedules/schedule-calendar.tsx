@@ -42,7 +42,7 @@ type RawEvent = {
 type EmployeeOption = {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   departmentId: string | null;
   departmentName: string | null;
 };
@@ -351,7 +351,7 @@ function EmployeeFilter({
     return employees.filter(
       (e) =>
         e.name.toLowerCase().includes(s) ||
-        e.email.toLowerCase().includes(s),
+        (e.email?.toLowerCase().includes(s) ?? false),
     );
   }, [employees, q]);
 

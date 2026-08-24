@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight, Loader2, CheckCircle2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ type FormState = OnboardingSubmit & { confirmPassword: string };
 const initial: FormState = {
   name: "",
   email: "",
+  username: "",
+  personalEmail: "",
   password: "",
   confirmPassword: "",
   phoneNumber: "",
@@ -60,7 +63,7 @@ const initial: FormState = {
   zipCode: "",
   nationality: "",
   educationLevel: "",
-  ssn: "",
+  ssnLast4: "",
   emergencyName: "",
   emergencyPhone: "",
   employeeId: "",
@@ -219,13 +222,23 @@ export function OnboardingForm({
       {step === 2 && (
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <Field label="SSN *">
+            <Field label="SSN — last 4 digits *">
               <Input
-                value={form.ssn}
-                onChange={(e) => update("ssn", e.target.value)}
-                placeholder="123-45-6789"
+                value={form.ssnLast4}
+                onChange={(e) => update("ssnLast4", e.target.value.replace(/\D/g, "").slice(0, 4))}
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="6789"
                 required
               />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                We only collect the last 4 digits — never your full Social
+                Security Number. See our{" "}
+                <Link href="/privacy" target="_blank" className="text-primary hover:underline">
+                  privacy notice
+                </Link>{" "}
+                for what we collect and why.
+              </p>
             </Field>
           </div>
           <Field label="Emergency contact name">
@@ -330,14 +343,30 @@ export function OnboardingForm({
             both fields match.
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Work email *">
+            <Field label="Work email (leave blank if you don't have one)">
               <Input
                 type="email"
                 value={form.email}
                 onChange={(e) => update("email", e.target.value)}
-                required
               />
             </Field>
+            <Field label="Username (only if no work email above) *">
+              <Input
+                value={form.username ?? ""}
+                onChange={(e) => update("username", e.target.value.toLowerCase())}
+                placeholder="jsmith"
+              />
+            </Field>
+            <div className="col-span-2">
+              <Field label="Personal email * — sign-in codes are sent here">
+                <Input
+                  type="email"
+                  value={form.personalEmail ?? ""}
+                  onChange={(e) => update("personalEmail", e.target.value)}
+                  required
+                />
+              </Field>
+            </div>
             <Field label="Password *">
               <Input
                 type="password"
@@ -453,13 +482,14 @@ function validateStep(step: number, f: FormState): string | null {
       if (!f.name || f.name.length < 2) return "Please enter your full name.";
       return null;
     case 2:
-      if (!f.ssn || f.ssn.length < 9) return "SSN is required.";
+      if (!/^\d{4}$/.test(f.ssnLast4 ?? "")) return "Enter the last 4 digits of your SSN.";
       return null;
     case 3:
       if (!f.employeeId || f.employeeId.length < 2) return "Employee ID is required.";
       return null;
     case 5:
-      if (!f.email) return "Email is required.";
+      if (!f.email && !f.username) return "Enter either a work email or a username.";
+      if (!f.personalEmail) return "Personal email is required — that's where sign-in codes go.";
       if (!f.password || f.password.length < 8) return "Password must be at least 8 characters.";
       return null;
     default:

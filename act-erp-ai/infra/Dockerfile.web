@@ -4,13 +4,30 @@ RUN corepack enable
 WORKDIR /app
 
 FROM base AS deps
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+# pnpm-workspace.yaml carries onlyBuiltDependencies/ignoredBuiltDependencies.
+# Without it, modern pnpm aborts the install with ERR_PNPM_IGNORED_BUILDS.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# pnpm still refuses to run build scripts (prisma, esbuild, ...) without an
+# explicit approval, even when onlyBuiltDependencies lists them — there's no
+# install flag for this, only the `approve-builds` subcommand. Install without
+# scripts first, approve everything pnpm-workspace.yaml already allow-lists,
+# then `rebuild` — a second `install` is a no-op here (node_modules already
+# matches the lockfile) and would silently skip the now-approved scripts.
+RUN pnpm install --frozen-lockfile --ignore-scripts \
+ && pnpm approve-builds --all \
+ && pnpm rebuild
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm prisma generate && pnpm build
+# `next build` executes module code while analyzing routes, so env.ts's Zod
+# validation runs at build time too — real-shaped values are required, not
+# just at container runtime. Mounted as a build secret (not COPY'd) so the
+# values exist only for this one RUN step and are never written into any
+# image layer. Target name matters: Next only auto-loads ".env.production",
+# not arbitrary filenames.
+RUN --mount=type=secret,id=env_prod,target=/app/.env.production \
+    pnpm prisma generate && pnpm build
 
 FROM node:22-slim AS runner
 WORKDIR /app

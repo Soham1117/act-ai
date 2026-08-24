@@ -46,7 +46,7 @@ import {
   updateSchedule,
 } from "@/server/actions/schedules";
 
-type Employee = { id: string; name: string; email: string };
+type Employee = { id: string; name: string; email: string | null };
 
 export type EditTarget = {
   id: string;
@@ -147,7 +147,7 @@ function ShiftForm({
     return employees.filter(
       (e) =>
         e.name.toLowerCase().includes(q) ||
-        e.email.toLowerCase().includes(q),
+        (e.email?.toLowerCase().includes(q) ?? false),
     );
   }, [employees, search]);
 
@@ -345,7 +345,7 @@ function ShiftForm({
                           </span>
                           <span className="flex-1 min-w-0 truncate">{e.name}</span>
                           <span className="truncate text-[10px] text-muted-foreground">
-                            {e.email}
+                            {e.email ?? "—"}
                           </span>
                         </button>
                       </li>

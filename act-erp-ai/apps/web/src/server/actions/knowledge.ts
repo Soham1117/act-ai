@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { aiEnabled } from "@/lib/features";
 import { uploadFile } from "@/lib/storage";
 import { enqueueIngestion } from "@/lib/queue";
 import { audit } from "@/lib/audit";
@@ -47,6 +48,11 @@ export async function uploadKnowledgeDocument(
   input: z.input<typeof uploadSchema>,
   file: { name: string; type: string; bytes: ArrayBuffer },
 ) {
+  // Unreachable while the knowledge UI is hidden, but fail loudly rather than
+  // uploading bytes we can never ingest (no worker, no queue) if it ever is.
+  if (!aiEnabled) {
+    throw new Error("The knowledge base is not enabled on this deployment.");
+  }
   const user = await requireUser();
   const data = uploadSchema.parse(input);
   const isAdmin = user.role === "ADMIN";

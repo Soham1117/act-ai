@@ -121,7 +121,7 @@ const DEMO_PASSWORD = "Demo#Pass1";
 const MARKER_ACTION = "seed.30days";
 
 type Emp = {
-  id: string; userId: string; name: string; email: string; deptName: string;
+  id: string; userId: string; name: string; email: string | null; deptName: string;
   jobCode: string; rate: number; onLeave: boolean; lead: boolean;
 };
 
@@ -171,8 +171,9 @@ async function main() {
         userId: adminUser.id,
         name: adminUser.name,
         email: adminUser.email,
+        personalEmail: adminUser.email ?? "admin@actools.com",
         gender: "MALE",
-        ssn: "600-01-0001",
+        ssnLast4: "0001",
         departmentId: deptByName.get("HR & Admin"),
         position: "Operations Manager",
         jobTitle: "Operations Manager",
@@ -220,7 +221,7 @@ async function main() {
       const [first, ...rest] = spec.name.toLowerCase().split(" ");
       const email = `${first}.${rest.join("")}@actools.com`;
       const jc = jobCodeByCode.get(spec.jobCode)!;
-      const ssn = `6${String(randInt(10, 99))}-${String(randInt(10, 99))}-${String(1000 + employees.length)}`;
+      const ssnLast4 = String(1000 + employees.length).slice(-4);
 
       const existing = await db.user.findUnique({ where: { email } });
       if (existing) {
@@ -237,7 +238,8 @@ async function main() {
       const emp = await db.employee.create({
         data: {
           employeeId, userId: user.id, name: spec.name, email,
-          gender: spec.gender, ssn,
+          personalEmail: `${first}.${rest.join("")}.personal@example.com`,
+          gender: spec.gender, ssnLast4,
           phoneNumber: `817-${randInt(200, 899)}-${String(randInt(1000, 9999))}`,
           dateOfBirth: new Date(randInt(1968, 2000), randInt(0, 11), randInt(1, 28)),
           address: `${randInt(100, 9800)} ${pick(["Oak Ridge Dr", "Mesa View Ln", "Rig Rd", "Prairie Wind Ct", "Cedar Bluff Ave", "Longhorn Trl"])}`,

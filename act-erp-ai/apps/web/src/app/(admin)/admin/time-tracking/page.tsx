@@ -136,7 +136,7 @@ type EntryRow = {
   clockOut: Date | null;
   source: TimeEntrySource;
   kioskLabel: string | null;
-  employee: { name: string; employeeId: string; profilePic: string | null; email: string; department: { name: string } | null };
+  employee: { name: string; employeeId: string; profilePic: string | null; email: string | null; department: { name: string } | null };
 };
 
 function EntryGrid({ entries, live = false }: { entries: EntryRow[]; live?: boolean }) {

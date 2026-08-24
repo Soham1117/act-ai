@@ -38,8 +38,10 @@ export function KioskScreen({
   const [now, setNow] = useState(new Date());
   const [input, setInput] = useState("");
   const [match, setMatch] = useState<LookupResult | null>(null);
+  const [pin, setPin] = useState("");
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+  const pinRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -50,6 +52,7 @@ export function KioskScreen({
     if (!match) return;
     const id = setTimeout(() => {
       setMatch(null);
+      setPin("");
       setTimeout(() => inputRef.current?.focus(), 0);
     }, 12_000);
     return () => clearTimeout(id);
@@ -57,6 +60,7 @@ export function KioskScreen({
 
   useEffect(() => {
     if (!match) inputRef.current?.focus();
+    else pinRef.current?.focus();
   }, [match, pending]);
 
   function submit(value: string) {
@@ -67,8 +71,8 @@ export function KioskScreen({
         const r = await kioskLookup(slug, trimmed);
         setMatch(r);
         setInput("");
-      } catch {
-        toast.error("Unknown employee ID");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Unknown employee ID");
         setInput("");
       }
     });
@@ -76,9 +80,13 @@ export function KioskScreen({
 
   function act(action: "CLOCK_IN" | "CLOCK_OUT" | "START_BREAK" | "END_BREAK") {
     if (!match) return;
+    if (!/^\d{4,6}$/.test(pin)) {
+      toast.error("Enter your 4-6 digit PIN");
+      return;
+    }
     startTransition(async () => {
       try {
-        await kioskAction({ slug, employeeId: match.employeeId, action });
+        await kioskAction({ slug, employeeId: match.employeeId, pin, action });
         const labels: Record<typeof action, string> = {
           CLOCK_IN: "Clocked in",
           CLOCK_OUT: "Clocked out",
@@ -87,8 +95,10 @@ export function KioskScreen({
         };
         toast.success(`${labels[action]} · ${match.name}`);
         setMatch(null);
+        setPin("");
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed");
+        setPin("");
       }
     });
   }
@@ -230,13 +240,38 @@ export function KioskScreen({
                       </Badge>
                     </div>
 
+                    {!match.hasPin ? (
+                      <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-center text-xs text-destructive">
+                        No kiosk PIN set for this account. Set one in
+                        Settings before clocking in/out here.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <label className="block text-center text-xs text-muted-foreground">
+                          Enter your PIN to confirm
+                        </label>
+                        <Input
+                          ref={pinRef}
+                          type="password"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          maxLength={6}
+                          value={pin}
+                          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          disabled={pending}
+                          placeholder="••••"
+                          className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                        />
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2">
                       {match.status === "OUT" && (
                         <Button
                           size="lg"
                           variant="success"
                           className="col-span-2 h-12 text-sm"
-                          disabled={pending}
+                          disabled={pending || !match.hasPin || pin.length < 4}
                           onClick={() => act("CLOCK_IN")}
                         >
                           <Play className="mr-2 h-4 w-4" /> Clock in
@@ -248,7 +283,7 @@ export function KioskScreen({
                             size="lg"
                             variant="warning"
                             className="h-12 text-sm"
-                            disabled={pending}
+                            disabled={pending || !match.hasPin || pin.length < 4}
                             onClick={() => act("START_BREAK")}
                           >
                             <Pause className="mr-2 h-4 w-4" /> Break
@@ -257,7 +292,7 @@ export function KioskScreen({
                             size="lg"
                             variant="destructive"
                             className="h-12 text-sm"
-                            disabled={pending}
+                            disabled={pending || !match.hasPin || pin.length < 4}
                             onClick={() => act("CLOCK_OUT")}
                           >
                             <Square className="mr-2 h-4 w-4" /> Clock out
@@ -269,7 +304,7 @@ export function KioskScreen({
                           size="lg"
                           variant="success"
                           className="col-span-2 h-12 text-sm"
-                          disabled={pending}
+                          disabled={pending || !match.hasPin || pin.length < 4}
                           onClick={() => act("END_BREAK")}
                         >
                           <Coffee className="mr-2 h-4 w-4" /> End break

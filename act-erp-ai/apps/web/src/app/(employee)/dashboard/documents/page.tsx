@@ -118,7 +118,7 @@ function DocList({ docs, currentUserId }: { docs: Doc[]; currentUserId: string }
             </div>
             <div className="mt-3 flex items-center gap-2">
               <Link
-                href={d.fileUrl}
+                href={`/api/documents/${d.id}/file`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex h-8 flex-1 items-center justify-center rounded-md border text-xs hover:bg-muted"

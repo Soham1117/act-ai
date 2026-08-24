@@ -92,7 +92,7 @@ type R = {
   status: "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "PAID";
   expenseDate: Date;
   createdAt: Date;
-  employee: { name: string; email: string; profilePic: string | null };
+  employee: { name: string; email: string | null; profilePic: string | null };
 };
 
 function RList({ rows }: { rows: R[] }) {

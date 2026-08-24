@@ -1,0 +1,11 @@
+# Without this, `COPY . .` in Dockerfile.web copies the host's own
+# node_modules on top of the clean one the deps stage just built inside the
+# container — silently corrupting it (wrong platform binaries, stale/broken
+# state from local dev). Confirmed as the cause of a real build failure.
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.*.example
+*.log

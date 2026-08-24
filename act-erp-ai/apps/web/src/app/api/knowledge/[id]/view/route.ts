@@ -1,4 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
+import { aiEnabled } from "@/lib/features";
 import { allowedDocumentIds } from "@/lib/knowledge/access";
 import { db } from "@/lib/db";
 
@@ -8,6 +9,7 @@ import { db } from "@/lib/db";
 export const runtime = "nodejs";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!aiEnabled) return new Response("Not found", { status: 404 });
   const user = await getSessionUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 

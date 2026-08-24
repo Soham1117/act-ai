@@ -20,7 +20,6 @@ export type Bucket =
   | "documents"
   | "payroll"
   | "reimbursement-receipts"
-  | "onboarding"
   | "knowledge";
 
 function keyFor(bucket: Bucket, path: string): string {
@@ -45,14 +44,12 @@ export async function uploadFile(
       CacheControl: "3600",
     }),
   );
-  // Objects are private — a signed URL is the read path. Callers that persist
-  // this should re-sign on read for long-lived access (see getSignedUrl).
-  const publicUrl = await presign(
-    s3(),
-    new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
-    { expiresIn: 3600 },
-  );
-  return { path, key, publicUrl };
+  // Objects are private. Do NOT persist a presigned URL anywhere (DB, logs) —
+  // it's a bearer credential with no session/auth check while valid, and it
+  // goes stale (default 1h) long before most records are read again. Reads
+  // must go through an authenticated proxy route that re-checks access on
+  // every request (see getObjectStream + the /api/*/file routes).
+  return { path, key };
 }
 
 export async function deleteFile(bucket: Bucket, path: string) {

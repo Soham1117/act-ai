@@ -32,7 +32,7 @@ export default async function LoginPage({
             <div className="space-y-1 text-center">
               <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
               <p className="text-sm text-muted-foreground">
-                Sign in with your work email to continue.
+                Sign in, then verify with the code we email you.
               </p>
             </div>
           </div>
@@ -46,8 +46,11 @@ export default async function LoginPage({
           </p>
         </div>
       </main>
-      <footer className="p-6 text-center text-[11px] text-muted-foreground">
-        © {new Date().getFullYear()} American Completion Tools
+      <footer className="space-y-1 p-6 text-center text-[11px] text-muted-foreground">
+        <p>
+          <Link href="/privacy" className="hover:underline">Privacy notice</Link>
+        </p>
+        <p>© {new Date().getFullYear()} American Completion Tools</p>
       </footer>
     </div>
   );

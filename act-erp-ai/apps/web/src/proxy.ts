@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   "/unauthorized",
   "/auth", // /auth/callback, /auth/reset-password
   "/api/auth",
+  "/privacy", // notice must be readable without an account
 ];
 
 function isPublic(path: string) {

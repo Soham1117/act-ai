@@ -7,7 +7,8 @@ export type AppRole = "ADMIN" | "EMPLOYEE";
 
 export type SessionUser = {
   id: string;
-  email: string;
+  /// Login email — null for employees who sign in via username instead.
+  email: string | null;
   name: string;
   profileImage: string | null;
   role: AppRole;

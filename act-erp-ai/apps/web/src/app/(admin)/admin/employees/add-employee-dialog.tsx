@@ -30,7 +30,17 @@ import { createEmployee } from "@/server/actions/employees";
 const schema = z.object({
   name: z.string().min(2, "At least 2 characters"),
   email: z.string().email(),
-  ssn: z.string().min(9).max(11),
+  username: z
+    .string()
+    .regex(/^[a-z0-9._-]{3,32}$/, "Lowercase letters, numbers, . _ - only, 3-32 chars")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  personalEmail: z.string().email("Enter a valid email — required for sign-in codes"),
+  ssnLast4: z
+    .string()
+    .regex(/^\d{4}$/, "Enter exactly 4 digits")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
   password: z.string().min(8, "Min 8 characters"),
   gender: z.enum(["MALE", "FEMALE", "OTHER"]),
   departmentId: z.string().optional(),
@@ -98,11 +108,28 @@ export function AddEmployeeDialog({
             <Field label="Full name" error={form.formState.errors.name?.message}>
               <Input {...form.register("name")} />
             </Field>
-            <Field label="Email" error={form.formState.errors.email?.message}>
+            <Field label="Company email (login)" error={form.formState.errors.email?.message}>
               <Input type="email" {...form.register("email")} />
             </Field>
-            <Field label="SSN (any format)" error={form.formState.errors.ssn?.message}>
-              <Input {...form.register("ssn")} placeholder="123-45-6789" />
+            <Field
+              label="Username (only if no company email)"
+              error={form.formState.errors.username?.message}
+            >
+              <Input {...form.register("username")} placeholder="jsmith" />
+            </Field>
+            <Field
+              label="Personal email — required, sign-in codes go here"
+              error={form.formState.errors.personalEmail?.message}
+            >
+              <Input type="email" {...form.register("personalEmail")} />
+            </Field>
+            <Field label="SSN — last 4 only" error={form.formState.errors.ssnLast4?.message}>
+              <Input
+                {...form.register("ssnLast4")}
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="6789"
+              />
             </Field>
             <Field label="Password" error={form.formState.errors.password?.message}>
               <Input type="text" {...form.register("password")} />
