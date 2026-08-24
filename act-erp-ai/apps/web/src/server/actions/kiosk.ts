@@ -11,6 +11,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { audit } from "@/lib/audit";
 import { rateLimited } from "@/lib/rate-limit";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
+import { requestUsesHttps } from "@/lib/cookie-secure";
 import { _clockIn, _clockOut, _startBreak, _endBreak } from "./time-clock";
 
 const COOKIE = "act_kiosk";
@@ -98,7 +99,7 @@ export async function activateKiosk(
     const jar = await cookies();
     jar.set(COOKIE, raw, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: await requestUsesHttps(),
       sameSite: "lax",
       path: "/",
       maxAge: KIOSK_TTL_DAYS * 24 * 60 * 60,
