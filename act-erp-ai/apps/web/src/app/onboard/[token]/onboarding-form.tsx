@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toastAction } from "@/lib/toast-action";
+import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
 import { submitOnboarding, type OnboardingSubmit } from "@/server/actions/onboarding";
 
 type Department = { id: string; name: string };
@@ -45,7 +46,11 @@ const DOCUMENT_SLOTS: Array<{
   { id: "personal",       label: "Personal Documents",           type: "PERSONAL" },
 ];
 
-type FormState = OnboardingSubmit & { confirmPassword: string };
+type FormState = Omit<OnboardingSubmit, "compensationValue"> & {
+  confirmPassword: string;
+  /** Display string with commas — parsed on submit. */
+  compensationValue: string;
+};
 
 const initial: FormState = {
   name: "",
@@ -74,7 +79,7 @@ const initial: FormState = {
   dateOfHire: "",
   employmentType: "FULL_PART_TIME",
   compensationType: "HOURLY_RATE",
-  compensationValue: null,
+  compensationValue: "",
 };
 
 const NONE = "__none__";
@@ -135,9 +140,13 @@ export function OnboardingForm({
         }),
       );
 
-      const { confirmPassword, ...payload } = form;
+      const { confirmPassword, compensationValue, ...rest } = form;
       void confirmPassword;
-      const res = await submitOnboarding(token, payload, fileEntries);
+      const res = await submitOnboarding(
+        token,
+        { ...rest, compensationValue: parseMoneyInput(compensationValue) },
+        fileEntries,
+      );
       if (!toastAction(res)) return;
       toast.success("Onboarding complete!");
       router.push("/login");
@@ -307,10 +316,11 @@ export function OnboardingForm({
           </Field>
           <Field label="Compensation value">
             <Input
-              type="number"
-              step="0.01"
-              value={form.compensationValue ?? ""}
-              onChange={(e) => update("compensationValue", e.target.value === "" ? null : Number(e.target.value))}
+              type="text"
+              inputMode="decimal"
+              placeholder="60,000"
+              value={form.compensationValue}
+              onChange={(e) => update("compensationValue", formatMoneyInput(e.target.value))}
             />
           </Field>
         </div>

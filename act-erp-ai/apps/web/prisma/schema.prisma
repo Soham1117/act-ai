@@ -57,6 +57,7 @@ model User {
   documentGrants   DocumentGrant[]     @relation("KnowledgeGrants")
   agentRuns        AgentRun[]          @relation("AgentRuns")
   chatSessions     ChatSession[]       @relation("ChatSessions")
+  hirePacketImports HirePacketImport[] @relation("HirePacketUploads")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -281,6 +282,7 @@ model Employee {
   notifications          NotificationRecipient[]
   benefitEnrollments     BenefitEnrollment[]
   retirementElections    RetirementElection[]
+  hirePacketImports      HirePacketImport[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -637,6 +639,31 @@ model Payroll {
   @@index([employeeId, payPeriodEnd])
   @@index([payPeriodStart])
   @@index([category])
+}
+
+/// Admin-uploaded onboarding zip for one employee — extracted fields await HR review.
+model HirePacketImport {
+  id            String                  @id @default(cuid())
+  employeeId    String
+  employee      Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uploadedById  String                  @db.Uuid
+  uploadedBy    User                    @relation("HirePacketUploads", fields: [uploadedById], references: [id])
+  status        HirePacketImportStatus  @default(PENDING)
+  zipFileName   String
+  /// S3 object key under documents/hire-packets/…
+  zipStorageKey String
+  /// Proposed employee fields keyed by updateEmployee field names.
+  proposedFields Json?
+  /// Per-file extraction metadata (form type, documentId, warnings).
+  fileResults   Json?
+  errorMessage  String?                 @db.Text
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  processedAt   DateTime?
+  appliedAt     DateTime?
+
+  @@index([employeeId, createdAt(sort: Desc)])
+  @@index([status])
 }
 
 model PayrollCalendar {
@@ -1266,6 +1293,15 @@ enum DocumentType {
   ONBOARDING
   BENEFITS
   TRAINING
+}
+
+enum HirePacketImportStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+  APPLIED
+  CANCELLED
 }
 
 enum PayrollPeriodStatus {

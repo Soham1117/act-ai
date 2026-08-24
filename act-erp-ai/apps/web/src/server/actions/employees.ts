@@ -132,6 +132,8 @@ const updateSchema = z.object({
   educationLevel: z.string().optional().nullable(),
   emergencyName: z.string().optional().nullable(),
   emergencyPhone: z.string().optional().nullable(),
+  personalEmail: z.string().email().optional().nullable(),
+  ssnLast4: z.string().regex(/^\d{4}$/).optional().nullable(),
   // Work
   departmentId: z.string().optional().nullable(),
   jobTitle: z.string().optional().nullable(),

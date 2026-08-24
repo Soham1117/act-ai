@@ -18,6 +18,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { updateEmployee, updateEmployeeProfilePic } from "@/server/actions/employees";
 import { toastAction } from "@/lib/toast-action";
+import { formatCurrency, formatMoneyInput, parseMoneyInput } from "@/lib/format";
 
 const NONE = "__none__";
 
@@ -515,6 +516,12 @@ export function CompensationEditableCard({
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState({
     ...initial,
+    compensationValue: initial.compensationValue
+      ? formatMoneyInput(initial.compensationValue)
+      : "",
+    defaultHourlyRate: initial.defaultHourlyRate
+      ? formatMoneyInput(initial.defaultHourlyRate)
+      : "",
     primaryJobCodeId: initial.primaryJobCodeId || NONE,
   });
 
@@ -526,8 +533,8 @@ export function CompensationEditableCard({
     startTransition(async () => {
       const res = await updateEmployee(employeeId, {
         compensationType: form.compensationType,
-        compensationValue: form.compensationValue ? Number(form.compensationValue) : null,
-        defaultHourlyRate: form.defaultHourlyRate ? Number(form.defaultHourlyRate) : 0,
+        compensationValue: parseMoneyInput(form.compensationValue),
+        defaultHourlyRate: parseMoneyInput(form.defaultHourlyRate) ?? 0,
         primaryJobCodeId: form.primaryJobCodeId === NONE ? null : form.primaryJobCodeId,
       });
       if (!toastAction(res)) return;
@@ -539,21 +546,45 @@ export function CompensationEditableCard({
   const primaryJobCodeLabel =
     jobCodes.find((j) => j.id === initial.primaryJobCodeId)?.code ?? null;
 
+  function resetForm() {
+    setForm({
+      ...initial,
+      compensationValue: initial.compensationValue
+        ? formatMoneyInput(initial.compensationValue)
+        : "",
+      defaultHourlyRate: initial.defaultHourlyRate
+        ? formatMoneyInput(initial.defaultHourlyRate)
+        : "",
+      primaryJobCodeId: initial.primaryJobCodeId || NONE,
+    });
+  }
+
   return (
     <EditableCard
       title="Compensation"
       editing={editing}
       setEditing={(v) => {
         setEditing(v);
-        if (!v) setForm({ ...initial, primaryJobCodeId: initial.primaryJobCodeId || NONE });
+        if (!v) resetForm();
       }}
       pending={pending}
       onSave={save}
       view={
         <>
           <ViewField label="Type" value={initial.compensationType.replace(/_/g, " ")} />
-          <ViewField label="Value" value={initial.compensationValue || null} />
-          <ViewField label="Default hourly rate" value={`$${initial.defaultHourlyRate}/hr`} mono />
+          <ViewField
+            label="Value"
+            value={
+              initial.compensationValue
+                ? formatCurrency(parseMoneyInput(initial.compensationValue) ?? initial.compensationValue)
+                : null
+            }
+          />
+          <ViewField
+            label="Default hourly rate"
+            value={`${formatCurrency(parseMoneyInput(initial.defaultHourlyRate) ?? Number(initial.defaultHourlyRate))}/hr`}
+            mono
+          />
           <ViewField label="Primary job code" value={primaryJobCodeLabel} />
         </>
       }
@@ -571,15 +602,15 @@ export function CompensationEditableCard({
           />
           <EditField
             label="Value"
-            type="number"
             value={form.compensationValue}
-            onChange={(v) => set("compensationValue", v)}
+            onChange={(v) => set("compensationValue", formatMoneyInput(v))}
+            placeholder="60,000"
           />
           <EditField
             label="Default hourly rate"
-            type="number"
             value={form.defaultHourlyRate}
-            onChange={(v) => set("defaultHourlyRate", v)}
+            onChange={(v) => set("defaultHourlyRate", formatMoneyInput(v))}
+            placeholder="25.00"
           />
           <EditSelect
             label="Primary job code"

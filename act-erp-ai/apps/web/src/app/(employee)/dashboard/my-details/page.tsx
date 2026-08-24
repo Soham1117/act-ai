@@ -22,6 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   formatPhone,
   formatHours,
+  formatCurrency,
   getAvatarUrl,
   formatSSNLast4,
 } from "@/lib/format";
@@ -238,13 +239,13 @@ export default async function MyDetailsPage() {
                 label="Compensation value"
                 value={
                   employee.compensationValue
-                    ? `$${employee.compensationValue.toString()}`
+                    ? formatCurrency(Number(employee.compensationValue.toString()))
                     : "—"
                 }
               />
               <Field
                 label="Default hourly rate"
-                value={`$${employee.defaultHourlyRate.toString()}`}
+                value={`${formatCurrency(Number(employee.defaultHourlyRate.toString()))}/hr`}
               />
               <Field
                 label="Primary job code"

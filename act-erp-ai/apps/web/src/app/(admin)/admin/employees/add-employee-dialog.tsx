@@ -27,6 +27,9 @@ import {
 } from "@/components/ui/select";
 import { createEmployee } from "@/server/actions/employees";
 import { toastAction } from "@/lib/toast-action";
+import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
+
+const NONE = "__none__";
 
 const schema = z.object({
   name: z.string().min(2, "At least 2 characters"),
@@ -44,7 +47,7 @@ const schema = z.object({
     .or(z.literal("").transform(() => undefined)),
   password: z.string().min(8, "Min 8 characters"),
   gender: z.enum(["MALE", "FEMALE", "OTHER"]),
-  departmentId: z.string().optional(),
+  departmentId: z.string(),
   jobTitle: z.string().optional(),
   phoneNumber: z.string().optional(),
   employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
@@ -53,6 +56,22 @@ const schema = z.object({
 });
 
 type Values = z.infer<typeof schema>;
+
+const defaults: Values = {
+  name: "",
+  email: "",
+  username: "",
+  personalEmail: "",
+  ssnLast4: "",
+  password: "",
+  gender: "MALE",
+  departmentId: NONE,
+  jobTitle: "",
+  phoneNumber: "",
+  employmentType: "FULL_PART_TIME",
+  compensationType: "HOURLY_RATE",
+  compensationValue: "",
+};
 
 export function AddEmployeeDialog({
   departments,
@@ -63,31 +82,33 @@ export function AddEmployeeDialog({
   const [pending, startTransition] = useTransition();
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      gender: "MALE",
-      employmentType: "FULL_PART_TIME",
-      compensationType: "HOURLY_RATE",
-    },
+    defaultValues: defaults,
   });
 
   function onSubmit(values: Values) {
     startTransition(async () => {
       const res = await createEmployee({
         ...values,
-        departmentId: values.departmentId || null,
+        departmentId: values.departmentId === NONE ? null : values.departmentId,
         jobTitle: values.jobTitle || null,
         phoneNumber: values.phoneNumber || null,
-        compensationValue: values.compensationValue ? Number(values.compensationValue) : null,
+        compensationValue: parseMoneyInput(values.compensationValue ?? ""),
       });
       if (!toastAction(res)) return;
       toast.success(`Created ${values.name}`);
       setOpen(false);
-      form.reset();
+      form.reset(defaults);
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) form.reset(defaults);
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" /> Add employee
@@ -155,6 +176,7 @@ export function AddEmployeeDialog({
               >
                 <SelectTrigger><SelectValue placeholder="(none)" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={NONE}>(none)</SelectItem>
                   {departments.map((d) => (
                     <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                   ))}
@@ -189,8 +211,22 @@ export function AddEmployeeDialog({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Compensation value ($)">
-              <Input type="number" step="0.01" {...form.register("compensationValue")} />
+            <Field
+              label="Compensation value ($)"
+              error={form.formState.errors.compensationValue?.message}
+            >
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="60,000"
+                value={form.watch("compensationValue") ?? ""}
+                onChange={(e) =>
+                  form.setValue("compensationValue", formatMoneyInput(e.target.value), {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              />
             </Field>
           </div>
           <DialogFooter className="pt-2">

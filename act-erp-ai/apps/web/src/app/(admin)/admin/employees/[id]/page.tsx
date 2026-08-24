@@ -33,6 +33,7 @@ import {
 import { UploadDocumentDialog } from "@/components/upload-document-dialog";
 import { DeleteDocumentButton } from "@/components/delete-document-button";
 import { BenefitsCard } from "./benefits-card";
+import { HirePacketImportButton } from "./hire-packet-import-button";
 
 export default async function EmployeeDetailPage({
   params,
@@ -147,6 +148,7 @@ export default async function EmployeeDetailPage({
           </Link>
         </Button>
         <div className="flex flex-wrap gap-2">
+          <HirePacketImportButton employeeId={employee.id} />
           <ChangePasswordModal employeeId={employee.id} employeeName={employee.name} />
           <ResetKioskPinButton employeeId={employee.id} />
           <StatusToggle employeeId={employee.id} status={employee.employmentStatus} />

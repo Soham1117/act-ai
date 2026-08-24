@@ -15,6 +15,33 @@ export function formatCurrency(
   }).format(n);
 }
 
+/**
+ * Live-format a money text field as the user types (thousands commas,
+ * optional cents). Strips currency symbols and letters. Keeps a trailing
+ * "." so typing "60,000." → cents still works.
+ */
+export function formatMoneyInput(raw: string): string {
+  const cleaned = raw.replace(/[^0-9.]/g, "");
+  if (!cleaned) return "";
+
+  const dot = cleaned.indexOf(".");
+  const intRaw = dot === -1 ? cleaned : cleaned.slice(0, dot);
+  const decRaw = dot === -1 ? null : cleaned.slice(dot + 1).replace(/\./g, "").slice(0, 2);
+  const intPart = intRaw.replace(/^0+(?=\d)/, "") || (decRaw !== null ? "0" : "");
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  if (dot === -1) return withCommas;
+  return `${withCommas}.${decRaw ?? ""}`;
+}
+
+/** Parse a comma-formatted money string to a number, or null if empty/invalid. */
+export function parseMoneyInput(raw: string): number | null {
+  const cleaned = raw.replace(/[^0-9.]/g, "");
+  if (!cleaned || cleaned === ".") return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function formatHours(minutes: number | null | undefined) {
   if (minutes === null || minutes === undefined) return "—";
   const h = Math.floor(minutes / 60);

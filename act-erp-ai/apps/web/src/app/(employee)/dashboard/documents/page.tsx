@@ -23,12 +23,7 @@ export default async function MyDocumentsPage() {
 
   const docs = await safe(
     db.document.findMany({
-      where: {
-        OR: [
-          { employeeId: user.employeeId },
-          { documentType: { in: ["COMPANY", "BENEFITS", "TRAINING"] } },
-        ],
-      },
+      where: { employeeId: user.employeeId },
       orderBy: { uploadedAt: "desc" },
     }),
     [],
