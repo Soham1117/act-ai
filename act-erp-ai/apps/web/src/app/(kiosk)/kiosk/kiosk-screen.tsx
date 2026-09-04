@@ -27,9 +27,11 @@ type LookupMatch = ActionOk<{
   activeEntryId: string | null;
 }>;
 
+const EMPLOYEE_ID_PREFIX = "EMP-2026-";
+
 export function KioskScreen({ slug, label }: { slug: string; label: string }) {
   const [now, setNow] = useState(new Date());
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(EMPLOYEE_ID_PREFIX);
   const [match, setMatch] = useState<LookupMatch | null>(null);
   const [pin, setPin] = useState("");
   const [pending, startTransition] = useTransition();
@@ -58,10 +60,10 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
 
   function submit(value: string) {
     const trimmed = value.trim().toUpperCase();
-    if (!trimmed) return;
+    if (!trimmed || trimmed === EMPLOYEE_ID_PREFIX) return;
     startTransition(async () => {
       const r = await kioskLookup(slug, trimmed);
-      setInput("");
+      setInput(EMPLOYEE_ID_PREFIX);
       if (!toastAction(r)) return;
       setMatch(r);
     });
@@ -173,7 +175,11 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                         type="submit"
                         size="lg"
                         className="h-12 w-full text-sm"
-                        disabled={pending || input.length === 0}
+                        disabled={
+                          pending ||
+                          input.trim().length === 0 ||
+                          input.trim().toUpperCase() === EMPLOYEE_ID_PREFIX
+                        }
                       >
                         {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Continue
