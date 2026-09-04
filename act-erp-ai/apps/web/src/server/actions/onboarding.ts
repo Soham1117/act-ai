@@ -9,6 +9,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { uploadFile } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
+import { DEFAULT_KIOSK_PIN } from "@/lib/kiosk-pin";
 
 const INVITE_TTL_DAYS = 7;
 
@@ -156,7 +157,10 @@ export async function submitOnboarding(
 
     const data = submitSchema.parse(fields);
 
-    const passwordHash = await hashPassword(data.password);
+    const [passwordHash, kioskPinHash] = await Promise.all([
+      hashPassword(data.password),
+      hashPassword(DEFAULT_KIOSK_PIN),
+    ]);
 
     const employee = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -196,6 +200,7 @@ export async function submitOnboarding(
           employmentStatus: "ACTIVE",
           compensationType: data.compensationType,
           compensationValue: data.compensationValue ?? null,
+          kioskPinHash,
         },
       });
     });

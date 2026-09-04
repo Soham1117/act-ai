@@ -78,7 +78,7 @@ export default async function SettingsPage() {
             <CardHeader>
               <CardTitle className="text-base">Kiosk PIN</CardTitle>
               <CardDescription>
-                Required to clock in/out at a shared kiosk terminal.
+                Your temporary PIN is 3214. Change it here to a private 4–6 digit PIN.
               </CardDescription>
             </CardHeader>
             <CardContent>

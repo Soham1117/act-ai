@@ -59,7 +59,7 @@ export default function PrivacyPage() {
               <li>Every login requires a password <em>and</em> a one-time code emailed to your personal email</li>
               <li>Access is role-based — most records are visible only to you and HR admins</li>
               <li>Uploaded documents are stored encrypted and are never publicly accessible</li>
-              <li>Kiosk clock-in requires a PIN only you know</li>
+              <li>Kiosk clock-in requires a PIN, stored only as a secure hash</li>
               <li>Account and record changes are logged</li>
             </ul>
           </CardContent>
@@ -85,7 +85,7 @@ export default function PrivacyPage() {
               <li>You choose and can update the personal email your sign-in codes go to (Settings)</li>
               <li>Your W-2 is delivered on paper unless you separately opt in to electronic delivery — and you can withdraw that at any time (Settings)</li>
               <li>Benefits plan documents (SPDs, summaries) are delivered on paper unless you separately opt in to electronic delivery — and you can withdraw that at any time (Settings). This doesn&apos;t affect your own coverage details on the Benefits page, which are always available to you regardless</li>
-              <li>You set your own kiosk PIN; nobody else can see it</li>
+              <li>You can replace the temporary kiosk PIN with your own PIN in Settings</li>
             </ul>
           </CardContent>
         </Card>

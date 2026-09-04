@@ -13,6 +13,7 @@ import { rateLimited } from "@/lib/rate-limit";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 import { requestUsesHttps } from "@/lib/cookie-secure";
 import { getKioskNetworkAccess } from "@/lib/kiosk-network";
+import { DEFAULT_KIOSK_PIN } from "@/lib/kiosk-pin";
 import { _clockIn, _clockOut, _startBreak, _endBreak } from "./time-clock";
 
 const COOKIE = "act_kiosk";
@@ -393,13 +394,19 @@ export async function setMyKioskPin(
   }
 }
 
-/** Admin: clear an employee's kiosk PIN (lost-PIN recovery). They must set a
- *  new one via Settings before they can clock in/out at a kiosk again. */
+/** Admin: restore the temporary kiosk PIN for lost-PIN recovery. */
 export async function resetEmployeeKioskPin(employeeId: string): Promise<ActionResult> {
   await requireAdmin();
   try {
-    await db.employee.update({ where: { id: employeeId }, data: { kioskPinHash: null } });
-    await audit({ action: "kiosk.pin_reset", resource: `Employee:${employeeId}` });
+    await db.employee.update({
+      where: { id: employeeId },
+      data: { kioskPinHash: await hashPassword(DEFAULT_KIOSK_PIN) },
+    });
+    await audit({
+      action: "kiosk.pin_reset",
+      resource: `Employee:${employeeId}`,
+      diff: { resetToDefault: true },
+    });
     revalidatePath(`/admin/employees/${employeeId}`);
     return ok();
   } catch (err) {

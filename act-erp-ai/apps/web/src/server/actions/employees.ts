@@ -10,6 +10,7 @@ import { uploadFile } from "@/lib/storage";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 import { resolveEmailHireMode } from "@/lib/employee-create";
 import { env } from "@/lib/env";
+import { DEFAULT_KIOSK_PIN } from "@/lib/kiosk-pin";
 
 const optionalEmail = z
   .string()
@@ -70,7 +71,10 @@ export async function createEmployee(
       );
     }
 
-    const passwordHash = await hashPassword(data.password);
+    const [passwordHash, kioskPinHash] = await Promise.all([
+      hashPassword(data.password),
+      hashPassword(DEFAULT_KIOSK_PIN),
+    ]);
 
     // Auto-generate EMP-YYYY-NNNN.
     const year = new Date().getFullYear();
@@ -121,6 +125,7 @@ export async function createEmployee(
           employmentType: data.employmentType,
           compensationType: data.compensationType,
           compensationValue: data.compensationValue ?? null,
+          kioskPinHash,
         },
       });
     });
