@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { formatHours } from "@/lib/format";
+import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
 import { Globe, MonitorSmartphone, Sparkles, PenLine } from "lucide-react";
 import type { TimeEntrySource } from "@prisma/client";
 
@@ -19,20 +19,11 @@ type Entry = {
 };
 
 function fmtTime(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return formatBusinessTime(iso);
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDateOnly(iso);
 }
 
 function SourceBadge({
@@ -75,8 +66,8 @@ export function TimeEntriesList({ entries }: { entries: Entry[] }) {
           e.approvalStatus === "APPROVED"
             ? "success"
             : e.approvalStatus === "REJECTED"
-            ? "destructive"
-            : "warning";
+              ? "destructive"
+              : "warning";
         return (
           <li
             key={e.id}

@@ -17,7 +17,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { formatPhone, formatHours, getAvatarUrl, formatSSNLast4 } from "@/lib/format";
+import {
+  formatBusinessTime,
+  formatDateOnly,
+  formatPhone,
+  formatHours,
+  getAvatarUrl,
+  formatSSNLast4,
+} from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
 import { ChangePasswordModal } from "./change-password-modal";
@@ -56,7 +63,9 @@ export default async function EmployeeDetailPage({
         },
         payrollDocs: { orderBy: { payPeriodEnd: "desc" }, take: 20 },
         benefitEnrollments: {
-          include: { plan: { select: { id: true, type: true, name: true, costPeriod: true } } },
+          include: {
+            plan: { select: { id: true, type: true, name: true, costPeriod: true } },
+          },
           orderBy: { effectiveDate: "desc" },
         },
         retirementElections: {
@@ -81,7 +90,10 @@ export default async function EmployeeDetailPage({
   if (!employee) notFound();
 
   const [departments, supervisors, jobCodes, activePlans] = await Promise.all([
-    db.department.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.department.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
     db.employee.findMany({
       where: { id: { not: id }, employmentStatus: { not: "TERMINATED" } },
       orderBy: { name: "asc" },
@@ -119,7 +131,12 @@ export default async function EmployeeDetailPage({
     endDate: e.endDate ? e.endDate.toISOString().slice(0, 10) : null,
     memberId: e.memberId,
     confirmedAsOf: e.confirmedAsOf.toISOString().slice(0, 10),
-    plan: { id: e.plan.id, type: e.plan.type, name: e.plan.name, costPeriod: e.plan.costPeriod },
+    plan: {
+      id: e.plan.id,
+      type: e.plan.type,
+      name: e.plan.name,
+      costPeriod: e.plan.costPeriod,
+    },
   }));
   const electionRows = employee.retirementElections.map((el) => ({
     id: el.id,
@@ -133,10 +150,12 @@ export default async function EmployeeDetailPage({
   }));
 
   const avatar = employee.profilePic ?? getAvatarUrl(employee.email);
-  const deptCfg = employee.department ? getDepartmentConfig(employee.department.name) : null;
+  const deptCfg = employee.department
+    ? getDepartmentConfig(employee.department.name)
+    : null;
   const DeptIcon = deptCfg?.icon;
 
-  const docsByType = (type: typeof employee.documents[number]["documentType"]) =>
+  const docsByType = (type: (typeof employee.documents)[number]["documentType"]) =>
     employee.documents.filter((d) => d.documentType === type);
 
   return (
@@ -172,14 +191,16 @@ export default async function EmployeeDetailPage({
                 employee.employmentStatus === "ACTIVE"
                   ? "success"
                   : employee.employmentStatus === "ON_LEAVE"
-                  ? "warning"
-                  : "destructive"
+                    ? "warning"
+                    : "destructive"
               }
             >
               {employee.employmentStatus.replace("_", " ")}
             </Badge>
             {deptCfg && DeptIcon && (
-              <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs ${deptCfg.bgColor} ${deptCfg.color}`}>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs ${deptCfg.bgColor} ${deptCfg.color}`}
+              >
                 <DeptIcon className="h-3 w-3" />
                 {deptCfg.label}
               </span>
@@ -187,7 +208,10 @@ export default async function EmployeeDetailPage({
             <Separator className="my-1" />
             <div className="w-full space-y-1.5 text-left text-xs">
               <Row icon={<Mail className="h-3 w-3" />} value={employee.email} />
-              <Row icon={<Phone className="h-3 w-3" />} value={formatPhone(employee.phoneNumber)} />
+              <Row
+                icon={<Phone className="h-3 w-3" />}
+                value={formatPhone(employee.phoneNumber)}
+              />
               <Row
                 icon={<MapPin className="h-3 w-3" />}
                 value={[employee.city, employee.state].filter(Boolean).join(", ") || "—"}
@@ -264,21 +288,34 @@ export default async function EmployeeDetailPage({
               }}
             />
             <Card>
-              <CardHeader><CardTitle className="text-base">Job code assignments ({employee.jobCodes.length})</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Job code assignments ({employee.jobCodes.length})
+                </CardTitle>
+              </CardHeader>
               <CardContent className="space-y-2">
                 {employee.jobCodes.length === 0 && (
                   <p className="text-xs text-muted-foreground">No job codes assigned.</p>
                 )}
                 {employee.jobCodes.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-md border p-3">
+                  <div
+                    key={a.id}
+                    className="flex items-center justify-between rounded-md border p-3"
+                  >
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm">{a.jobCode.code}</span>
-                        {a.isPrimary && <Badge variant="secondary" className="text-[10px]">Primary</Badge>}
+                        {a.isPrimary && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Primary
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">{a.jobCode.title}</p>
                     </div>
-                    <span className="font-mono text-xs text-muted-foreground">{a.assignedRate}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {a.assignedRate}
+                    </span>
                   </div>
                 ))}
               </CardContent>
@@ -305,30 +342,17 @@ export default async function EmployeeDetailPage({
                         className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-sm"
                       >
                         <span className="text-xs text-muted-foreground">
-                          {t.date.toLocaleDateString([], {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          })}
+                          {formatDateOnly(t.date)}
                         </span>
                         <span className="font-mono text-xs">
-                          {t.clockIn.toLocaleTimeString([], {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
+                          {formatBusinessTime(t.clockIn)}
                           {" → "}
-                          {t.clockOut?.toLocaleTimeString([], {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          }) ?? "—"}
+                          {formatBusinessTime(t.clockOut)}
                         </span>
                         <span className="font-mono text-xs text-muted-foreground">
                           {t.jobCode}
                         </span>
-                        <SourceBadge
-                          source={t.source}
-                          kioskLabel={t.kioskLabel}
-                        />
+                        <SourceBadge source={t.source} kioskLabel={t.kioskLabel} />
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-sm tabular-nums">
                             {formatHours(t.totalWorkMin)}
@@ -338,8 +362,8 @@ export default async function EmployeeDetailPage({
                               t.approvalStatus === "APPROVED"
                                 ? "success"
                                 : t.approvalStatus === "REJECTED"
-                                ? "destructive"
-                                : "warning"
+                                  ? "destructive"
+                                  : "warning"
                             }
                             className="text-[10px]"
                           >
@@ -358,7 +382,8 @@ export default async function EmployeeDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
-                  Leave summary · {employee.leavesRemaining}/{employee.totalLeaves} remaining
+                  Leave summary · {employee.leavesRemaining}/{employee.totalLeaves}{" "}
+                  remaining
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -367,13 +392,17 @@ export default async function EmployeeDetailPage({
                 ) : (
                   <ul className="divide-y">
                     {employee.leaveRequests.map((l) => (
-                      <li key={l.id} className="flex items-center justify-between py-2 text-sm">
+                      <li
+                        key={l.id}
+                        className="flex items-center justify-between py-2 text-sm"
+                      >
                         <div>
                           <p className="font-medium">
                             {l.leaveType.replace(/_/g, " ")} · {l.totalDays}d
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {l.startDate.toLocaleDateString()} → {l.endDate.toLocaleDateString()}
+                            {l.startDate.toLocaleDateString()} →{" "}
+                            {l.endDate.toLocaleDateString()}
                           </p>
                         </div>
                         <Badge
@@ -381,8 +410,8 @@ export default async function EmployeeDetailPage({
                             l.status === "APPROVED"
                               ? "success"
                               : l.status === "PENDING"
-                              ? "warning"
-                              : "destructive"
+                                ? "warning"
+                                : "destructive"
                           }
                           className="text-[10px]"
                         >
@@ -398,21 +427,36 @@ export default async function EmployeeDetailPage({
 
           <TabsContent value="payroll">
             <Card>
-              <CardHeader><CardTitle className="text-base">Payroll documents ({employee.payrollDocs.length})</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Payroll documents ({employee.payrollDocs.length})
+                </CardTitle>
+              </CardHeader>
               <CardContent>
                 {employee.payrollDocs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No payroll documents yet.</p>
+                  <p className="text-xs text-muted-foreground">
+                    No payroll documents yet.
+                  </p>
                 ) : (
                   <ul className="divide-y">
                     {employee.payrollDocs.map((p) => (
-                      <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <li
+                        key={p.id}
+                        className="flex items-center justify-between gap-3 py-2 text-sm"
+                      >
                         <div className="min-w-0">
                           <p className="truncate font-medium">{p.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {p.payPeriodStart.toLocaleDateString()} → {p.payPeriodEnd.toLocaleDateString()}
+                            {p.payPeriodStart.toLocaleDateString()} →{" "}
+                            {p.payPeriodEnd.toLocaleDateString()}
                           </p>
                         </div>
-                        <a href={`/api/payroll/${p.id}/file`} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                        <a
+                          href={`/api/payroll/${p.id}/file`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline"
+                        >
                           <FileText className="h-4 w-4" />
                         </a>
                       </li>
@@ -508,7 +552,14 @@ function DocumentSection({
   defaultType,
 }: {
   employeeId: string;
-  docs: Array<{ id: string; title: string; fileName: string; fileUrl: string; uploadedAt: Date; documentType: DocType }>;
+  docs: Array<{
+    id: string;
+    title: string;
+    fileName: string;
+    fileUrl: string;
+    uploadedAt: Date;
+    documentType: DocType;
+  }>;
   emptyHint: string;
   allowedTypes: readonly DocType[];
   defaultType: DocType;
@@ -529,7 +580,10 @@ function DocumentSection({
         ) : (
           <ul className="divide-y">
             {docs.map((d) => (
-              <li key={d.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <li
+                key={d.id}
+                className="flex items-center justify-between gap-3 py-2 text-sm"
+              >
                 <div className="min-w-0">
                   <p className="truncate font-medium">{d.title}</p>
                   <p className="text-xs text-muted-foreground">
@@ -557,7 +611,13 @@ function DocumentSection({
   );
 }
 
-function Row({ icon, value }: { icon: React.ReactNode; value: string | null | undefined }) {
+function Row({
+  icon,
+  value,
+}: {
+  icon: React.ReactNode;
+  value: string | null | undefined;
+}) {
   return (
     <div className="flex items-center gap-2 text-muted-foreground">
       <span className="opacity-60">{icon}</span>

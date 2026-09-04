@@ -12,7 +12,13 @@ import {
   PenLine,
   Sparkles,
 } from "lucide-react";
-import { formatHours, getAvatarUrl } from "@/lib/format";
+import {
+  businessDateOnly,
+  formatBusinessTime,
+  formatDateOnly,
+  formatHours,
+  getAvatarUrl,
+} from "@/lib/format";
 import { ApproveButton } from "./approve-button";
 import type { TimeEntrySource } from "@prisma/client";
 
@@ -20,16 +26,24 @@ export const metadata = { title: "Time tracking" };
 
 export default async function AdminTimeTrackingPage() {
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-    try { return await p; } catch { return fallback; }
+    try {
+      return await p;
+    } catch {
+      return fallback;
+    }
   };
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const today = businessDateOnly();
   const [pending, today_, active] = await Promise.all([
     safe(
       db.timeEntry.findMany({
         where: { approvalStatus: "PENDING", clockOut: { not: null } },
         orderBy: { clockOut: "desc" },
-        include: { employee: { select: { name: true, employeeId: true, profilePic: true, email: true } } },
+        include: {
+          employee: {
+            select: { name: true, employeeId: true, profilePic: true, email: true },
+          },
+        },
         take: 25,
       }),
       [],
@@ -38,14 +52,34 @@ export default async function AdminTimeTrackingPage() {
       db.timeEntry.findMany({
         where: { date: { gte: today } },
         orderBy: { clockIn: "desc" },
-        include: { employee: { select: { name: true, employeeId: true, profilePic: true, email: true, department: { select: { name: true } } } } },
+        include: {
+          employee: {
+            select: {
+              name: true,
+              employeeId: true,
+              profilePic: true,
+              email: true,
+              department: { select: { name: true } },
+            },
+          },
+        },
       }),
       [],
     ),
     safe(
       db.timeEntry.findMany({
         where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
-        include: { employee: { select: { name: true, employeeId: true, profilePic: true, email: true, department: { select: { name: true } } } } },
+        include: {
+          employee: {
+            select: {
+              name: true,
+              employeeId: true,
+              profilePic: true,
+              email: true,
+              department: { select: { name: true } },
+            },
+          },
+        },
       }),
       [],
     ),
@@ -58,9 +92,21 @@ export default async function AdminTimeTrackingPage() {
         description="Live activity, today's entries, and the approval queue."
       />
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="Clocked in now" value={active.length} icon={<Activity className="h-4 w-4 text-primary" />} />
-        <StatCard label="Today's entries" value={today_.length} icon={<Clock className="h-4 w-4" />} />
-        <StatCard label="Pending approval" value={pending.length} icon={<Clock className="h-4 w-4" />} />
+        <StatCard
+          label="Clocked in now"
+          value={active.length}
+          icon={<Activity className="h-4 w-4 text-primary" />}
+        />
+        <StatCard
+          label="Today's entries"
+          value={today_.length}
+          icon={<Clock className="h-4 w-4" />}
+        />
+        <StatCard
+          label="Pending approval"
+          value={pending.length}
+          icon={<Clock className="h-4 w-4" />}
+        />
       </div>
 
       <Tabs defaultValue="pending" className="mt-6 space-y-4">
@@ -76,11 +122,15 @@ export default async function AdminTimeTrackingPage() {
               <ul className="divide-y">
                 {pending.map((e) => (
                   <li key={e.id} className="flex items-center gap-3 p-3">
-                    <Avatar src={e.employee.profilePic ?? getAvatarUrl(e.employee.email)} name={e.employee.name} />
-                    <div className="flex-1 min-w-0">
+                    <Avatar
+                      src={e.employee.profilePic ?? getAvatarUrl(e.employee.email)}
+                      name={e.employee.name}
+                    />
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{e.employee.name}</p>
                       <p className="truncate text-[11px] text-muted-foreground">
-                        {e.date.toLocaleDateString()} · {e.jobCode} · {formatHours(e.totalWorkMin)}
+                        {formatDateOnly(e.date)} · {e.jobCode} ·{" "}
+                        {formatHours(e.totalWorkMin)}
                       </p>
                     </div>
                     <SourceBadge source={e.source} kioskLabel={e.kioskLabel} />
@@ -99,7 +149,9 @@ export default async function AdminTimeTrackingPage() {
 
         <TabsContent value="today">
           <Card>
-            <CardHeader><CardTitle className="text-base">Today&apos;s entries</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Today&apos;s entries</CardTitle>
+            </CardHeader>
             <CardContent>
               <EntryGrid entries={today_} />
             </CardContent>
@@ -108,7 +160,9 @@ export default async function AdminTimeTrackingPage() {
 
         <TabsContent value="now">
           <Card>
-            <CardHeader><CardTitle className="text-base">Currently on shift</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Currently on shift</CardTitle>
+            </CardHeader>
             <CardContent>
               <EntryGrid entries={active} live />
             </CardContent>
@@ -122,7 +176,14 @@ export default async function AdminTimeTrackingPage() {
 function Avatar({ src, name }: { src: string; name: string }) {
   return (
     <span className="relative h-9 w-9 overflow-hidden rounded-full bg-muted">
-      <Image src={src} alt={name} fill sizes="36px" className="object-cover" unoptimized />
+      <Image
+        src={src}
+        alt={name}
+        fill
+        sizes="36px"
+        className="object-cover"
+        unoptimized
+      />
     </span>
   );
 }
@@ -136,17 +197,31 @@ type EntryRow = {
   clockOut: Date | null;
   source: TimeEntrySource;
   kioskLabel: string | null;
-  employee: { name: string; employeeId: string; profilePic: string | null; email: string | null; department: { name: string } | null };
+  employee: {
+    name: string;
+    employeeId: string;
+    profilePic: string | null;
+    email: string | null;
+    department: { name: string } | null;
+  };
 };
 
 function EntryGrid({ entries, live = false }: { entries: EntryRow[]; live?: boolean }) {
   if (entries.length === 0)
-    return <p className="py-8 text-center text-xs text-muted-foreground">Nothing here yet.</p>;
+    return (
+      <p className="py-8 text-center text-xs text-muted-foreground">Nothing here yet.</p>
+    );
   return (
     <ul className="divide-y">
       {entries.map((e) => (
-        <li key={e.id} className="grid grid-cols-[36px_1fr_auto_auto_auto_auto] items-center gap-3 py-2.5">
-          <Avatar src={e.employee.profilePic ?? getAvatarUrl(e.employee.email)} name={e.employee.name} />
+        <li
+          key={e.id}
+          className="grid grid-cols-[36px_1fr_auto_auto_auto_auto] items-center gap-3 py-2.5"
+        >
+          <Avatar
+            src={e.employee.profilePic ?? getAvatarUrl(e.employee.email)}
+            name={e.employee.name}
+          />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{e.employee.name}</p>
             <p className="truncate text-[11px] text-muted-foreground">
@@ -155,16 +230,21 @@ function EntryGrid({ entries, live = false }: { entries: EntryRow[]; live?: bool
           </div>
           <span className="font-mono text-xs text-muted-foreground">{e.jobCode}</span>
           <span className="font-mono text-xs text-muted-foreground">
-            {e.clockIn.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-            {e.clockOut && ` → ${e.clockOut.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
+            {formatBusinessTime(e.clockIn)}
+            {e.clockOut && ` → ${formatBusinessTime(e.clockOut)}`}
           </span>
           <SourceBadge source={e.source} kioskLabel={e.kioskLabel} />
           {live ? (
-            <Badge variant={e.status === "ON_BREAK" ? "warning" : "success"} className="text-[10px]">
+            <Badge
+              variant={e.status === "ON_BREAK" ? "warning" : "success"}
+              className="text-[10px]"
+            >
               {e.status === "ON_BREAK" ? "On break" : "Working"}
             </Badge>
           ) : (
-            <span className="font-mono text-sm tabular-nums">{formatHours(e.totalWorkMin)}</span>
+            <span className="font-mono text-sm tabular-nums">
+              {formatHours(e.totalWorkMin)}
+            </span>
           )}
         </li>
       ))}

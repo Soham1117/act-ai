@@ -12,6 +12,7 @@ import { audit } from "@/lib/audit";
 import { rateLimited } from "@/lib/rate-limit";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 import { requestUsesHttps } from "@/lib/cookie-secure";
+import { getKioskNetworkAccess } from "@/lib/kiosk-network";
 import { _clockIn, _clockOut, _startBreak, _endBreak } from "./time-clock";
 
 const COOKIE = "act_kiosk";
@@ -77,12 +78,20 @@ export async function activateKiosk(
 ): Promise<ActionResult<{ redirectTo: string }>> {
   const admin = await requireAdmin();
   try {
+    const network = await getKioskNetworkAccess();
+    if (!network.allowed) {
+      return fail(
+        "Kiosk activation is only available from the approved facility network.",
+      );
+    }
     const session = await db.kioskSession.findUnique({ where: { slug } });
     if (!session) {
       return fail("That kiosk was not found. Check the slug or create the kiosk first.");
     }
     if (session.revokedAt) {
-      return fail("That kiosk has been revoked. Create a new kiosk or ask an admin to restore access.");
+      return fail(
+        "That kiosk has been revoked. Create a new kiosk or ask an admin to restore access.",
+      );
     }
 
     const raw = randomBytes(32).toString("base64url");
@@ -172,6 +181,10 @@ export async function kioskLookup(
   employeeId: string,
 ): Promise<ActionResult<KioskLookupOk>> {
   try {
+    const network = await getKioskNetworkAccess();
+    if (!network.allowed) {
+      return fail("This kiosk can only be used from the approved facility network.");
+    }
     const session = await requireActiveKiosk(slug);
     if (!session) {
       return fail(
@@ -223,6 +236,10 @@ export async function kioskAction(
   input: z.infer<typeof actionSchema>,
 ): Promise<ActionResult<{ id: string | null; status: string | null }>> {
   try {
+    const network = await getKioskNetworkAccess();
+    if (!network.allowed) {
+      return fail("This kiosk can only be used from the approved facility network.");
+    }
     const session = await requireActiveKiosk(input.slug);
     if (!session) {
       return fail(
@@ -231,7 +248,9 @@ export async function kioskAction(
     }
     const data = actionSchema.parse(input);
 
-    const employee = await db.employee.findUnique({ where: { employeeId: data.employeeId } });
+    const employee = await db.employee.findUnique({
+      where: { employeeId: data.employeeId },
+    });
     if (!employee) {
       return fail("Unknown employee ID. Check the ID and try again.");
     }
@@ -252,7 +271,9 @@ export async function kioskAction(
         resource: `Employee:${employee.id}`,
         diff: { kioskSlug: session.slug },
       });
-      return fail("Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.");
+      return fail(
+        "Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.",
+      );
     }
 
     const meta = { kioskSlug: session.slug ?? input.slug, kioskLabel: session.label };
@@ -351,8 +372,14 @@ export async function setMyKioskPin(
   }
 
   try {
-    const row = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
-    if (!row?.passwordHash || !(await verifyPassword(currentPassword, row.passwordHash))) {
+    const row = await db.user.findUnique({
+      where: { id: user.id },
+      select: { passwordHash: true },
+    });
+    if (
+      !row?.passwordHash ||
+      !(await verifyPassword(currentPassword, row.passwordHash))
+    ) {
       return fail("Current password is incorrect. Re-enter your password and try again.");
     }
     await db.employee.update({

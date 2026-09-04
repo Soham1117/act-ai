@@ -26,7 +26,13 @@ export function formatMoneyInput(raw: string): string {
 
   const dot = cleaned.indexOf(".");
   const intRaw = dot === -1 ? cleaned : cleaned.slice(0, dot);
-  const decRaw = dot === -1 ? null : cleaned.slice(dot + 1).replace(/\./g, "").slice(0, 2);
+  const decRaw =
+    dot === -1
+      ? null
+      : cleaned
+          .slice(dot + 1)
+          .replace(/\./g, "")
+          .slice(0, 2);
   const intPart = intRaw.replace(/^0+(?=\d)/, "") || (decRaw !== null ? "0" : "");
   const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
@@ -47,6 +53,34 @@ export function formatHours(minutes: number | null | undefined) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h}h ${m.toString().padStart(2, "0")}m`;
+}
+
+/** Business timezone used for schedules, punches, and kiosk displays. */
+export const BUSINESS_TIME_ZONE = "America/Chicago";
+
+export function formatBusinessTime(date: Date | string | null | undefined) {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+/** Convert an instant to the UTC-midnight value for its Central calendar day. */
+export function businessDateOnly(date: Date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return new Date(Date.UTC(value("year"), value("month") - 1, value("day")));
 }
 
 export function formatPhone(phone: string | null | undefined) {

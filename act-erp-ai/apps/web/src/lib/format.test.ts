@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { formatDateOnly, formatMoneyInput, parseMoneyInput } from "./format";
+import {
+  businessDateOnly,
+  formatBusinessTime,
+  formatDateOnly,
+  formatMoneyInput,
+  parseMoneyInput,
+} from "./format";
+
+describe("Central business time", () => {
+  it("renders UTC instants in America/Chicago during daylight time", () => {
+    expect(formatBusinessTime("2026-09-04T14:53:00.000Z")).toBe("9:53 AM");
+  });
+
+  it("renders UTC instants in America/Chicago during standard time", () => {
+    expect(formatBusinessTime("2026-01-04T15:53:00.000Z")).toBe("9:53 AM");
+  });
+
+  it("assigns late-evening punches to the Central calendar day", () => {
+    expect(businessDateOnly(new Date("2026-09-05T02:30:00.000Z")).toISOString()).toBe(
+      "2026-09-04T00:00:00.000Z",
+    );
+  });
+});
 
 describe("formatDateOnly", () => {
   it("renders a UTC-midnight @db.Date as the same calendar day regardless of the runner's local timezone", () => {

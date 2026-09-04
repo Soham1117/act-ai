@@ -2,28 +2,15 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
-import {
-  Coffee,
-  LogOut,
-  Pause,
-  Play,
-  Square,
-  X,
-  Loader2,
-  ScanLine,
-} from "lucide-react";
+import { Coffee, LogOut, Pause, Play, Square, X, Loader2, ScanLine } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/logo";
-import {
-  kioskAction,
-  kioskLookup,
-  endKioskSession,
-} from "@/server/actions/kiosk";
-import { getAvatarUrl } from "@/lib/format";
+import { kioskAction, kioskLookup, endKioskSession } from "@/server/actions/kiosk";
+import { BUSINESS_TIME_ZONE, getAvatarUrl } from "@/lib/format";
 import { toast } from "sonner";
 import { toastAction } from "@/lib/toast-action";
 import type { ActionOk } from "@/lib/action-result";
@@ -40,13 +27,7 @@ type LookupMatch = ActionOk<{
   activeEntryId: string | null;
 }>;
 
-export function KioskScreen({
-  slug,
-  label,
-}: {
-  slug: string;
-  label: string;
-}) {
+export function KioskScreen({ slug, label }: { slug: string; label: string }) {
   const [now, setNow] = useState(new Date());
   const [input, setInput] = useState("");
   const [match, setMatch] = useState<LookupMatch | null>(null);
@@ -124,6 +105,7 @@ export function KioskScreen({
         <div className="text-right">
           <p className="font-mono text-2xl font-semibold tabular-nums">
             {now.toLocaleTimeString([], {
+              timeZone: BUSINESS_TIME_ZONE,
               hour: "numeric",
               minute: "2-digit",
               hour12: true,
@@ -131,6 +113,7 @@ export function KioskScreen({
           </p>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {now.toLocaleDateString([], {
+              timeZone: BUSINESS_TIME_ZONE,
               weekday: "long",
               month: "long",
               day: "numeric",
@@ -183,7 +166,7 @@ export function KioskScreen({
                         }
                         disabled={pending}
                         placeholder="EMP-2026-0001"
-                        className="h-16 text-center font-mono text-2xl tracking-[0.18em] tabular-nums"
+                        className="h-16 text-center font-mono text-2xl tabular-nums tracking-[0.18em]"
                         autoFocus
                       />
                       <Button
@@ -192,9 +175,7 @@ export function KioskScreen({
                         className="h-12 w-full text-sm"
                         disabled={pending || input.length === 0}
                       >
-                        {pending && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
+                        {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Continue
                       </Button>
                     </form>
@@ -222,9 +203,7 @@ export function KioskScreen({
                         />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-base font-semibold">
-                          {match.name}
-                        </p>
+                        <p className="truncate text-base font-semibold">{match.name}</p>
                         <p className="truncate text-xs text-muted-foreground">
                           {match.jobTitle ?? "—"} · {match.employeeId}
                         </p>
@@ -234,23 +213,23 @@ export function KioskScreen({
                           match.status === "ACTIVE"
                             ? "success"
                             : match.status === "ON_BREAK"
-                            ? "warning"
-                            : "outline"
+                              ? "warning"
+                              : "outline"
                         }
                         className="text-[10px]"
                       >
                         {match.status === "ACTIVE"
                           ? "On shift"
                           : match.status === "ON_BREAK"
-                          ? "On break"
-                          : "Clocked out"}
+                            ? "On break"
+                            : "Clocked out"}
                       </Badge>
                     </div>
 
                     {!match.hasPin ? (
                       <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-center text-xs text-destructive">
-                        No kiosk PIN set for this account. Set one in
-                        Settings before clocking in/out here.
+                        No kiosk PIN set for this account. Set one in Settings before
+                        clocking in/out here.
                       </p>
                     ) : (
                       <div className="space-y-1.5">
@@ -264,7 +243,9 @@ export function KioskScreen({
                           autoComplete="off"
                           maxLength={6}
                           value={pin}
-                          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          onChange={(e) =>
+                            setPin(e.target.value.replace(/\D/g, "").slice(0, 6))
+                          }
                           disabled={pending}
                           placeholder="••••"
                           className="h-12 text-center font-mono text-xl tracking-[0.4em]"

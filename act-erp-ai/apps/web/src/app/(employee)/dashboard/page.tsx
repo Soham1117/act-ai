@@ -24,7 +24,7 @@ import {
   ClipboardList,
   TrendingUp,
 } from "lucide-react";
-import { formatHours } from "@/lib/format";
+import { formatBusinessTime, formatHours } from "@/lib/format";
 import {
   addDays,
   differenceInMinutes,
@@ -251,9 +251,21 @@ export default async function EmployeeHomePage() {
             where: { employeeId, date: { gte: weekStart, lte: addDays(weekStart, 7) } },
             select: { date: true, startTime: true, endTime: true, totalBreakMin: true },
           }),
-          [] as Array<{ date: Date; startTime: Date; endTime: Date; totalBreakMin: number }>,
+          [] as Array<{
+            date: Date;
+            startTime: Date;
+            endTime: Date;
+            totalBreakMin: number;
+          }>,
         )
-      : Promise.resolve([] as Array<{ date: Date; startTime: Date; endTime: Date; totalBreakMin: number }>),
+      : Promise.resolve(
+          [] as Array<{
+            date: Date;
+            startTime: Date;
+            endTime: Date;
+            totalBreakMin: number;
+          }>,
+        ),
     employeeId
       ? safe(
           db.leaveRequest.findMany({
@@ -341,8 +353,10 @@ export default async function EmployeeHomePage() {
   for (const s of weekScheduled) {
     const k = format(s.date, "yyyy-MM-dd");
     if (!scheduledByDay.has(k)) continue;
-    const mins =
-      Math.max(0, differenceInMinutes(s.endTime, s.startTime) - (s.totalBreakMin ?? 0));
+    const mins = Math.max(
+      0,
+      differenceInMinutes(s.endTime, s.startTime) - (s.totalBreakMin ?? 0),
+    );
     scheduledByDay.set(k, (scheduledByDay.get(k) ?? 0) + mins / 60);
   }
   const scheduledVsWorkedData = Array.from(byDay.entries()).map(([k, mins]) => ({
@@ -389,7 +403,13 @@ export default async function EmployeeHomePage() {
   for (let i = 5; i >= 0; i--) {
     const m = startOfMonth(subMonths(now, i));
     const key = format(m, "MMM");
-    reimbursementBuckets.set(key, { month: key, PENDING: 0, APPROVED: 0, PAID: 0, REJECTED: 0 });
+    reimbursementBuckets.set(key, {
+      month: key,
+      PENDING: 0,
+      APPROVED: 0,
+      PAID: 0,
+      REJECTED: 0,
+    });
   }
   for (const r of reimbsMonthly) {
     const key = format(r.createdAt, "MMM");
@@ -470,11 +490,7 @@ export default async function EmployeeHomePage() {
           label="Leave remaining"
           value={`${leavesRemaining} / ${totalLeaves || "—"} days`}
           icon={<Plane className="h-4 w-4" />}
-          delta={
-            totalLeaves > 0
-              ? { value: `${leavesUsedPct}% used` }
-              : undefined
-          }
+          delta={totalLeaves > 0 ? { value: `${leavesUsedPct}% used` } : undefined}
         />
         <StatCard
           label="Pending reimbursements"
@@ -496,10 +512,8 @@ export default async function EmployeeHomePage() {
               <Activity className="h-4 w-4 text-primary" /> Hours this month
             </CardTitle>
             <CardDescription>
-              Daily hours clocked across {format(now, "MMMM yyyy")} ({formatHours(
-                monthHours._sum.totalWorkMin ?? 0,
-              )}{" "}
-              total).
+              Daily hours clocked across {format(now, "MMMM yyyy")} (
+              {formatHours(monthHours._sum.totalWorkMin ?? 0)} total).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -532,12 +546,7 @@ export default async function EmployeeHomePage() {
               </p>
               {todayEntry && (
                 <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                  Since{" "}
-                  {todayEntry.clockIn.toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}{" "}
-                  · {todayEntry.jobCode}
+                  Since {formatBusinessTime(todayEntry.clockIn)} · {todayEntry.jobCode}
                 </p>
               )}
             </div>
@@ -595,9 +604,7 @@ export default async function EmployeeHomePage() {
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium">
-                        {format(s.date, "EEEE")}
-                      </p>
+                      <p className="text-sm font-medium">{format(s.date, "EEEE")}</p>
                       <p className="font-mono text-[11px] text-muted-foreground">
                         {s.startTime} → {s.endTime} · {s.jobCode}
                       </p>
@@ -671,7 +678,7 @@ export default async function EmployeeHomePage() {
                       }`}
                       aria-hidden
                     />
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {r.notification.title}
                       </p>
@@ -693,7 +700,7 @@ export default async function EmployeeHomePage() {
       {/* New analytics — appended below for evaluation                */}
       {/* ─────────────────────────────────────────────────────────── */}
 
-      <div className="mt-10 mb-3 flex items-center gap-2">
+      <div className="mb-3 mt-10 flex items-center gap-2">
         <span className="h-px flex-1 bg-border" />
         <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           New analytics
@@ -705,7 +712,8 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarCheck className="h-4 w-4 text-primary" /> Scheduled vs worked · this week
+              <CalendarCheck className="h-4 w-4 text-primary" /> Scheduled vs worked ·
+              this week
             </CardTitle>
             <CardDescription>
               Daily side-by-side of what you were scheduled and what you logged.
@@ -815,10 +823,7 @@ function ActionItemRow({
       >
         <span>{label}</span>
         <span className="flex items-center gap-1.5">
-          <Badge
-            variant={count > 0 ? "default" : "secondary"}
-            className="font-mono"
-          >
+          <Badge variant={count > 0 ? "default" : "secondary"} className="font-mono">
             {count}
           </Badge>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />

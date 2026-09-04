@@ -12,10 +12,18 @@ export const env = createEnv({
     AWS_REGION: z.string().default("us-east-2"),
     AWS_ENDPOINT_URL: z.string().url().optional(),
     S3_BUCKET: z.string().min(1),
-    // Sender identity for login 2FA codes — must be a verified SES identity
-    // (SES starts in sandbox mode: only verified addresses can receive mail
-    // until production access is requested).
-    SES_FROM_EMAIL: z.string().email(),
+    // Login-code delivery. Microsoft Graph is preferred in production so
+    // employee recipients never need to be individually verified. SES stays
+    // available for local/testing and as an operational fallback.
+    EMAIL_PROVIDER: z.enum(["ses", "microsoft-graph"]).default("ses"),
+    SES_FROM_EMAIL: z.string().email().optional(),
+    MICROSOFT_TENANT_ID: z.string().min(1).optional(),
+    MICROSOFT_CLIENT_ID: z.string().min(1).optional(),
+    MICROSOFT_CLIENT_SECRET: z.string().min(1).optional(),
+    MICROSOFT_SENDER_USER: z.string().email().optional(),
+    // Comma-separated exact IPs or IPv4 CIDRs. In production, kiosk
+    // activation and clock actions fail closed when this is unset.
+    KIOSK_ALLOWED_NETWORKS: z.string().optional(),
     // ── AI document-chat feature (apps/ai agent + SQS ingestion) ────────
     // Off by default. When off, the chat/knowledge routes are disabled and
     // the three vars below are unused — a core-ERP-only deploy does not
@@ -37,7 +45,13 @@ export const env = createEnv({
     AWS_REGION: process.env.AWS_REGION,
     AWS_ENDPOINT_URL: process.env.AWS_ENDPOINT_URL,
     S3_BUCKET: process.env.S3_BUCKET,
+    EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
     SES_FROM_EMAIL: process.env.SES_FROM_EMAIL,
+    MICROSOFT_TENANT_ID: process.env.MICROSOFT_TENANT_ID,
+    MICROSOFT_CLIENT_ID: process.env.MICROSOFT_CLIENT_ID,
+    MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
+    MICROSOFT_SENDER_USER: process.env.MICROSOFT_SENDER_USER,
+    KIOSK_ALLOWED_NETWORKS: process.env.KIOSK_ALLOWED_NETWORKS,
     AI_ENABLED: process.env.AI_ENABLED,
     SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
     AGENT_SERVICE_URL: process.env.AGENT_SERVICE_URL,
@@ -47,6 +61,25 @@ export const env = createEnv({
   emptyStringAsUndefined: true,
   skipValidation: process.env.SKIP_ENV_VALIDATION === "true",
 });
+
+if (process.env.SKIP_ENV_VALIDATION !== "true") {
+  if (env.EMAIL_PROVIDER === "ses" && !env.SES_FROM_EMAIL) {
+    throw new Error("EMAIL_PROVIDER=ses requires SES_FROM_EMAIL.");
+  }
+  if (env.EMAIL_PROVIDER === "microsoft-graph") {
+    const missing = (
+      [
+        "MICROSOFT_TENANT_ID",
+        "MICROSOFT_CLIENT_ID",
+        "MICROSOFT_CLIENT_SECRET",
+        "MICROSOFT_SENDER_USER",
+      ] as const
+    ).filter((key) => !env[key]);
+    if (missing.length > 0) {
+      throw new Error(`EMAIL_PROVIDER=microsoft-graph requires: ${missing.join(", ")}.`);
+    }
+  }
+}
 
 /**
  * Fail fast on a half-configured AI deploy. Without this, AI_ENABLED=true

@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Activity, Clock, MonitorSmartphone } from "lucide-react";
 import { TimeEntriesList } from "./time-entries-list";
-import { formatHours } from "@/lib/format";
+import { formatBusinessTime, formatHours } from "@/lib/format";
 import { startOfMonth, startOfWeek } from "date-fns";
 
 export const metadata = { title: "Timesheet" };
@@ -98,11 +98,7 @@ export default async function TimeTrackingPage() {
               </p>
               {active && (
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Since{" "}
-                  {active.clockIn.toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                  Since {formatBusinessTime(active.clockIn)}
                   {" · "}
                   <span className="font-mono">{active.jobCode}</span>
                 </p>

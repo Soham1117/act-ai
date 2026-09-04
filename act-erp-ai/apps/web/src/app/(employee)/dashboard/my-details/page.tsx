@@ -25,6 +25,8 @@ import {
   formatCurrency,
   getAvatarUrl,
   formatSSNLast4,
+  formatBusinessTime,
+  formatDateOnly,
 } from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
@@ -72,9 +74,8 @@ export default async function MyDetailsPage() {
     : null;
   const DeptIcon = deptCfg?.icon;
 
-  const docsByType = (
-    type: (typeof employee.documents)[number]["documentType"],
-  ) => employee.documents.filter((d) => d.documentType === type);
+  const docsByType = (type: (typeof employee.documents)[number]["documentType"]) =>
+    employee.documents.filter((d) => d.documentType === type);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
@@ -122,9 +123,7 @@ export default async function MyDetailsPage() {
             />
             <Row
               icon={<MapPin className="h-3 w-3" />}
-              value={
-                [employee.city, employee.state].filter(Boolean).join(", ") || "—"
-              }
+              value={[employee.city, employee.state].filter(Boolean).join(", ") || "—"}
             />
           </div>
         </CardContent>
@@ -160,14 +159,11 @@ export default async function MyDetailsPage() {
               <Field label="Phone" value={formatPhone(employee.phoneNumber)} />
               <Field
                 label="Address"
-                value={[
-                  employee.address,
-                  employee.city,
-                  employee.state,
-                  employee.zipCode,
-                ]
-                  .filter(Boolean)
-                  .join(", ") || "—"}
+                value={
+                  [employee.address, employee.city, employee.state, employee.zipCode]
+                    .filter(Boolean)
+                    .join(", ") || "—"
+                }
               />
               <Field label="Emergency contact" value={employee.emergencyName} />
               <Field
@@ -197,20 +193,14 @@ export default async function MyDetailsPage() {
                 value={employee.employmentType.replace(/_/g, " ")}
               />
               <Field label="Work email" value={employee.workEmail} />
-              <Field
-                label="Work phone"
-                value={formatPhone(employee.workPhoneNumber)}
-              />
+              <Field label="Work phone" value={formatPhone(employee.workPhoneNumber)} />
               {employee.terminationDate && (
                 <>
                   <Field
                     label="Termination date"
                     value={employee.terminationDate.toLocaleDateString()}
                   />
-                  <Field
-                    label="Termination reason"
-                    value={employee.terminationReason}
-                  />
+                  <Field label="Termination reason" value={employee.terminationReason} />
                 </>
               )}
               {employee.jobDescription && (
@@ -266,9 +256,7 @@ export default async function MyDetailsPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               {employee.jobCodes.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  No job codes assigned.
-                </p>
+                <p className="text-xs text-muted-foreground">No job codes assigned.</p>
               )}
               {employee.jobCodes.map((a) => (
                 <div
@@ -284,9 +272,7 @@ export default async function MyDetailsPage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {a.jobCode.title}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{a.jobCode.title}</p>
                   </div>
                   <span className="font-mono text-xs text-muted-foreground">
                     {a.assignedRate}
@@ -317,22 +303,12 @@ export default async function MyDetailsPage() {
                       className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-sm"
                     >
                       <span className="text-xs text-muted-foreground">
-                        {t.date.toLocaleDateString([], {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {formatDateOnly(t.date)}
                       </span>
                       <span className="font-mono text-xs">
-                        {t.clockIn.toLocaleTimeString([], {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
+                        {formatBusinessTime(t.clockIn)}
                         {" → "}
-                        {t.clockOut?.toLocaleTimeString([], {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        }) ?? "—"}
+                        {formatBusinessTime(t.clockOut)}
                       </span>
                       <span className="font-mono text-xs text-muted-foreground">
                         {t.jobCode}
@@ -373,9 +349,7 @@ export default async function MyDetailsPage() {
             </CardHeader>
             <CardContent>
               {employee.leaveRequests.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No leave requests yet.
-                </p>
+                <p className="text-xs text-muted-foreground">No leave requests yet.</p>
               ) : (
                 <ul className="divide-y">
                   {employee.leaveRequests.map((l) => (
@@ -421,9 +395,7 @@ export default async function MyDetailsPage() {
             </CardHeader>
             <CardContent>
               {employee.payrollDocs.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No payroll documents yet.
-                </p>
+                <p className="text-xs text-muted-foreground">No payroll documents yet.</p>
               ) : (
                 <ul className="divide-y">
                   {employee.payrollDocs.map((p) => (
@@ -467,7 +439,8 @@ export default async function MyDetailsPage() {
             <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
               <HeartPulse className="h-6 w-6 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                Your medical, dental, vision, and 401(k) info now lives on a dedicated page.
+                Your medical, dental, vision, and 401(k) info now lives on a dedicated
+                page.
               </p>
               <Button asChild size="sm">
                 <Link href="/dashboard/benefits">Go to Benefits</Link>
@@ -488,13 +461,7 @@ export default async function MyDetailsPage() {
   );
 }
 
-function Field({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | null | undefined;
-}) {
+function Field({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -573,9 +540,7 @@ function DocumentList({
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {docs.length === 0 ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">
-            {emptyHint}
-          </p>
+          <p className="py-8 text-center text-xs text-muted-foreground">{emptyHint}</p>
         ) : (
           <ul className="divide-y">
             {docs.map((d) => (

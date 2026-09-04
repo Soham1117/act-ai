@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import type { TimeEntryStatus } from "@prisma/client";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
+import { businessDateOnly } from "@/lib/format";
 
 /** Pick the best job code for an employee using the legacy 5-tier resolver. */
 async function resolveJobCode(employeeId: string): Promise<string> {
@@ -48,14 +49,17 @@ export async function _clockIn(
       where: { employeeId, status: { in: ["ACTIVE", "ON_BREAK"] } },
     });
     if (existing) {
-      return fail("You are already clocked in. Clock out first, or refresh if this looks wrong.");
+      return fail(
+        "You are already clocked in. Clock out first, or refresh if this looks wrong.",
+      );
     }
     const code = jobCode ?? (await resolveJobCode(employeeId));
+    const now = new Date();
     const entry = await db.timeEntry.create({
       data: {
         employeeId,
-        date: new Date(),
-        clockIn: new Date(),
+        date: businessDateOnly(now),
+        clockIn: now,
         jobCode: code,
         status: "ACTIVE" as TimeEntryStatus,
         source,
@@ -129,7 +133,9 @@ export async function _startBreak(
       where: { employeeId, status: "ACTIVE" },
     });
     if (!entry) {
-      return fail("You are not currently clocked in. Clock in first, then start a break.");
+      return fail(
+        "You are not currently clocked in. Clock in first, then start a break.",
+      );
     }
 
     const updated = await db.$transaction(async (tx) => {
@@ -163,7 +169,9 @@ export async function _endBreak(
 
     const open = entry.breaks[0];
     if (!open) {
-      return fail("No open break was found on this session. Refresh the kiosk and try again.");
+      return fail(
+        "No open break was found on this session. Refresh the kiosk and try again.",
+      );
     }
     const now = new Date();
     const dur = Math.floor((now.getTime() - open.startTime.getTime()) / 60_000);
