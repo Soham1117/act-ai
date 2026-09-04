@@ -313,6 +313,7 @@ export async function consentToElectronicW2(): Promise<ActionResult> {
       data: { w2ConsentAt: new Date() },
     });
     await audit({ action: "employee.w2_consent_given", resource: `Employee:${user.employeeId}` });
+    revalidatePath("/dashboard/settings");
     return ok();
   } catch (err) {
     return failFromUnknown(err);
@@ -328,6 +329,7 @@ export async function withdrawW2Consent(): Promise<ActionResult> {
       data: { w2ConsentAt: null },
     });
     await audit({ action: "employee.w2_consent_withdrawn", resource: `Employee:${user.employeeId}` });
+    revalidatePath("/dashboard/settings");
     return ok();
   } catch (err) {
     return failFromUnknown(err);
@@ -347,6 +349,7 @@ export async function consentToBenefitsEDelivery(): Promise<ActionResult> {
       data: { benefitsEConsentAt: new Date() },
     });
     await audit({ action: "employee.benefits_econsent_given", resource: `Employee:${user.employeeId}` });
+    revalidatePath("/dashboard/settings");
     return ok();
   } catch (err) {
     return failFromUnknown(err);
@@ -362,6 +365,7 @@ export async function withdrawBenefitsEConsent(): Promise<ActionResult> {
       data: { benefitsEConsentAt: null },
     });
     await audit({ action: "employee.benefits_econsent_withdrawn", resource: `Employee:${user.employeeId}` });
+    revalidatePath("/dashboard/settings");
     return ok();
   } catch (err) {
     return failFromUnknown(err);

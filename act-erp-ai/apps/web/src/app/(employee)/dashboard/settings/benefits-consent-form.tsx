@@ -1,7 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,13 +10,17 @@ import { toastAction } from "@/lib/toast-action";
 import { consentToBenefitsEDelivery, withdrawBenefitsEConsent } from "@/server/actions/employees";
 
 export function BenefitsConsentForm({ consented }: { consented: boolean }) {
+  const router = useRouter();
+  const [isConsented, setIsConsented] = useState(consented);
   const [pending, startTransition] = useTransition();
 
   function give() {
     startTransition(async () => {
       const res = await consentToBenefitsEDelivery();
       if (!toastAction(res)) return;
+      setIsConsented(true);
       toast.success("Electronic benefits document delivery enabled");
+      router.refresh();
     });
   }
 
@@ -23,15 +28,20 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
     startTransition(async () => {
       const res = await withdrawBenefitsEConsent();
       if (!toastAction(res)) return;
+      setIsConsented(false);
       toast.success("Reverted to paper delivery for benefits documents");
+      router.refresh();
     });
   }
 
-  if (consented) {
+  if (isConsented) {
     return (
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Badge variant="success" className="text-[10px]">Electronic delivery on</Badge>
+        <div className="flex items-center gap-2" role="status" aria-live="polite">
+          <Badge variant="success" className="gap-1 text-xs">
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Consented — electronic delivery on
+          </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
           Health & welfare plan documents (SPDs, summaries of material modifications, benefit
@@ -40,7 +50,7 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
         </p>
         <Button variant="outline" size="sm" onClick={withdraw} disabled={pending}>
           {pending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-          Withdraw consent — go back to paper
+          {pending ? "Withdrawing consent…" : "Withdraw consent — go back to paper"}
         </Button>
       </div>
     );
@@ -63,7 +73,7 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
       </div>
       <Button size="sm" onClick={give} disabled={pending}>
         {pending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-        I consent to electronic benefits document delivery
+        {pending ? "Saving consent…" : "I consent to electronic benefits document delivery"}
       </Button>
     </div>
   );
