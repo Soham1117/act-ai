@@ -2,32 +2,61 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { authConfig } from "./auth.config";
 import { verifyPassword } from "./password";
 
-const credsSchema = z.object({
+const challengeCredsSchema = z.object({
   challengeId: z.string().min(1),
   code: z.string().regex(/^\d{6}$/),
+});
+
+const passwordCredsSchema = z.object({
+  identifier: z.string().min(1),
+  password: z.string().min(1),
 });
 
 /**
  * Full NextAuth instance (Node runtime). Adds the Credentials provider on top
  * of the edge-safe base config.
  *
- * `authorize` does NOT take a password — password verification happens one
- * step earlier, in `requestLoginChallenge` (src/server/actions/login-challenge.ts),
- * which creates a `LoginChallenge` row and emails a 6-digit code (2FA). This
- * provider's only job is to check that code and, if it matches, complete the
- * sign-in. See LoginChallenge in schema.prisma for why the code itself is
- * never stored, only its hash.
+ * With LOGIN_2FA_ENABLED=true, password verification happens in
+ * requestLoginChallenge and this provider completes the sign-in from the
+ * emailed code. With the switch off, this provider verifies the username or
+ * email and password directly. The code path remains intact for re-enabling.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
-      credentials: { challengeId: {}, code: {} },
+      credentials: { identifier: {}, password: {}, challengeId: {}, code: {} },
       authorize: async (raw) => {
-        const parsed = credsSchema.safeParse(raw);
+        if (env.LOGIN_2FA_ENABLED === "false") {
+          const parsed = passwordCredsSchema.safeParse(raw);
+          if (!parsed.success) return null;
+          const identifier = parsed.data.identifier.trim().toLowerCase();
+          const user = await db.user.findFirst({
+            where: { OR: [{ email: identifier }, { username: identifier }] },
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              tokenVersion: true,
+              passwordHash: true,
+            },
+          });
+          if (!user?.passwordHash) return null;
+          if (!(await verifyPassword(parsed.data.password, user.passwordHash)))
+            return null;
+          return {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            tokenVersion: user.tokenVersion,
+          };
+        }
+
+        const parsed = challengeCredsSchema.safeParse(raw);
         if (!parsed.success) return null;
         const { challengeId, code } = parsed.data;
 

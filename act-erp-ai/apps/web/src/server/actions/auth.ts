@@ -9,12 +9,12 @@ import { sendLoginCode } from "@/lib/email";
 import { rateLimited } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
+import { env } from "@/lib/env";
 
 export type LoginResult = { ok: true } | { ok: false; error: string };
 
 const CHALLENGE_TTL_MS = 10 * 60_000;
-const GENERIC_ERROR =
-  "Invalid email/username or password. Check both and try again.";
+const GENERIC_ERROR = "Invalid email/username or password. Check both and try again.";
 
 /**
  * Step 1 of login. Verifies the identifier (email OR username) + password,
@@ -27,7 +27,7 @@ const GENERIC_ERROR =
 export async function requestLoginChallenge(
   identifier: string,
   password: string,
-): Promise<{ ok: true; challengeId: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; challengeId: string | null } | { ok: false; error: string }> {
   const id = identifier.trim().toLowerCase();
   if (!id || !password) return { ok: false, error: GENERIC_ERROR };
 
@@ -52,6 +52,16 @@ export async function requestLoginChallenge(
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return { ok: false, error: GENERIC_ERROR };
 
+  if (env.LOGIN_2FA_ENABLED === "false") {
+    try {
+      await signIn("credentials", { identifier: id, password, redirect: false });
+      return { ok: true, challengeId: null };
+    } catch (err) {
+      if (err instanceof AuthError) return { ok: false, error: GENERIC_ERROR };
+      throw err;
+    }
+  }
+
   // Employee.personalEmail takes priority; User.personalEmail is the
   // fallback for admin/system accounts with no Employee record at all.
   const to = user.employee?.personalEmail ?? user.personalEmail;
@@ -61,7 +71,8 @@ export async function requestLoginChallenge(
     // password, and the employee can't self-serve their way out of it.
     return {
       ok: false,
-      error: "No personal email on file for 2FA. Ask an admin to add one before you can sign in.",
+      error:
+        "No personal email on file for 2FA. Ask an admin to add one before you can sign in.",
     };
   }
 
@@ -123,12 +134,16 @@ export async function changeMyPassword(
   next: string,
 ): Promise<ActionResult> {
   const user = await getSessionUser();
-  if (!user) return fail("You are not signed in. Sign in again, then change your password.");
+  if (!user)
+    return fail("You are not signed in. Sign in again, then change your password.");
   if (next.length < 8) {
     return fail("New password must be at least 8 characters. Choose a longer password.");
   }
 
-  const row = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
+  const row = await db.user.findUnique({
+    where: { id: user.id },
+    select: { passwordHash: true },
+  });
   if (!row?.passwordHash || !(await verifyPassword(current, row.passwordHash))) {
     return fail("Current password is incorrect. Re-enter it and try again.");
   }

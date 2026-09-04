@@ -31,29 +31,40 @@ import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
 
 const NONE = "__none__";
 
-const schema = z.object({
-  name: z.string().min(2, "At least 2 characters"),
-  email: z.string().email(),
-  username: z
-    .string()
-    .regex(/^[a-z0-9._-]{3,32}$/, "Lowercase letters, numbers, . _ - only, 3-32 chars")
-    .optional()
-    .or(z.literal("").transform(() => undefined)),
-  personalEmail: z.string().email("Enter a valid email — required for sign-in codes"),
-  ssnLast4: z
-    .string()
-    .regex(/^\d{4}$/, "Enter exactly 4 digits")
-    .optional()
-    .or(z.literal("").transform(() => undefined)),
-  password: z.string().min(8, "Min 8 characters"),
-  gender: z.enum(["MALE", "FEMALE", "OTHER"]),
-  departmentId: z.string(),
-  jobTitle: z.string().optional(),
-  phoneNumber: z.string().optional(),
-  employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
-  compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
-  compensationValue: z.string().optional(),
-});
+const optionalEmail = z
+  .string()
+  .email()
+  .optional()
+  .or(z.literal("").transform(() => undefined));
+
+const schema = z
+  .object({
+    name: z.string().min(2, "At least 2 characters"),
+    email: optionalEmail,
+    username: z
+      .string()
+      .regex(/^[a-z0-9._-]{3,32}$/, "Lowercase letters, numbers, . _ - only, 3-32 chars")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    personalEmail: optionalEmail,
+    ssnLast4: z
+      .string()
+      .regex(/^\d{4}$/, "Enter exactly 4 digits")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    password: z.string().min(8, "Min 8 characters"),
+    gender: z.enum(["MALE", "FEMALE", "OTHER"]),
+    departmentId: z.string(),
+    jobTitle: z.string().optional(),
+    phoneNumber: z.string().optional(),
+    employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
+    compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
+    compensationValue: z.string().optional(),
+  })
+  .refine((value) => value.email || value.username, {
+    message: "Enter a username when no company email is provided",
+    path: ["username"],
+  });
 
 type Values = z.infer<typeof schema>;
 
@@ -118,8 +129,8 @@ export function AddEmployeeDialog({
         <DialogHeader>
           <DialogTitle>New employee</DialogTitle>
           <DialogDescription>
-            Creates the auth account + employee record. Phase 6 onboarding will
-            handle this via invite links instead.
+            Creates the auth account + employee record. Phase 6 onboarding will handle
+            this via invite links instead.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
@@ -127,7 +138,10 @@ export function AddEmployeeDialog({
             <Field label="Full name" error={form.formState.errors.name?.message}>
               <Input {...form.register("name")} />
             </Field>
-            <Field label="Company email (login)" error={form.formState.errors.email?.message}>
+            <Field
+              label="Company email (optional)"
+              error={form.formState.errors.email?.message}
+            >
               <Input type="email" {...form.register("email")} />
             </Field>
             <Field
@@ -137,12 +151,15 @@ export function AddEmployeeDialog({
               <Input {...form.register("username")} placeholder="jsmith" />
             </Field>
             <Field
-              label="Personal email — required, sign-in codes go here"
+              label="Personal email (optional)"
               error={form.formState.errors.personalEmail?.message}
             >
               <Input type="email" {...form.register("personalEmail")} />
             </Field>
-            <Field label="SSN — last 4 only" error={form.formState.errors.ssnLast4?.message}>
+            <Field
+              label="SSN — last 4 only"
+              error={form.formState.errors.ssnLast4?.message}
+            >
               <Input
                 {...form.register("ssnLast4")}
                 inputMode="numeric"
@@ -158,7 +175,9 @@ export function AddEmployeeDialog({
                 value={form.watch("gender")}
                 onValueChange={(v) => form.setValue("gender", v as Values["gender"])}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="MALE">Male</SelectItem>
                   <SelectItem value="FEMALE">Female</SelectItem>
@@ -174,11 +193,15 @@ export function AddEmployeeDialog({
                 value={form.watch("departmentId")}
                 onValueChange={(v) => form.setValue("departmentId", v)}
               >
-                <SelectTrigger><SelectValue placeholder="(none)" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="(none)" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NONE}>(none)</SelectItem>
                   {departments.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -189,9 +212,13 @@ export function AddEmployeeDialog({
             <Field label="Employment type">
               <Select
                 value={form.watch("employmentType")}
-                onValueChange={(v) => form.setValue("employmentType", v as Values["employmentType"])}
+                onValueChange={(v) =>
+                  form.setValue("employmentType", v as Values["employmentType"])
+                }
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="FULL_PART_TIME">Full-time / Part-time</SelectItem>
                   <SelectItem value="CONTRACT_HOURLY">Contract / Hourly</SelectItem>
@@ -201,9 +228,13 @@ export function AddEmployeeDialog({
             <Field label="Compensation type">
               <Select
                 value={form.watch("compensationType")}
-                onValueChange={(v) => form.setValue("compensationType", v as Values["compensationType"])}
+                onValueChange={(v) =>
+                  form.setValue("compensationType", v as Values["compensationType"])
+                }
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="HOURLY_RATE">Hourly rate</SelectItem>
                   <SelectItem value="MONTHLY_SALARY">Monthly salary</SelectItem>

@@ -2,13 +2,20 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ChangePasswordForm } from "./change-password-form";
 import { KioskPinForm } from "./kiosk-pin-form";
 import { PersonalEmailForm } from "./personal-email-form";
 import { W2ConsentForm } from "./w2-consent-form";
 import { BenefitsConsentForm } from "./benefits-consent-form";
+import { env } from "@/lib/env";
 
 export const metadata = { title: "Settings" };
 
@@ -57,7 +64,9 @@ export default async function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Password</CardTitle>
-            <CardDescription>Change your password. Requires the current one.</CardDescription>
+            <CardDescription>
+              Change your password. Requires the current one.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ChangePasswordForm />
@@ -83,11 +92,16 @@ export default async function SettingsPage() {
             <CardHeader>
               <CardTitle className="text-base">Two-factor authentication</CardTitle>
               <CardDescription>
-                A 6-digit code is emailed here every time you sign in.
+                {env.LOGIN_2FA_ENABLED === "true"
+                  ? "A 6-digit code is emailed here every time you sign in."
+                  : "Email verification is temporarily paused. Your saved address is optional."}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <PersonalEmailForm current={personalEmail ?? ""} />
+              <PersonalEmailForm
+                current={personalEmail ?? ""}
+                required={env.LOGIN_2FA_ENABLED === "true"}
+              />
             </CardContent>
           </Card>
         )}
@@ -127,7 +141,15 @@ export default async function SettingsPage() {
   );
 }
 
-function Row({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function Row({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-b-0 last:pb-0">
       <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>

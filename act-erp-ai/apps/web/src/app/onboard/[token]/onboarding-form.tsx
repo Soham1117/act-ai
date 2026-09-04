@@ -3,7 +3,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Loader2, CheckCircle2, Upload, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  CheckCircle2,
+  Upload,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,14 +43,14 @@ const DOCUMENT_SLOTS: Array<{
   label: string;
   type: "PERSONAL" | "ONBOARDING" | "BENEFITS" | "TRAINING";
 }> = [
-  { id: "gov_id",         label: "Driver's License / State ID", type: "ONBOARDING" },
-  { id: "ssn_card",       label: "Social Security Card",        type: "ONBOARDING" },
-  { id: "i9",             label: "I-9",                          type: "ONBOARDING" },
-  { id: "w4",             label: "W-4",                          type: "ONBOARDING" },
+  { id: "gov_id", label: "Driver's License / State ID", type: "ONBOARDING" },
+  { id: "ssn_card", label: "Social Security Card", type: "ONBOARDING" },
+  { id: "i9", label: "I-9", type: "ONBOARDING" },
+  { id: "w4", label: "W-4", type: "ONBOARDING" },
   { id: "direct_deposit", label: "Direct Deposit Authorization", type: "ONBOARDING" },
-  { id: "benefits",       label: "Benefits Enrollment Forms",    type: "BENEFITS" },
-  { id: "certifications", label: "Professional Certifications",  type: "TRAINING" },
-  { id: "personal",       label: "Personal Documents",           type: "PERSONAL" },
+  { id: "benefits", label: "Benefits Enrollment Forms", type: "BENEFITS" },
+  { id: "certifications", label: "Professional Certifications", type: "TRAINING" },
+  { id: "personal", label: "Personal Documents", type: "PERSONAL" },
 ];
 
 type FormState = Omit<OnboardingSubmit, "compensationValue"> & {
@@ -108,10 +115,15 @@ export function OnboardingForm({
 
   function next() {
     const err = validateStep(step, form);
-    if (err) { toast.error(err); return; }
+    if (err) {
+      toast.error(err);
+      return;
+    }
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
-  function back() { setStep((s) => Math.max(0, s - 1)); }
+  function back() {
+    setStep((s) => Math.max(0, s - 1));
+  }
 
   function onPick(id: string, list: FileList | null) {
     const f = list?.[0] ?? null;
@@ -120,7 +132,10 @@ export function OnboardingForm({
 
   function submit() {
     const err = validateStep(STEPS.length - 1, form);
-    if (err) { toast.error(err); return; }
+    if (err) {
+      toast.error(err);
+      return;
+    }
     if (form.password !== form.confirmPassword) {
       toast.error("Passwords don't match");
       return;
@@ -130,13 +145,15 @@ export function OnboardingForm({
         DOCUMENT_SLOTS.flatMap((slot) => {
           const f = files[slot.id];
           if (!f) return [];
-          return [readFile(f).then((b64) => ({
-            fileName: f.name,
-            title: slot.label,
-            documentType: slot.type,
-            contentType: f.type || "application/octet-stream",
-            base64: b64,
-          }))];
+          return [
+            readFile(f).then((b64) => ({
+              fileName: f.name,
+              title: slot.label,
+              documentType: slot.type,
+              contentType: f.type || "application/octet-stream",
+              base64: b64,
+            })),
+          ];
         }),
       );
 
@@ -158,7 +175,9 @@ export function OnboardingForm({
       <div>
         <div className="mb-2 flex justify-between text-xs">
           <span className="font-medium">{STEPS[step]}</span>
-          <span className="text-muted-foreground">Step {step + 1} of {STEPS.length}</span>
+          <span className="text-muted-foreground">
+            Step {step + 1} of {STEPS.length}
+          </span>
         </div>
         <Progress value={progress} />
       </div>
@@ -166,17 +185,33 @@ export function OnboardingForm({
       {step === 0 && (
         <div className="grid grid-cols-2 gap-3">
           <Field label="Full name *">
-            <Input value={form.name} onChange={(e) => update("name", e.target.value)} required />
+            <Input
+              value={form.name}
+              onChange={(e) => update("name", e.target.value)}
+              required
+            />
           </Field>
           <Field label="Phone">
-            <Input value={form.phoneNumber ?? ""} onChange={(e) => update("phoneNumber", e.target.value)} />
+            <Input
+              value={form.phoneNumber ?? ""}
+              onChange={(e) => update("phoneNumber", e.target.value)}
+            />
           </Field>
           <Field label="Date of birth">
-            <Input type="date" value={form.dateOfBirth ?? ""} onChange={(e) => update("dateOfBirth", e.target.value)} />
+            <Input
+              type="date"
+              value={form.dateOfBirth ?? ""}
+              onChange={(e) => update("dateOfBirth", e.target.value)}
+            />
           </Field>
           <Field label="Gender *">
-            <Select value={form.gender} onValueChange={(v) => update("gender", v as FormState["gender"])}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={form.gender}
+              onValueChange={(v) => update("gender", v as FormState["gender"])}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="MALE">Male</SelectItem>
                 <SelectItem value="FEMALE">Female</SelectItem>
@@ -187,22 +222,47 @@ export function OnboardingForm({
           <Field label="Marital status">
             <Select
               value={form.maritalStatus ?? NONE}
-              onValueChange={(v) => update("maritalStatus", v === NONE ? null : (v as FormState["maritalStatus"]))}
+              onValueChange={(v) =>
+                update(
+                  "maritalStatus",
+                  v === NONE ? null : (v as FormState["maritalStatus"]),
+                )
+              }
             >
-              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NONE}>—</SelectItem>
-                {(["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "SEPARATED", "OTHER"] as const).map((s) => (
-                  <SelectItem key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</SelectItem>
+                {(
+                  [
+                    "SINGLE",
+                    "MARRIED",
+                    "DIVORCED",
+                    "WIDOWED",
+                    "SEPARATED",
+                    "OTHER",
+                  ] as const
+                ).map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s.charAt(0) + s.slice(1).toLowerCase()}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </Field>
           <Field label="Nationality">
-            <Input value={form.nationality ?? ""} onChange={(e) => update("nationality", e.target.value)} />
+            <Input
+              value={form.nationality ?? ""}
+              onChange={(e) => update("nationality", e.target.value)}
+            />
           </Field>
           <Field label="Education level">
-            <Input value={form.educationLevel ?? ""} onChange={(e) => update("educationLevel", e.target.value)} placeholder="High School / Bachelor's / etc." />
+            <Input
+              value={form.educationLevel ?? ""}
+              onChange={(e) => update("educationLevel", e.target.value)}
+              placeholder="High School / Bachelor's / etc."
+            />
           </Field>
         </div>
       )}
@@ -211,17 +271,29 @@ export function OnboardingForm({
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <Field label="Street address">
-              <Input value={form.address ?? ""} onChange={(e) => update("address", e.target.value)} />
+              <Input
+                value={form.address ?? ""}
+                onChange={(e) => update("address", e.target.value)}
+              />
             </Field>
           </div>
           <Field label="City">
-            <Input value={form.city ?? ""} onChange={(e) => update("city", e.target.value)} />
+            <Input
+              value={form.city ?? ""}
+              onChange={(e) => update("city", e.target.value)}
+            />
           </Field>
           <Field label="State">
-            <Input value={form.state ?? ""} onChange={(e) => update("state", e.target.value)} />
+            <Input
+              value={form.state ?? ""}
+              onChange={(e) => update("state", e.target.value)}
+            />
           </Field>
           <Field label="Zip code">
-            <Input value={form.zipCode ?? ""} onChange={(e) => update("zipCode", e.target.value)} />
+            <Input
+              value={form.zipCode ?? ""}
+              onChange={(e) => update("zipCode", e.target.value)}
+            />
           </Field>
         </div>
       )}
@@ -232,16 +304,22 @@ export function OnboardingForm({
             <Field label="SSN — last 4 digits *">
               <Input
                 value={form.ssnLast4}
-                onChange={(e) => update("ssnLast4", e.target.value.replace(/\D/g, "").slice(0, 4))}
+                onChange={(e) =>
+                  update("ssnLast4", e.target.value.replace(/\D/g, "").slice(0, 4))
+                }
                 inputMode="numeric"
                 maxLength={4}
                 placeholder="6789"
                 required
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
-                We only collect the last 4 digits — never your full Social
-                Security Number. See our{" "}
-                <Link href="/privacy" target="_blank" className="text-primary hover:underline">
+                We only collect the last 4 digits — never your full Social Security
+                Number. See our{" "}
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="text-primary hover:underline"
+                >
                   privacy notice
                 </Link>{" "}
                 for what we collect and why.
@@ -249,10 +327,16 @@ export function OnboardingForm({
             </Field>
           </div>
           <Field label="Emergency contact name">
-            <Input value={form.emergencyName ?? ""} onChange={(e) => update("emergencyName", e.target.value)} />
+            <Input
+              value={form.emergencyName ?? ""}
+              onChange={(e) => update("emergencyName", e.target.value)}
+            />
           </Field>
           <Field label="Emergency contact phone">
-            <Input value={form.emergencyPhone ?? ""} onChange={(e) => update("emergencyPhone", e.target.value)} />
+            <Input
+              value={form.emergencyPhone ?? ""}
+              onChange={(e) => update("emergencyPhone", e.target.value)}
+            />
           </Field>
         </div>
       )}
@@ -273,28 +357,48 @@ export function OnboardingForm({
               value={form.departmentId ?? NONE}
               onValueChange={(v) => update("departmentId", v === NONE ? null : v)}
             >
-              <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NONE}>—</SelectItem>
-                {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
           <Field label="Job title">
-            <Input value={form.jobTitle ?? ""} onChange={(e) => update("jobTitle", e.target.value)} />
+            <Input
+              value={form.jobTitle ?? ""}
+              onChange={(e) => update("jobTitle", e.target.value)}
+            />
           </Field>
           <Field label="Position">
-            <Input value={form.position ?? ""} onChange={(e) => update("position", e.target.value)} />
+            <Input
+              value={form.position ?? ""}
+              onChange={(e) => update("position", e.target.value)}
+            />
           </Field>
           <Field label="Date of hire">
-            <Input type="date" value={form.dateOfHire ?? ""} onChange={(e) => update("dateOfHire", e.target.value)} />
+            <Input
+              type="date"
+              value={form.dateOfHire ?? ""}
+              onChange={(e) => update("dateOfHire", e.target.value)}
+            />
           </Field>
           <Field label="Employment type *">
             <Select
               value={form.employmentType}
-              onValueChange={(v) => update("employmentType", v as FormState["employmentType"])}
+              onValueChange={(v) =>
+                update("employmentType", v as FormState["employmentType"])
+              }
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="FULL_PART_TIME">Full-time / Part-time</SelectItem>
                 <SelectItem value="CONTRACT_HOURLY">Contract / Hourly</SelectItem>
@@ -304,9 +408,13 @@ export function OnboardingForm({
           <Field label="Compensation type *">
             <Select
               value={form.compensationType}
-              onValueChange={(v) => update("compensationType", v as FormState["compensationType"])}
+              onValueChange={(v) =>
+                update("compensationType", v as FormState["compensationType"])
+              }
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="HOURLY_RATE">Hourly rate</SelectItem>
                 <SelectItem value="MONTHLY_SALARY">Monthly salary</SelectItem>
@@ -320,7 +428,9 @@ export function OnboardingForm({
               inputMode="decimal"
               placeholder="60,000"
               value={form.compensationValue}
-              onChange={(e) => update("compensationValue", formatMoneyInput(e.target.value))}
+              onChange={(e) =>
+                update("compensationValue", formatMoneyInput(e.target.value))
+              }
             />
           </Field>
         </div>
@@ -329,8 +439,8 @@ export function OnboardingForm({
       {step === 4 && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Upload any documents now if you have them — you can also upload later.
-            Max 10MB per file. PDF, JPG, PNG accepted.
+            Upload any documents now if you have them — you can also upload later. Max
+            10MB per file. PDF, JPG, PNG accepted.
           </p>
           {DOCUMENT_SLOTS.map((slot) => (
             <FileSlot
@@ -347,8 +457,8 @@ export function OnboardingForm({
       {step === 5 && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            This is the email + password you&apos;ll use to sign in. Make sure
-            both fields match.
+            Create a username and password for sign-in. Email addresses are optional while
+            email verification is paused.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Work email (leave blank if you don't have one)">
@@ -366,12 +476,11 @@ export function OnboardingForm({
               />
             </Field>
             <div className="col-span-2">
-              <Field label="Personal email * — sign-in codes are sent here">
+              <Field label="Personal email (optional)">
                 <Input
                   type="email"
                   value={form.personalEmail ?? ""}
                   onChange={(e) => update("personalEmail", e.target.value)}
-                  required
                 />
               </Field>
             </div>
@@ -405,7 +514,11 @@ export function OnboardingForm({
         </Button>
         {isLast ? (
           <Button onClick={submit} disabled={pending}>
-            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+            {pending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+            )}
             Submit
           </Button>
         ) : (
@@ -449,7 +562,13 @@ function FileSlot({
         )}
       </div>
       {file ? (
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onClear}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={onClear}
+        >
           <X className="h-3.5 w-3.5" />
         </Button>
       ) : (
@@ -490,15 +609,16 @@ function validateStep(step: number, f: FormState): string | null {
       if (!f.name || f.name.length < 2) return "Please enter your full name.";
       return null;
     case 2:
-      if (!/^\d{4}$/.test(f.ssnLast4 ?? "")) return "Enter the last 4 digits of your SSN.";
+      if (!/^\d{4}$/.test(f.ssnLast4 ?? ""))
+        return "Enter the last 4 digits of your SSN.";
       return null;
     case 3:
       if (!f.employeeId || f.employeeId.length < 2) return "Employee ID is required.";
       return null;
     case 5:
       if (!f.email && !f.username) return "Enter either a work email or a username.";
-      if (!f.personalEmail) return "Personal email is required — that's where sign-in codes go.";
-      if (!f.password || f.password.length < 8) return "Password must be at least 8 characters.";
+      if (!f.password || f.password.length < 8)
+        return "Password must be at least 8 characters.";
       return null;
     default:
       return null;

@@ -46,6 +46,11 @@ export function LoginForm({
         setError(res.error);
         return;
       }
+      if (!res.challengeId) {
+        router.refresh();
+        router.push(next || "/");
+        return;
+      }
       setChallengeId(res.challengeId);
     });
   }
@@ -61,7 +66,7 @@ export function LoginForm({
         return;
       }
       router.refresh();
-      router.push(next || "/admin");
+      router.push(next || "/");
     });
   }
 
@@ -76,8 +81,7 @@ export function LoginForm({
         <div className="flex flex-col items-center gap-2 text-center">
           <Mail className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm">
-            We emailed a 6-digit code to your personal email. It expires in
-            10 minutes.
+            We emailed a 6-digit code to your personal email. It expires in 10 minutes.
           </p>
         </div>
         <div className="space-y-1.5">
@@ -172,7 +176,7 @@ export function LoginForm({
 
       <Button type="submit" className="w-full" disabled={pending}>
         {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Continue
+        Sign in
       </Button>
     </form>
   );

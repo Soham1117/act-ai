@@ -9,26 +9,44 @@ import { audit } from "@/lib/audit";
 import { uploadFile } from "@/lib/storage";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 import { resolveEmailHireMode } from "@/lib/employee-create";
+import { env } from "@/lib/env";
 
-const employeeSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  // Only for employees with no company email — they log in with this instead.
-  username: z.string().regex(/^[a-z0-9._-]{3,32}$/).optional(),
-  // Where 2FA sign-in codes go — deliberately separate from the login email
-  // above, since some employees have no company email at all.
-  personalEmail: z.string().email(),
-  // Last 4 digits only — we deliberately never collect the full SSN.
-  ssnLast4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of the SSN").optional(),
-  gender: z.enum(["MALE", "FEMALE", "OTHER"]),
-  departmentId: z.string().optional().nullable(),
-  jobTitle: z.string().optional().nullable(),
-  phoneNumber: z.string().optional().nullable(),
-  employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
-  compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
-  compensationValue: z.coerce.number().optional().nullable(),
-  password: z.string().min(8),
-});
+const optionalEmail = z
+  .string()
+  .email()
+  .optional()
+  .or(z.literal("").transform(() => undefined));
+
+const employeeSchema = z
+  .object({
+    name: z.string().min(2),
+    email: optionalEmail,
+    // Only for employees with no company email — they log in with this instead.
+    username: z
+      .string()
+      .regex(/^[a-z0-9._-]{3,32}$/)
+      .optional(),
+    // Where 2FA sign-in codes go — deliberately separate from the login email
+    // above, since some employees have no company email at all.
+    personalEmail: optionalEmail,
+    // Last 4 digits only — we deliberately never collect the full SSN.
+    ssnLast4: z
+      .string()
+      .regex(/^\d{4}$/, "Enter the last 4 digits of the SSN")
+      .optional(),
+    gender: z.enum(["MALE", "FEMALE", "OTHER"]),
+    departmentId: z.string().optional().nullable(),
+    jobTitle: z.string().optional().nullable(),
+    phoneNumber: z.string().optional().nullable(),
+    employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
+    compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
+    compensationValue: z.coerce.number().optional().nullable(),
+    password: z.string().min(8),
+  })
+  .refine((value) => value.email || value.username, {
+    message: "Provide either a work email or a username",
+    path: ["username"],
+  });
 
 export async function createEmployee(
   input: z.infer<typeof employeeSchema>,
@@ -37,10 +55,12 @@ export async function createEmployee(
   try {
     const data = employeeSchema.parse(input);
 
-    const existing = await db.user.findUnique({
-      where: { email: data.email },
-      select: { id: true, role: true, employee: { select: { id: true } } },
-    });
+    const existing = data.email
+      ? await db.user.findUnique({
+          where: { email: data.email },
+          select: { id: true, role: true, employee: { select: { id: true } } },
+        })
+      : null;
     const mode = resolveEmailHireMode(
       existing ? { employeeId: existing.employee?.id ?? null } : null,
     );
@@ -77,7 +97,7 @@ export async function createEmployee(
       } else {
         const user = await tx.user.create({
           data: {
-            email: data.email,
+            email: data.email ?? null,
             username: data.username ?? null,
             name: data.name,
             role: "EMPLOYEE",
@@ -91,8 +111,8 @@ export async function createEmployee(
           employeeId,
           userId,
           name: data.name,
-          email: data.email,
-          personalEmail: data.personalEmail,
+          email: data.email ?? null,
+          personalEmail: data.personalEmail ?? null,
           ssnLast4: data.ssnLast4 ?? null,
           gender: data.gender,
           departmentId: data.departmentId || null,
@@ -120,7 +140,10 @@ export async function createEmployee(
 const updateSchema = z.object({
   name: z.string().min(2).optional(),
   gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
-  maritalStatus: z.enum(["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "SEPARATED", "OTHER"]).optional().nullable(),
+  maritalStatus: z
+    .enum(["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "SEPARATED", "OTHER"])
+    .optional()
+    .nullable(),
   phoneNumber: z.string().optional().nullable(),
   dateOfBirth: z.string().optional().nullable(),
   // Personal
@@ -133,7 +156,11 @@ const updateSchema = z.object({
   emergencyName: z.string().optional().nullable(),
   emergencyPhone: z.string().optional().nullable(),
   personalEmail: z.string().email().optional().nullable(),
-  ssnLast4: z.string().regex(/^\d{4}$/).optional().nullable(),
+  ssnLast4: z
+    .string()
+    .regex(/^\d{4}$/)
+    .optional()
+    .nullable(),
   // Work
   departmentId: z.string().optional().nullable(),
   jobTitle: z.string().optional().nullable(),
@@ -145,7 +172,9 @@ const updateSchema = z.object({
   workEmail: z.string().optional().nullable(),
   workPhoneNumber: z.string().optional().nullable(),
   // Compensation
-  compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]).optional(),
+  compensationType: z
+    .enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"])
+    .optional(),
   compensationValue: z.coerce.number().optional().nullable(),
   defaultHourlyRate: z.coerce.number().optional(),
   primaryJobCodeId: z.string().optional().nullable(),
@@ -173,7 +202,11 @@ export async function updateEmployee(
       where: { id: employeeId },
       data,
     });
-    await audit({ action: "employee.update", resource: `Employee:${employeeId}`, diff: data });
+    await audit({
+      action: "employee.update",
+      resource: `Employee:${employeeId}`,
+      diff: data,
+    });
     revalidatePath("/admin/employees");
     revalidatePath(`/admin/employees/${employeeId}`);
     return ok({ id: updated.id });
@@ -202,7 +235,10 @@ export async function changeEmployeePassword(
     }
     await db.user.update({
       where: { id: employee.userId },
-      data: { passwordHash: await hashPassword(password), tokenVersion: { increment: 1 } },
+      data: {
+        passwordHash: await hashPassword(password),
+        tokenVersion: { increment: 1 },
+      },
     });
     await audit({
       action: "employee.password_change",
@@ -280,21 +316,37 @@ export async function updateMyPersonalEmail(
 ): Promise<ActionResult> {
   const user = await requireUser();
   if (!user.employeeId) return fail(NO_EMPLOYEE);
-  const parsed = z.string().email().safeParse(personalEmail);
+  const normalized = personalEmail.trim();
+  const parsed = (
+    env.LOGIN_2FA_ENABLED === "true"
+      ? z.string().email()
+      : z.string().email().or(z.literal(""))
+  ).safeParse(normalized);
   if (!parsed.success) {
-    return fail("Enter a valid personal email address (codes are sent here for sign-in).");
+    return fail(
+      "Enter a valid personal email address (codes are sent here for sign-in).",
+    );
   }
 
   try {
-    const row = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
-    if (!row?.passwordHash || !(await verifyPassword(currentPassword, row.passwordHash))) {
+    const row = await db.user.findUnique({
+      where: { id: user.id },
+      select: { passwordHash: true },
+    });
+    if (
+      !row?.passwordHash ||
+      !(await verifyPassword(currentPassword, row.passwordHash))
+    ) {
       return fail("Current password is incorrect. Re-enter it and try again.");
     }
     await db.employee.update({
       where: { id: user.employeeId },
-      data: { personalEmail: parsed.data },
+      data: { personalEmail: parsed.data || null },
     });
-    await audit({ action: "employee.personal_email_update", resource: `Employee:${user.employeeId}` });
+    await audit({
+      action: "employee.personal_email_update",
+      resource: `Employee:${user.employeeId}`,
+    });
     return ok();
   } catch (err) {
     return failFromUnknown(err);
@@ -312,7 +364,10 @@ export async function consentToElectronicW2(): Promise<ActionResult> {
       where: { id: user.employeeId },
       data: { w2ConsentAt: new Date() },
     });
-    await audit({ action: "employee.w2_consent_given", resource: `Employee:${user.employeeId}` });
+    await audit({
+      action: "employee.w2_consent_given",
+      resource: `Employee:${user.employeeId}`,
+    });
     revalidatePath("/dashboard/settings");
     return ok();
   } catch (err) {
@@ -328,7 +383,10 @@ export async function withdrawW2Consent(): Promise<ActionResult> {
       where: { id: user.employeeId },
       data: { w2ConsentAt: null },
     });
-    await audit({ action: "employee.w2_consent_withdrawn", resource: `Employee:${user.employeeId}` });
+    await audit({
+      action: "employee.w2_consent_withdrawn",
+      resource: `Employee:${user.employeeId}`,
+    });
     revalidatePath("/dashboard/settings");
     return ok();
   } catch (err) {
@@ -348,7 +406,10 @@ export async function consentToBenefitsEDelivery(): Promise<ActionResult> {
       where: { id: user.employeeId },
       data: { benefitsEConsentAt: new Date() },
     });
-    await audit({ action: "employee.benefits_econsent_given", resource: `Employee:${user.employeeId}` });
+    await audit({
+      action: "employee.benefits_econsent_given",
+      resource: `Employee:${user.employeeId}`,
+    });
     revalidatePath("/dashboard/settings");
     return ok();
   } catch (err) {
@@ -364,7 +425,10 @@ export async function withdrawBenefitsEConsent(): Promise<ActionResult> {
       where: { id: user.employeeId },
       data: { benefitsEConsentAt: null },
     });
-    await audit({ action: "employee.benefits_econsent_withdrawn", resource: `Employee:${user.employeeId}` });
+    await audit({
+      action: "employee.benefits_econsent_withdrawn",
+      resource: `Employee:${user.employeeId}`,
+    });
     revalidatePath("/dashboard/settings");
     return ok();
   } catch (err) {

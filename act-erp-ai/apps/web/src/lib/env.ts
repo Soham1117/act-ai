@@ -8,6 +8,9 @@ export const env = createEnv({
     DIRECT_URL: z.string().url().optional(),
     // NextAuth signing secret (generate: `openssl rand -base64 32`).
     AUTH_SECRET: z.string().min(1),
+    // Reversible login policy switch. When false, username/email + password
+    // signs in directly and employee email fields may be left blank.
+    LOGIN_2FA_ENABLED: z.enum(["true", "false"]).default("true"),
     // AWS / storage / queue (Phase 3). Endpoint set for LocalStack/MinIO locally.
     AWS_REGION: z.string().default("us-east-2"),
     AWS_ENDPOINT_URL: z.string().url().optional(),
@@ -42,6 +45,7 @@ export const env = createEnv({
     DATABASE_URL: process.env.DATABASE_URL,
     DIRECT_URL: process.env.DIRECT_URL,
     AUTH_SECRET: process.env.AUTH_SECRET,
+    LOGIN_2FA_ENABLED: process.env.LOGIN_2FA_ENABLED,
     AWS_REGION: process.env.AWS_REGION,
     AWS_ENDPOINT_URL: process.env.AWS_ENDPOINT_URL,
     S3_BUCKET: process.env.S3_BUCKET,

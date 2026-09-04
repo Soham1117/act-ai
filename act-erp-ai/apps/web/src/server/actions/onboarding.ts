@@ -13,9 +13,9 @@ import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-resul
 const INVITE_TTL_DAYS = 7;
 
 /** Admin: create a new onboarding invite. Returns token + full URL. */
-export async function createOnboardingInvite(
-  input: { email?: string },
-): Promise<ActionResult<{ id: string; token: string }>> {
+export async function createOnboardingInvite(input: {
+  email?: string;
+}): Promise<ActionResult<{ id: string; token: string }>> {
   const admin = await requireAdmin();
   try {
     const token = randomUUID();
@@ -50,50 +50,67 @@ export async function revokeOnboardingInvite(id: string): Promise<ActionResult> 
   }
 }
 
-const submitSchema = z.object({
-  // Basic
-  name: z.string().min(2),
-  // Optional — some hires (part-time / shop floor) have no company email at
-  // all. If omitted, `username` is required instead as the login identifier.
-  email: z.string().email().optional().or(z.literal("").transform(() => undefined)),
-  username: z
-    .string()
-    .regex(/^[a-z0-9._-]{3,32}$/, "Lowercase letters, numbers, . _ - only, 3-32 chars")
-    .optional()
-    .or(z.literal("").transform(() => undefined)),
-  // Where 2FA sign-in codes go — always required, separate from the login
-  // email/username above.
-  personalEmail: z.string().email(),
-  password: z.string().min(8),
-  phoneNumber: z.string().optional().nullable(),
-  dateOfBirth: z.string().optional().nullable(),
-  gender: z.enum(["MALE", "FEMALE", "OTHER"]),
-  maritalStatus: z.enum(["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "SEPARATED", "OTHER"]).optional().nullable(),
-  // Address
-  address: z.string().optional().nullable(),
-  city: z.string().optional().nullable(),
-  state: z.string().optional().nullable(),
-  zipCode: z.string().optional().nullable(),
-  nationality: z.string().optional().nullable(),
-  educationLevel: z.string().optional().nullable(),
-  // Identity / emergency
-  // Last 4 digits only — we deliberately never collect the full SSN.
-  ssnLast4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of your SSN"),
-  emergencyName: z.string().optional().nullable(),
-  emergencyPhone: z.string().optional().nullable(),
-  // Work
-  employeeId: z.string().min(2).max(20).transform((v) => v.toUpperCase()),
-  departmentId: z.string().optional().nullable(),
-  jobTitle: z.string().optional().nullable(),
-  position: z.string().optional().nullable(),
-  dateOfHire: z.string().optional().nullable(),
-  employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
-  compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
-  compensationValue: z.coerce.number().optional().nullable(),
-}).refine((v) => v.email || v.username, {
-  message: "Provide either a work email or a username",
-  path: ["username"],
-});
+const submitSchema = z
+  .object({
+    // Basic
+    name: z.string().min(2),
+    // Optional — some hires (part-time / shop floor) have no company email at
+    // all. If omitted, `username` is required instead as the login identifier.
+    email: z
+      .string()
+      .email()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    username: z
+      .string()
+      .regex(/^[a-z0-9._-]{3,32}$/, "Lowercase letters, numbers, . _ - only, 3-32 chars")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    // Optional while password-only login is enabled. Retained so 2FA can be
+    // restored later without changing the onboarding data model again.
+    personalEmail: z
+      .string()
+      .email()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    password: z.string().min(8),
+    phoneNumber: z.string().optional().nullable(),
+    dateOfBirth: z.string().optional().nullable(),
+    gender: z.enum(["MALE", "FEMALE", "OTHER"]),
+    maritalStatus: z
+      .enum(["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "SEPARATED", "OTHER"])
+      .optional()
+      .nullable(),
+    // Address
+    address: z.string().optional().nullable(),
+    city: z.string().optional().nullable(),
+    state: z.string().optional().nullable(),
+    zipCode: z.string().optional().nullable(),
+    nationality: z.string().optional().nullable(),
+    educationLevel: z.string().optional().nullable(),
+    // Identity / emergency
+    // Last 4 digits only — we deliberately never collect the full SSN.
+    ssnLast4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of your SSN"),
+    emergencyName: z.string().optional().nullable(),
+    emergencyPhone: z.string().optional().nullable(),
+    // Work
+    employeeId: z
+      .string()
+      .min(2)
+      .max(20)
+      .transform((v) => v.toUpperCase()),
+    departmentId: z.string().optional().nullable(),
+    jobTitle: z.string().optional().nullable(),
+    position: z.string().optional().nullable(),
+    dateOfHire: z.string().optional().nullable(),
+    employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
+    compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
+    compensationValue: z.coerce.number().optional().nullable(),
+  })
+  .refine((v) => v.email || v.username, {
+    message: "Provide either a work email or a username",
+    path: ["username"],
+  });
 
 export type OnboardingSubmit = z.infer<typeof submitSchema>;
 
@@ -157,7 +174,7 @@ export async function submitOnboarding(
           userId: user.id,
           name: data.name,
           email: data.email ?? null,
-          personalEmail: data.personalEmail,
+          personalEmail: data.personalEmail ?? null,
           gender: data.gender,
           maritalStatus: data.maritalStatus ?? null,
           phoneNumber: data.phoneNumber ?? null,

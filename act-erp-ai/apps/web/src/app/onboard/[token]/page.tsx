@@ -1,6 +1,12 @@
 import { notFound } from "next/navigation";
 import { Brand } from "@/components/brand";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/lib/db";
 import { OnboardingForm } from "./onboarding-form";
@@ -23,7 +29,9 @@ export default async function OnboardTokenPage({
   if (completed || expired) {
     return (
       <div className="flex min-h-screen flex-col">
-        <header className="p-6"><Brand href="/" /></header>
+        <header className="p-6">
+          <Brand href="/" />
+        </header>
         <main className="flex flex-1 items-center justify-center p-6">
           <Card className="w-full max-w-lg">
             <CardHeader>
@@ -35,7 +43,7 @@ export default async function OnboardTokenPage({
               </div>
               <CardDescription>
                 {completed
-                  ? "Your account has been created. Sign in with your email + password."
+                  ? "Your account has been created. Sign in with your username or work email and password."
                   : "This invite has expired. Ask your admin for a new one."}
               </CardDescription>
             </CardHeader>
@@ -53,7 +61,9 @@ export default async function OnboardTokenPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="p-6"><Brand href="/" /></header>
+      <header className="p-6">
+        <Brand href="/" />
+      </header>
       <main className="flex flex-1 items-center justify-center p-6">
         <Card className="w-full max-w-3xl">
           <CardHeader>

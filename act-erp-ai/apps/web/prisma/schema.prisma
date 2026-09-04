@@ -26,40 +26,40 @@ datasource db {
 /// access — `requireAdmin` gates admin-only routes; `requireUser` lets
 /// either role through, so admins can use the employee dashboard too.
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
+  id                String              @id @default(uuid()) @db.Uuid
   /// Login email — optional. Some employees (part-time / shop floor hires)
   /// have no company email at all and log in via `username` instead.
-  email        String?    @unique
+  email             String?             @unique
   /// Login identifier for employees with no company email (part-time / shop
   /// floor hires). Login accepts either this OR email. Null for users who
   /// sign in with email.
-  username     String?    @unique
+  username          String?             @unique
   /// 2FA code destination for users with no Employee record (bootstrap /
   /// system admin accounts). Employee.personalEmail takes priority when both
   /// exist — this is only the fallback for admins who aren't also modeled
   /// as a full HR employee (gender, SSN, etc. don't make sense for those).
-  personalEmail String?
-  name         String
-  profileImage String?
-  role         Role       @default(EMPLOYEE)
+  personalEmail     String?
+  name              String
+  profileImage      String?
+  role              Role                @default(EMPLOYEE)
   /// bcrypt hash for credentials auth (NextAuth). Null until a password is set
   /// (e.g. legacy/SSO users). See lib/auth.
-  passwordHash String?
+  passwordHash      String?
   /// Bumped to revoke all of a user's JWT sessions instantly (logout-everywhere,
   /// role change, disable). getSessionUser compares this against the token.
-  tokenVersion Int        @default(0)
-  employee     Employee?
-  loginChallenges LoginChallenge[]
-  auditLogs    AuditLog[] @relation("ActorAuditLogs")
+  tokenVersion      Int                 @default(0)
+  employee          Employee?
+  loginChallenges   LoginChallenge[]
+  auditLogs         AuditLog[]          @relation("ActorAuditLogs")
   // Agentic RAG relations (act-erp-ai)
-  knowledgeUploads KnowledgeDocument[] @relation("KnowledgeUploads")
-  knowledgeOwned   KnowledgeDocument[] @relation("KnowledgeOwned")
-  documentGrants   DocumentGrant[]     @relation("KnowledgeGrants")
-  agentRuns        AgentRun[]          @relation("AgentRuns")
-  chatSessions     ChatSession[]       @relation("ChatSessions")
-  hirePacketImports HirePacketImport[] @relation("HirePacketUploads")
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  knowledgeUploads  KnowledgeDocument[] @relation("KnowledgeUploads")
+  knowledgeOwned    KnowledgeDocument[] @relation("KnowledgeOwned")
+  documentGrants    DocumentGrant[]     @relation("KnowledgeGrants")
+  agentRuns         AgentRun[]          @relation("AgentRuns")
+  chatSessions      ChatSession[]       @relation("ChatSessions")
+  hirePacketImports HirePacketImport[]  @relation("HirePacketUploads")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   @@index([email])
 }
@@ -183,11 +183,9 @@ model Employee {
   dateOfBirth   DateTime?
   /// Work/company email. Optional — see User.email.
   email         String?        @unique
-  /// Where login 2FA codes are sent — deliberately separate from the login
-  /// email/username above, since some employees have no company email at all.
-  /// Always required (every employee has *some* personal email), even when
-  /// email above is null.
-  personalEmail String
+  /// Where login 2FA codes are sent when LOGIN_2FA_ENABLED=true. Optional
+  /// while password-only sign-in is enabled.
+  personalEmail String?
 
   /// IRS Treas. Reg. 31.6051-1 requires affirmative, electronically-confirmed
   /// consent before a W-2 can be furnished electronically instead of on
@@ -643,24 +641,24 @@ model Payroll {
 
 /// Admin-uploaded onboarding zip for one employee — extracted fields await HR review.
 model HirePacketImport {
-  id            String                  @id @default(cuid())
-  employeeId    String
-  employee      Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  uploadedById  String                  @db.Uuid
-  uploadedBy    User                    @relation("HirePacketUploads", fields: [uploadedById], references: [id])
-  status        HirePacketImportStatus  @default(PENDING)
-  zipFileName   String
+  id             String                 @id @default(cuid())
+  employeeId     String
+  employee       Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uploadedById   String                 @db.Uuid
+  uploadedBy     User                   @relation("HirePacketUploads", fields: [uploadedById], references: [id])
+  status         HirePacketImportStatus @default(PENDING)
+  zipFileName    String
   /// S3 object key under documents/hire-packets/…
-  zipStorageKey String
+  zipStorageKey  String
   /// Proposed employee fields keyed by updateEmployee field names.
   proposedFields Json?
   /// Per-file extraction metadata (form type, documentId, warnings).
-  fileResults   Json?
-  errorMessage  String?                 @db.Text
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
-  processedAt   DateTime?
-  appliedAt     DateTime?
+  fileResults    Json?
+  errorMessage   String?                @db.Text
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  processedAt    DateTime?
+  appliedAt      DateTime?
 
   @@index([employeeId, createdAt(sort: Desc)])
   @@index([status])
@@ -700,33 +698,33 @@ model PayrollCalendar {
 /// dates or tier prices once enrollments exist against it; roll forward
 /// (clone + re-point) instead.
 model BenefitPlan {
-  id               String  @id @default(cuid())
-  type             BenefitType
-  name             String
-  carrierName      String
-  groupNumber      String?
-  carrierPhone     String?
-  carrierPortalUrl String?
-  planYearStart    DateTime @db.Date
-  planYearEnd      DateTime @db.Date
+  id                 String            @id @default(cuid())
+  type               BenefitType
+  name               String
+  carrierName        String
+  groupNumber        String?
+  carrierPhone       String?
+  carrierPortalUrl   String?
+  planYearStart      DateTime          @db.Date
+  planYearEnd        DateTime          @db.Date
   /// Brokers quote monthly; payroll deducts per paycheck. Required and
   /// load-bearing — a monthly rate typed into a per-paycheck field shows a
   /// semi-monthly employee ~2.17x what actually leaves their paycheck.
-  costPeriod BenefitCostPeriod @default(PER_PAYCHECK)
+  costPeriod         BenefitCostPeriod @default(PER_PAYCHECK)
   /// 401(k) only. Free text copied verbatim from the plan document (e.g.
   /// "100% of the first 3%, then 50% of the next 2%") rather than a
   /// structured formula — structuring it invites the UI to compute a
   /// projected match, which an employee will read as a promise. Safe-harbor
   /// variants, true-up rules, and hours-of-service eligibility mean any
   /// structured model is wrong for someone.
-  matchDescription   String? @db.Text
-  vestingDescription String? @db.Text
-  isActive           Boolean @default(true)
-  notes              String? @db.Text
+  matchDescription   String?           @db.Text
+  vestingDescription String?           @db.Text
+  isActive           Boolean           @default(true)
+  notes              String?           @db.Text
   /// No relation — mirrors PayrollCalendar.createdById.
-  createdById String?  @db.Uuid
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdById        String?           @db.Uuid
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   tiers       BenefitPlanTier[]
   enrollments BenefitEnrollment[]
@@ -745,8 +743,8 @@ model BenefitPlanTier {
   plan         BenefitPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
   tier         CoverageTier
   /// Always annotate Decimal — a bare Decimal maps to numeric(65,30).
-  employeeCost Decimal @db.Decimal(10, 2)
-  employerCost Decimal @db.Decimal(10, 2)
+  employeeCost Decimal      @db.Decimal(10, 2)
+  employerCost Decimal      @db.Decimal(10, 2)
 
   @@unique([planId, tier])
 }
@@ -759,19 +757,19 @@ model BenefitPlanTier {
 /// stored ACTIVE/ENDED flag, because a stored flag goes stale the day after
 /// it's written.
 model BenefitEnrollment {
-  id         String   @id @default(cuid())
+  id         String                  @id @default(cuid())
   employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee   Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   planId     String
   /// Restrict, not Cascade — deleting a plan people were covered under must
   /// fail loudly, not silently erase their coverage history.
-  plan BenefitPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  plan       BenefitPlan             @relation(fields: [planId], references: [id], onDelete: Restrict)
   /// Null when status is WAIVED.
-  tier   CoverageTier?
+  tier       CoverageTier?
   /// WAIVED is not optional to omit: without it, "no rows for this type"
   /// means both "you declined" and "HR hasn't entered your data yet," and an
   /// employee who is actually covered would see a page implying otherwise.
-  status BenefitEnrollmentStatus
+  status     BenefitEnrollmentStatus
 
   effectiveDate DateTime  @db.Date
   endDate       DateTime? @db.Date
@@ -804,11 +802,11 @@ model BenefitEnrollment {
 /// leave several permanently-null columns on every row of one model or the
 /// other, with no expressible invariant.
 model RetirementElection {
-  id         String      @id @default(cuid())
+  id         String                  @id @default(cuid())
   employeeId String
-  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee   Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   planId     String
-  plan       BenefitPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  plan       BenefitPlan             @relation(fields: [planId], references: [id], onDelete: Restrict)
   status     BenefitEnrollmentStatus
 
   /// Decimal(5,2), not (10,2) — a percentage is not money. Percent-vs-flat

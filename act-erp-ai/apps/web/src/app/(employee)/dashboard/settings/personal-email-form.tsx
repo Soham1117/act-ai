@@ -9,7 +9,13 @@ import { Label } from "@/components/ui/label";
 import { toastAction } from "@/lib/toast-action";
 import { updateMyPersonalEmail } from "@/server/actions/employees";
 
-export function PersonalEmailForm({ current }: { current: string }) {
+export function PersonalEmailForm({
+  current,
+  required,
+}: {
+  current: string;
+  required: boolean;
+}) {
   const [pending, startTransition] = useTransition();
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState(current);
@@ -27,12 +33,22 @@ export function PersonalEmailForm({ current }: { current: string }) {
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <div className="space-y-1.5">
-        <Label className="text-xs">Personal email</Label>
-        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <Label className="text-xs">Personal email {required ? "" : "(optional)"}</Label>
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required={required}
+        />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Current password</Label>
-        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <Input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
       </div>
       <Button type="submit" disabled={pending || !password || email === current}>
         {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
