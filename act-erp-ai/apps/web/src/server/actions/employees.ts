@@ -76,12 +76,21 @@ export async function createEmployee(
       hashPassword(DEFAULT_KIOSK_PIN),
     ]);
 
-    // Auto-generate EMP-YYYY-NNNN.
+    // Auto-generate EMP-YYYY-NNNN. Derived from the highest existing suffix,
+    // not a row count — a count undercounts the next number once any
+    // non-most-recent employee for the year has been deleted, colliding with
+    // an ID still in use.
     const year = new Date().getFullYear();
-    const count = await db.employee.count({
-      where: { employeeId: { startsWith: `EMP-${year}-` } },
+    const prefix = `EMP-${year}-`;
+    const employeesThisYear = await db.employee.findMany({
+      where: { employeeId: { startsWith: prefix } },
+      select: { employeeId: true },
     });
-    const employeeId = `EMP-${year}-${String(count + 1).padStart(4, "0")}`;
+    const maxSeq = employeesThisYear.reduce((max, { employeeId }) => {
+      const seq = Number(employeeId.slice(prefix.length));
+      return Number.isFinite(seq) && seq > max ? seq : max;
+    }, 0);
+    const employeeId = `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
 
     const employee = await db.$transaction(async (tx) => {
       let userId: string;
