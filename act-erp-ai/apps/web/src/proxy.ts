@@ -15,6 +15,12 @@ const PUBLIC_PATHS = [
   "/auth", // /auth/callback, /auth/reset-password
   "/api/auth",
   "/privacy", // notice must be readable without an account
+  // Customer-portal identity adapter (jwks/begin/finish/status). No browser
+  // session: POST operations are HMAC-authenticated in the route handler
+  // (service-auth.ts); jwks is public key material only. Matched as an exact
+  // segment prefix, so siblings like /api/v1/identityfoo or /api/v1/other stay
+  // behind the session check.
+  "/api/v1/identity",
 ];
 
 function isPublic(path: string) {

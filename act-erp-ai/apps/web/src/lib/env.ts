@@ -36,6 +36,16 @@ export const env = createEnv({
     // Internal agent service (apps/ai). The browser never calls it directly.
     AGENT_SERVICE_URL: z.string().url().optional(),
     INTERNAL_SERVICE_TOKEN: z.string().min(1).optional(),
+    // Private ACT Persona identity adapter. These values are server-only and
+    // are deliberately optional here so the rest of the ERP can boot when
+    // the customer portal integration is not configured. The adapter itself
+    // fails closed when a request reaches it without a complete configuration.
+    PERSONA_IDENTITY_SERVICE_ID: z.string().min(1).optional(),
+    PERSONA_IDENTITY_HMAC_SECRET: z.string().min(1).optional(),
+    PERSONA_IDENTITY_ISSUER: z.string().min(1).optional(),
+    PERSONA_IDENTITY_AUDIENCE: z.string().min(1).default("act-customer-portal"),
+    PERSONA_IDENTITY_KEY_ID: z.string().min(1).optional(),
+    PERSONA_IDENTITY_PRIVATE_KEY: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
@@ -60,6 +70,12 @@ export const env = createEnv({
     SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
     AGENT_SERVICE_URL: process.env.AGENT_SERVICE_URL,
     INTERNAL_SERVICE_TOKEN: process.env.INTERNAL_SERVICE_TOKEN,
+    PERSONA_IDENTITY_SERVICE_ID: process.env.PERSONA_IDENTITY_SERVICE_ID,
+    PERSONA_IDENTITY_HMAC_SECRET: process.env.PERSONA_IDENTITY_HMAC_SECRET,
+    PERSONA_IDENTITY_ISSUER: process.env.PERSONA_IDENTITY_ISSUER,
+    PERSONA_IDENTITY_AUDIENCE: process.env.PERSONA_IDENTITY_AUDIENCE,
+    PERSONA_IDENTITY_KEY_ID: process.env.PERSONA_IDENTITY_KEY_ID,
+    PERSONA_IDENTITY_PRIVATE_KEY: process.env.PERSONA_IDENTITY_PRIVATE_KEY,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   },
   emptyStringAsUndefined: true,

@@ -72,6 +72,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
         if (challenge.attempts >= 5) return null;
+        // Customer-portal identity challenges are only redeemable through the
+        // HMAC identity adapter, never as an ERP session sign-in.
+        if (challenge.identityNonce) return null;
 
         const ok = await verifyPassword(code, challenge.codeHash);
         if (!ok) {
