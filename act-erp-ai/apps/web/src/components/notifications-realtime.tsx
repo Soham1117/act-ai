@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notification-events";
 
 /**
  * Live-ish unread badge. Polls /api/notifications/unread every 30s (replaced
@@ -32,9 +33,12 @@ export function NotificationsRealtime({
     };
     const id = setInterval(poll, 30000);
     poll();
+    // Refetch immediately when the notifications page marks items read.
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, poll);
     return () => {
       active = false;
       clearInterval(id);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, poll);
     };
   }, [employeeId]);
 

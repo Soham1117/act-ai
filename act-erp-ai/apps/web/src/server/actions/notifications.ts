@@ -83,6 +83,7 @@ export async function markNotificationRead(notificationId: string): Promise<Acti
       data: { read: true, readAt: new Date() },
     });
     revalidatePath("/dashboard/notifications");
+    revalidatePath("/dashboard", "layout");
     return ok();
   } catch (err) {
     return failFromUnknown(err);
@@ -102,6 +103,7 @@ export async function markAllNotificationsRead(): Promise<ActionResult> {
       data: { read: true, readAt: new Date() },
     });
     revalidatePath("/dashboard/notifications");
+    revalidatePath("/dashboard", "layout");
     return ok();
   } catch (err) {
     return failFromUnknown(err);

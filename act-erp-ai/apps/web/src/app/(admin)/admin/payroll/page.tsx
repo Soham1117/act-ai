@@ -7,6 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Banknote } from "lucide-react";
 import { CreatePayrollPeriodDialog } from "./create-period-dialog";
 import { UploadPaystubsDialog } from "./upload-paystubs-dialog";
+import { PeriodActions } from "./period-actions";
+import { PayrollDocumentActions } from "./document-actions";
+import { effectivePeriodStatus } from "@/lib/payroll-period";
+import { formatDateOnly } from "@/lib/format";
+
+const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export const metadata = { title: "Payroll" };
 
@@ -15,15 +21,16 @@ export default async function AdminPayrollPage() {
     try { return await p; } catch { return fallback; }
   };
 
-  const [docs, calendar, employees] = await Promise.all([
+  const [docs, docCount, rawCalendar, employees] = await Promise.all([
     safe(
       db.payroll.findMany({
         orderBy: { uploadedAt: "desc" },
-        take: 50,
+        take: 100,
         include: { employee: { select: { name: true } } },
       }),
       [],
     ),
+    safe(db.payroll.count(), 0),
     safe(
       db.payrollCalendar.findMany({ orderBy: { payDate: "desc" } }),
       [],
@@ -34,9 +41,13 @@ export default async function AdminPayrollPage() {
     ),
   ]);
 
-  const upcoming = calendar.filter((p) => p.status === "UPCOMING").length;
-  const current = calendar.filter((p) => p.status === "CURRENT").length;
-  const completed = calendar.filter((p) => p.status === "COMPLETED").length;
+  const calendar = rawCalendar.map((p) => ({
+    ...p,
+    displayStatus: effectivePeriodStatus(p.status, p.payPeriodStart, p.payPeriodEnd),
+  }));
+  const upcoming = calendar.filter((p) => p.displayStatus === "UPCOMING").length;
+  const current = calendar.filter((p) => p.displayStatus === "CURRENT").length;
+  const completed = calendar.filter((p) => p.displayStatus === "COMPLETED").length;
 
   return (
     <>
@@ -51,7 +62,7 @@ export default async function AdminPayrollPage() {
         }
       />
       <div className="grid gap-3 sm:grid-cols-4">
-        <StatCard label="Documents" value={docs.length} icon={<Banknote className="h-4 w-4" />} />
+        <StatCard label="Documents" value={docCount} icon={<Banknote className="h-4 w-4" />} />
         <StatCard label="Upcoming periods" value={upcoming} />
         <StatCard label="Current period" value={current} />
         <StatCard label="Completed periods" value={completed} />
@@ -60,7 +71,7 @@ export default async function AdminPayrollPage() {
       <Tabs defaultValue="calendar" className="mt-6 space-y-4">
         <TabsList>
           <TabsTrigger value="calendar">Pay calendar ({calendar.length})</TabsTrigger>
-          <TabsTrigger value="documents">Documents ({docs.length})</TabsTrigger>
+          <TabsTrigger value="documents">Documents ({docCount})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="calendar">
@@ -75,28 +86,39 @@ export default async function AdminPayrollPage() {
                 )}
                 {calendar.map((p) => {
                   const variant =
-                    p.status === "CURRENT" ? "warning" :
-                    p.status === "COMPLETED" ? "success" : "outline";
+                    p.displayStatus === "CURRENT" ? "warning" :
+                    p.displayStatus === "COMPLETED" ? "success" : "outline";
                   return (
-                    <li key={p.id}>
+                    <li key={p.id} className="flex items-center gap-2 pr-3 transition-colors hover:bg-muted/50">
                       <Link
                         href={`/admin/payroll/${p.id}`}
-                        className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 p-3 transition-colors hover:bg-muted/50"
+                        className="grid flex-1 grid-cols-[1fr_auto_auto_auto] items-center gap-3 p-3"
                       >
                         <div>
                           <p className="text-sm font-medium">{p.title}</p>
                           <p className="text-[11px] text-muted-foreground">
-                            {p.payPeriodStart.toLocaleDateString()} → {p.payPeriodEnd.toLocaleDateString()}
+                            {formatDateOnly(p.payPeriodStart)} → {formatDateOnly(p.payPeriodEnd)}
                           </p>
                         </div>
                         <span className="font-mono text-xs">
-                          Pay {p.payDate.toLocaleDateString()}
+                          Pay {formatDateOnly(p.payDate)}
                         </span>
-                        <Badge variant={variant} className="text-[10px]">{p.status}</Badge>
+                        <Badge variant={variant} className="text-[10px]">{p.displayStatus}</Badge>
                         <span className="text-[10px] text-muted-foreground">
                           Open slip →
                         </span>
                       </Link>
+                      <PeriodActions
+                        period={{
+                          id: p.id,
+                          title: p.title,
+                          payPeriodStart: iso(p.payPeriodStart),
+                          payPeriodEnd: iso(p.payPeriodEnd),
+                          payDate: iso(p.payDate),
+                          notes: p.notes,
+                          completedOverride: p.status === "COMPLETED",
+                        }}
+                      />
                     </li>
                   );
                 })}
@@ -107,7 +129,7 @@ export default async function AdminPayrollPage() {
 
         <TabsContent value="documents">
           <Card>
-            <CardHeader><CardTitle className="text-base">Recent uploads</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Recent uploads{docCount > docs.length ? ` (latest ${docs.length} of ${docCount})` : ""}</CardTitle></CardHeader>
             <CardContent className="p-0">
               <ul className="divide-y">
                 {docs.length === 0 && (
@@ -116,7 +138,7 @@ export default async function AdminPayrollPage() {
                   </li>
                 )}
                 {docs.map((d) => (
-                  <li key={d.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 p-3">
+                  <li key={d.id} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 p-3">
                     <div>
                       <p className="text-sm font-medium">{d.title}</p>
                       <p className="text-[11px] text-muted-foreground">
@@ -124,11 +146,12 @@ export default async function AdminPayrollPage() {
                       </p>
                     </div>
                     <span className="text-[11px] text-muted-foreground">
-                      {d.payPeriodStart.toLocaleDateString()} → {d.payPeriodEnd.toLocaleDateString()}
+                      {formatDateOnly(d.payPeriodStart)} → {formatDateOnly(d.payPeriodEnd)}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
                       {d.uploadedAt.toLocaleDateString()}
                     </span>
+                    <PayrollDocumentActions id={d.id} title={d.title} />
                   </li>
                 ))}
               </ul>

@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { getPayrollSlipsForPeriod } from "@/server/queries/payroll-slip";
+import { effectivePeriodStatus } from "@/lib/payroll-period";
+import { formatDateOnly } from "@/lib/format";
 import { DownloadCsvButton } from "./download-csv-button";
 import { PrintClient } from "./print-button";
 
@@ -32,6 +34,7 @@ export default async function PayrollPeriodPage({
   if (!period) notFound();
 
   const slips = await getPayrollSlipsForPeriod(period.payPeriodStart, period.payPeriodEnd);
+  const displayStatus = effectivePeriodStatus(period.status, period.payPeriodStart, period.payPeriodEnd);
   const totalEmployees = slips.length;
   const totalHours = slips.reduce((s, r) => s + r.totalHours, 0);
   const totalOT = slips.reduce((s, r) => s + r.overtimeHours, 0);
@@ -46,7 +49,7 @@ export default async function PayrollPeriodPage({
 
       <PageHeader
         title={period.title}
-        description={`${period.payPeriodStart.toLocaleDateString()} → ${period.payPeriodEnd.toLocaleDateString()} · pay date ${period.payDate.toLocaleDateString()}`}
+        description={`${formatDateOnly(period.payPeriodStart)} → ${formatDateOnly(period.payPeriodEnd)} · pay date ${formatDateOnly(period.payDate)}`}
         actions={
           <div className="flex gap-2 print:hidden">
             <DownloadCsvButton periodId={period.id} title={period.title} />
@@ -56,8 +59,8 @@ export default async function PayrollPeriodPage({
       />
 
       <div className="mb-6 flex items-center gap-2 print:hidden">
-        <Badge variant={period.status === "COMPLETED" ? "success" : period.status === "CURRENT" ? "warning" : "outline"}>
-          {period.status}
+        <Badge variant={displayStatus === "COMPLETED" ? "success" : displayStatus === "CURRENT" ? "warning" : "outline"}>
+          {displayStatus}
         </Badge>
         {period.notes && (
           <span className="text-xs text-muted-foreground">{period.notes}</span>
@@ -75,8 +78,8 @@ export default async function PayrollPeriodPage({
         <h1 className="text-2xl font-bold">ACT — Payroll Slip</h1>
         <p className="text-sm text-muted-foreground">{period.title}</p>
         <p className="text-xs text-muted-foreground">
-          Period: {period.payPeriodStart.toLocaleDateString()} → {period.payPeriodEnd.toLocaleDateString()} ·
-          Pay date: {period.payDate.toLocaleDateString()} ·
+          Period: {formatDateOnly(period.payPeriodStart)} → {formatDateOnly(period.payPeriodEnd)} ·
+          Pay date: {formatDateOnly(period.payDate)} ·
           Generated {new Date().toLocaleString()}
         </p>
       </div>
@@ -153,7 +156,9 @@ export default async function PayrollPeriodPage({
 
       <p className="mt-4 text-[10px] text-muted-foreground print:mt-8">
         Hours computed from approved time entries within the pay period. Overtime
-        = hours over 40 in any ISO week (US standard). Pay rates are deliberately
+        = hours over 40 in any Mon-Sun week (US standard); for a week that
+        straddles two pay periods, the overtime lands in the period where the
+        hours past 40 were actually worked. Pay rates are deliberately
         omitted on this slip — finance computes gross pay from these hours.
       </p>
     </>

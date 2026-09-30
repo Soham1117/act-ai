@@ -74,10 +74,11 @@ export default async function EmployeeBenefitsPage() {
       include: { plan: true },
       orderBy: { effectiveDate: "desc" },
     }),
-    // BENEFITS documents are broadcast to all employees, same as COMPANY —
-    // mirrors listMyDocuments' type-based OR branch, so no employeeId filter.
+    // Only the BENEFITS documents delivered to THIS employee (one Document
+    // row per recipient). Same visibility rule as /api/documents/[id]/file,
+    // so every listed link opens, and nobody else's document titles appear.
     db.document.findMany({
-      where: { documentType: "BENEFITS" },
+      where: { documentType: "BENEFITS", employeeId: user.employeeId },
       orderBy: { uploadedAt: "desc" },
     }),
     db.employee.findUnique({
@@ -475,7 +476,9 @@ function HealthCoverageCard({
         </div>
         {isPending && (
           <Badge variant="warning" className="text-[10px]">
-            Starts {formatDateOnly(row.effectiveDate)}
+            {row.effectiveDate > utcToday()
+              ? `Starts ${formatDateOnly(row.effectiveDate)}`
+              : "Pending confirmation"}
           </Badge>
         )}
       </CardHeader>

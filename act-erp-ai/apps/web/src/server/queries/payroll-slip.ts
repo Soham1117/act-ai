@@ -1,5 +1,11 @@
 import { db } from "@/lib/db";
-import { eachWeekOfInterval, endOfWeek, isWithinInterval, startOfWeek } from "date-fns";
+import {
+  allocateWeeklyOvertime,
+  csvRow,
+  isoWeekEnd,
+  isoWeekStart,
+  type SlipEntry,
+} from "@/lib/payroll-overtime";
 
 export type PayrollSlipRow = {
   employeeId: string;        // EMP-YYYY-NNNN
@@ -17,28 +23,36 @@ export type PayrollSlipRow = {
   lastClockOut: Date | null;
 };
 
+const dayStr = (d: Date) => d.toISOString().slice(0, 10);
+
 /**
  * Compute payroll slip rows for a given pay period.
  *
  * Rules:
  *  - Counts only APPROVED time entries with a clock-out.
- *  - Hours = TimeEntry.totalWorkMin / 60, summed per ISO week.
- *  - Overtime = hours over 40 in any ISO week (US standard).
- *  - Overlap of a week with the pay period is full-week (we report
- *    regular + overtime as computed against the whole ISO week).
+ *  - Overtime = minutes over 40 in a Mon-Sun week. We load WHOLE weeks around
+ *    the period, walk them chronologically, and attribute to this period only
+ *    the minutes worked inside it (see lib/payroll-overtime) so a week that
+ *    straddles two periods is never double counted.
+ *  - TimeEntry.date is the business-calendar day (@db.Date), so day keys are
+ *    read as UTC without any timezone shifting.
  */
 export async function getPayrollSlipsForPeriod(
   payPeriodStart: Date,
   payPeriodEnd: Date,
 ): Promise<PayrollSlipRow[]> {
+  const startKey = dayStr(payPeriodStart);
+  const endKey = dayStr(payPeriodEnd);
+  const fetchFrom = new Date(`${isoWeekStart(startKey)}T00:00:00.000Z`);
+  const fetchTo = new Date(`${isoWeekEnd(endKey)}T00:00:00.000Z`);
+
   const entries = await db.timeEntry.findMany({
     where: {
       approvalStatus: "APPROVED",
       clockOut: { not: null },
-      date: { gte: payPeriodStart, lte: payPeriodEnd },
+      date: { gte: fetchFrom, lte: fetchTo },
     },
     select: {
-      employeeId: true,
       date: true,
       clockIn: true,
       clockOut: true,
@@ -54,97 +68,57 @@ export async function getPayrollSlipsForPeriod(
         },
       },
     },
-    orderBy: { date: "asc" },
+    orderBy: [{ date: "asc" }, { clockIn: "asc" }],
   });
 
-  // Group entries by employee.
   type Bucket = {
-    employee: PayrollSlipRow;
-    weekly: Map<string, number>; // ISO-week-start string → total minutes
+    emp: (typeof entries)[number]["employee"];
+    slip: SlipEntry[];
     daySet: Set<string>;
     firstClockIn: Date | null;
     lastClockOut: Date | null;
   };
   const buckets = new Map<string, Bucket>();
 
-  function makeBucket(e: (typeof entries)[number]): Bucket {
-    return {
-      employee: {
-        employeeRowId: e.employee.id,
-        employeeId: e.employee.employeeId,
-        name: e.employee.name,
-        email: e.employee.email,
-        profilePic: e.employee.profilePic,
-        department: e.employee.department?.name ?? null,
-        weeks: [],
-        regularHours: 0,
-        overtimeHours: 0,
-        totalHours: 0,
-        daysWorked: 0,
-        firstClockIn: null,
-        lastClockOut: null,
-      },
-      weekly: new Map(),
-      daySet: new Set(),
-      firstClockIn: null,
-      lastClockOut: null,
-    };
-  }
-
   for (const e of entries) {
-    if (!buckets.has(e.employee.id)) buckets.set(e.employee.id, makeBucket(e));
-    const b = buckets.get(e.employee.id)!;
-
-    const wkKey = startOfWeek(e.date, { weekStartsOn: 1 }).toISOString();
-    b.weekly.set(wkKey, (b.weekly.get(wkKey) ?? 0) + e.totalWorkMin);
-    b.daySet.add(e.date.toISOString().slice(0, 10));
-    if (e.clockIn && (!b.firstClockIn || e.clockIn < b.firstClockIn)) b.firstClockIn = e.clockIn;
-    if (e.clockOut && (!b.lastClockOut || e.clockOut > b.lastClockOut)) b.lastClockOut = e.clockOut;
+    let b = buckets.get(e.employee.id);
+    if (!b) {
+      b = { emp: e.employee, slip: [], daySet: new Set(), firstClockIn: null, lastClockOut: null };
+      buckets.set(e.employee.id, b);
+    }
+    const key = dayStr(e.date);
+    b.slip.push({ date: key, clockIn: e.clockIn.getTime(), minutes: e.totalWorkMin });
+    if (key >= startKey && key <= endKey) {
+      if (e.totalWorkMin > 0) b.daySet.add(key);
+      if (!b.firstClockIn || e.clockIn < b.firstClockIn) b.firstClockIn = e.clockIn;
+      if (e.clockOut && (!b.lastClockOut || e.clockOut > b.lastClockOut)) b.lastClockOut = e.clockOut;
+    }
   }
-
-  // Compute regular + overtime per week.
-  const allWeeks = eachWeekOfInterval(
-    { start: payPeriodStart, end: payPeriodEnd },
-    { weekStartsOn: 1 },
-  );
 
   const rows: PayrollSlipRow[] = [];
   for (const b of buckets.values()) {
-    let regularTotal = 0;
-    let overtimeTotal = 0;
-    const weekRows: PayrollSlipRow["weeks"] = [];
-
-    for (const wk of allWeeks) {
-      const key = wk.toISOString();
-      const minutes = b.weekly.get(key) ?? 0;
-      const hours = minutes / 60;
-      // Only count weeks that overlap the pay period.
-      const wkEnd = endOfWeek(wk, { weekStartsOn: 1 });
-      const overlaps =
-        isWithinInterval(wk, { start: payPeriodStart, end: payPeriodEnd }) ||
-        isWithinInterval(wkEnd, { start: payPeriodStart, end: payPeriodEnd }) ||
-        (wk <= payPeriodStart && wkEnd >= payPeriodEnd);
-      if (!overlaps) continue;
-      const regular = Math.min(hours, 40);
-      const overtime = Math.max(0, hours - 40);
-      weekRows.push({
-        weekStart: wk.toISOString().slice(0, 10),
-        weekEnd: wkEnd.toISOString().slice(0, 10),
-        regular: round2(regular),
-        overtime: round2(overtime),
-      });
-      regularTotal += regular;
-      overtimeTotal += overtime;
-    }
-
-    b.employee.weeks = weekRows;
-    b.employee.regularHours = round2(regularTotal);
-    b.employee.overtimeHours = round2(overtimeTotal);
-    b.employee.totalHours = round2(regularTotal + overtimeTotal);
-    b.employee.daysWorked = b.daySet.size;
-    b.employee.firstClockIn = b.firstClockIn;
-    b.employee.lastClockOut = b.lastClockOut;
-    rows.push(b.employee);
+    const alloc = allocateWeeklyOvertime(b.slip, startKey, endKey);
+    if (alloc.weeks.length === 0) continue; // nothing worked inside this period
+    rows.push({
+      employeeRowId: b.emp.id,
+      employeeId: b.emp.employeeId,
+      name: b.emp.name,
+      email: b.emp.email,
+      profilePic: b.emp.profilePic,
+      department: b.emp.department?.name ?? null,
+      weeks: alloc.weeks.map((w) => ({
+        weekStart: w.weekStart,
+        weekEnd: w.weekEnd,
+        regular: round2(w.regularMin / 60),
+        overtime: round2(w.overtimeMin / 60),
+      })),
+      regularHours: round2(alloc.regularMin / 60),
+      overtimeHours: round2(alloc.overtimeMin / 60),
+      totalHours: round2((alloc.regularMin + alloc.overtimeMin) / 60),
+      daysWorked: b.daySet.size,
+      firstClockIn: b.firstClockIn,
+      lastClockOut: b.lastClockOut,
+    });
   }
 
   rows.sort((a, b) => a.name.localeCompare(b.name));
@@ -155,14 +129,14 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-/** CSV serialiser — used by the download button. */
+/** CSV serialiser (RFC 4180, every field quoted, formula-injection safe). */
 export function payrollSlipsToCsv(
   periodTitle: string,
   start: Date,
   end: Date,
   rows: PayrollSlipRow[],
 ): string {
-  const header = [
+  const header = csvRow([
     "Employee ID",
     "Name",
     "Department",
@@ -172,19 +146,19 @@ export function payrollSlipsToCsv(
     "Regular Hours",
     "Overtime Hours",
     "Total Hours",
-  ].join(",");
+  ]);
   const lines = rows.map((r) =>
-    [
+    csvRow([
       r.employeeId,
-      `"${r.name.replace(/"/g, '""')}"`,
+      r.name,
       r.department ?? "",
-      start.toISOString().slice(0, 10),
-      end.toISOString().slice(0, 10),
+      dayStr(start),
+      dayStr(end),
       r.daysWorked,
       r.regularHours,
       r.overtimeHours,
       r.totalHours,
-    ].join(","),
+    ]),
   );
-  return [`# ${periodTitle}`, header, ...lines].join("\n");
+  return [csvRow([periodTitle]), header, ...lines].join("\r\n");
 }

@@ -160,6 +160,7 @@ export default async function AdminBenefitsPage() {
                             })),
                           }}
                         />
+                        {p.isActive && !plans.some((x) => x.rolledFromId === p.id) && (
                         <RollForwardDialog
                           plan={{
                             id: p.id,
@@ -174,6 +175,7 @@ export default async function AdminBenefitsPage() {
                             })),
                           }}
                         />
+                        )}
                         {p.isActive && <DeactivatePlanButton planId={p.id} planName={p.name} />}
                       </div>
                     </CardHeader>

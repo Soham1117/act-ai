@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { previewPaystub, uploadPayrollDocument, type PaystubPreview } from "@/server/actions/payroll";
 import { humanizeUnexpectedError } from "@/lib/action-result";
+import { PAYROLL_DUPLICATE_PREFIX } from "@/lib/payroll-period";
 
 type CalendarPeriod = { id: string; title: string; payPeriodStart: Date; payPeriodEnd: Date };
 type EmployeeOption = { id: string; name: string };
@@ -38,9 +39,13 @@ type Row = {
   payPeriodStart: string;
   payPeriodEnd: string;
   errorMessage?: string;
+  /** Replace an existing matching document (explicit admin choice). */
+  overwrite: boolean;
+  duplicate: boolean;
 };
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const CONCURRENCY = 4;
 
 async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
@@ -97,6 +102,8 @@ export function UploadPaystubsDialog({
       employeeId: null,
       payPeriodStart: "",
       payPeriodEnd: "",
+      overwrite: false,
+      duplicate: false,
     }));
     setRows((prev) => [...prev, ...newRows]);
 
@@ -114,15 +121,15 @@ export function UploadPaystubsDialog({
       }
       try {
         const bytes = await row.file.arrayBuffer();
-        const preview = await previewPaystub({
-          name: row.file.name,
-          type: row.file.type,
-          bytes,
-        });
+        const preview = await previewPaystub(
+          { name: row.file.name, type: row.file.type, bytes },
+          category,
+        );
         updateRow(row.key, {
           status: "ready",
           preview,
           employeeId: preview.match.employeeId,
+          duplicate: !!preview.duplicateOf,
           payPeriodStart: toDateInput(preview.parsed?.payPeriodStart ?? null),
           payPeriodEnd: toDateInput(preview.parsed?.payPeriodEnd ?? null),
         });
@@ -141,10 +148,32 @@ export function UploadPaystubsDialog({
 
   const readyRows = rows.filter((r) => r.status === "ready" || r.status === "error");
   const allResolved = rows.length > 0 && rows.every((r) => r.status !== "parsing" && r.status !== "uploading");
-  const allHaveEmployee = readyRows.length > 0 && readyRows.every((r) => r.employeeId && r.payPeriodStart && r.payPeriodEnd);
+  const allHaveEmployee =
+    readyRows.length > 0 &&
+    readyRows.every(
+      (r) =>
+        r.employeeId &&
+        r.payPeriodStart &&
+        r.payPeriodEnd &&
+        r.payPeriodEnd >= r.payPeriodStart &&
+        r.file.size <= MAX_UPLOAD_BYTES,
+    );
+
+  // Same employee + same period end twice in one batch: catch it before
+  // either file is uploaded (the server would only catch the second one).
+  const batchDupKeys = new Set<string>();
+  const seenKeys = new Set<string>();
+  for (const r of readyRows) {
+    if (!r.employeeId || !r.payPeriodEnd) continue;
+    const k = `${r.employeeId}|${r.payPeriodEnd}`;
+    if (seenKeys.has(k)) batchDupKeys.add(k);
+    seenKeys.add(k);
+  }
+  const hasBatchDup = batchDupKeys.size > 0;
+  const hasUnresolvedDuplicate = readyRows.some((r) => r.duplicate && !r.overwrite);
 
   async function onConfirm() {
-    if (!allHaveEmployee) return;
+    if (!allHaveEmployee || hasBatchDup || hasUnresolvedDuplicate) return;
     setUploading(true);
     let succeeded = 0;
     let failed = 0;
@@ -158,6 +187,7 @@ export function UploadPaystubsDialog({
           category,
           payPeriodStart: row.payPeriodStart,
           payPeriodEnd: row.payPeriodEnd,
+          overwrite: row.overwrite,
         },
         { name: row.file.name, type: row.file.type || "application/pdf", bytes },
       );
@@ -165,6 +195,7 @@ export function UploadPaystubsDialog({
         updateRow(row.key, {
           status: "error",
           errorMessage: res.error || "Upload failed",
+          duplicate: res.error?.startsWith(PAYROLL_DUPLICATE_PREFIX) ? true : row.duplicate,
         });
         failed++;
         return;
@@ -300,11 +331,24 @@ export function UploadPaystubsDialog({
                                 {(confidence === "low" || confidence === "none") && "No confident match"}
                               </Badge>
                             )}
-                            {row.preview?.duplicateOf && (
-                              <p className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+                            {row.duplicate && (
+                              <label className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
                                 <AlertTriangle className="h-3 w-3 shrink-0" />
-                                Already has a stub for this period
+                                <input
+                                  type="checkbox"
+                                  checked={row.overwrite}
+                                  onChange={(e) => updateRow(row.key, { overwrite: e.target.checked })}
+                                />
+                                Already on file — replace it
+                              </label>
+                            )}
+                            {row.employeeId && row.payPeriodEnd && batchDupKeys.has(`${row.employeeId}|${row.payPeriodEnd}`) && (
+                              <p className="text-[10px] text-destructive">
+                                Duplicate in this batch — remove one.
                               </p>
+                            )}
+                            {row.file.size > MAX_UPLOAD_BYTES && (
+                              <p className="text-[10px] text-destructive">Larger than 10 MB.</p>
                             )}
                           </div>
                         )}
@@ -366,7 +410,7 @@ export function UploadPaystubsDialog({
           <Button
             type="button"
             onClick={onConfirm}
-            disabled={!allResolved || !allHaveEmployee || uploading || !periodId}
+            disabled={!allResolved || !allHaveEmployee || hasBatchDup || hasUnresolvedDuplicate || uploading || !periodId}
           >
             {uploading && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
             Confirm &amp; upload {readyRows.length > 0 ? readyRows.length : ""}

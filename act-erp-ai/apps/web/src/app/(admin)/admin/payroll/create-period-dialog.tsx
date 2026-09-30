@@ -32,7 +32,7 @@ export function CreatePayrollPeriodDialog() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [payDate, setPayDate] = useState("");
-  const [status, setStatus] = useState<"UPCOMING" | "CURRENT" | "COMPLETED">("UPCOMING");
+  const [status, setStatus] = useState<"AUTO" | "COMPLETED">("AUTO");
   const [notes, setNotes] = useState("");
 
   function onSubmit(e: React.FormEvent) {
@@ -74,11 +74,11 @@ export function CreatePayrollPeriodDialog() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Period end</Label>
-              <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} required />
+              <Input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Pay date</Label>
-              <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} required />
+              <Input type="date" value={payDate} min={end} onChange={(e) => setPayDate(e.target.value)} required />
             </div>
           </div>
           <div className="space-y-1.5">
@@ -86,9 +86,8 @@ export function CreatePayrollPeriodDialog() {
             <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="UPCOMING">Upcoming</SelectItem>
-                <SelectItem value="CURRENT">Current</SelectItem>
-                <SelectItem value="COMPLETED">Completed</SelectItem>
+                <SelectItem value="AUTO">Automatic (from dates)</SelectItem>
+                <SelectItem value="COMPLETED">Mark completed (closed early)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -98,7 +97,7 @@ export function CreatePayrollPeriodDialog() {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={pending || !title || !start || !end || !payDate}>
+            <Button type="submit" disabled={pending || !title || !start || !end || !payDate || end < start || payDate < end}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create
             </Button>

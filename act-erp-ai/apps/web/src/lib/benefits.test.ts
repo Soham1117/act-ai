@@ -26,6 +26,19 @@ describe("coverageState", () => {
     expect(coverageState(row, null, today)).toBe("pending");
   });
 
+  it("returns 'pending' for an in-date row whose status is still PENDING (not confirmed)", () => {
+    const row = { status: "PENDING" as const, effectiveDate: utc(2026, 1, 1), endDate: null };
+    expect(coverageState(row, utc(2026, 12, 31), today)).toBe("pending");
+    expect(isCurrentCoverage(row, today)).toBe(false);
+  });
+
+  it("a PENDING row that has already ended or whose plan year ended is 'lapsed', not pending", () => {
+    const ended = { status: "PENDING" as const, effectiveDate: utc(2025, 1, 1), endDate: utc(2026, 3, 1) };
+    expect(coverageState(ended, null, today)).toBe("lapsed");
+    const stale = { status: "PENDING" as const, effectiveDate: utc(2025, 1, 1), endDate: null };
+    expect(coverageState(stale, utc(2025, 12, 31), today)).toBe("lapsed");
+  });
+
   it("returns 'current' for an in-force row with no end date", () => {
     const row = { status: "ENROLLED" as const, effectiveDate: utc(2026, 1, 1), endDate: null };
     expect(coverageState(row, utc(2026, 12, 31), today)).toBe("current");

@@ -4,7 +4,7 @@ import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, FileText } from "lucide-react";
+import { Download, Eye, FileText } from "lucide-react";
 import { UploadDocumentBulkDialog } from "@/components/upload-document-bulk-dialog";
 import { DeleteDocumentButton } from "@/components/delete-document-button";
 
@@ -17,11 +17,11 @@ export default async function AdminDocumentsPage() {
     try { return await p; } catch { return fallback; }
   };
 
-  const [docs, employees] = await Promise.all([
+  const [docs, typeCounts, employees] = await Promise.all([
     safe(
       db.document.findMany({
         orderBy: { uploadedAt: "desc" },
-        take: 200,
+        take: 300,
         include: { employee: { select: { name: true, email: true } } },
       }),
       [] as Array<{
@@ -40,6 +40,10 @@ export default async function AdminDocumentsPage() {
       }>,
     ),
     safe(
+      db.document.groupBy({ by: ["documentType"], _count: { _all: true } }),
+      [] as Array<{ documentType: string; _count: { _all: number } }>,
+    ),
+    safe(
       db.employee.findMany({
         where: { employmentStatus: { not: "TERMINATED" } },
         orderBy: { name: "asc" },
@@ -50,9 +54,10 @@ export default async function AdminDocumentsPage() {
   ]);
 
   const counts = TYPES.reduce<Record<string, number>>((acc, t) => {
-    acc[t] = docs.filter((d) => d.documentType === t).length;
+    acc[t] = typeCounts.find((c) => c.documentType === t)?._count._all ?? 0;
     return acc;
   }, {});
+  const totalDocs = Object.values(counts).reduce((s, n) => s + n, 0);
 
   return (
     <>
@@ -69,12 +74,17 @@ export default async function AdminDocumentsPage() {
 
       <Tabs defaultValue="ALL" className="mt-6 space-y-4">
         <TabsList>
-          <TabsTrigger value="ALL">All ({docs.length})</TabsTrigger>
+          <TabsTrigger value="ALL">All ({totalDocs})</TabsTrigger>
           {TYPES.map((t) => (
             <TabsTrigger key={t} value={t}>{t} ({counts[t] ?? 0})</TabsTrigger>
           ))}
         </TabsList>
         <TabsContent value="ALL">
+          {totalDocs > docs.length && (
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              Showing the latest {docs.length} of {totalDocs} documents. Open an employee profile to see all of theirs.
+            </p>
+          )}
           <DocList docs={docs} />
         </TabsContent>
         {TYPES.map((t) => (
@@ -111,12 +121,12 @@ function DocList({ docs }: { docs: Doc[] }) {
       <CardContent className="p-0">
         <ul className="divide-y">
           {docs.map((d) => (
-            <li key={d.id} className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 p-3">
+            <li key={d.id} className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-3 p-3">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{d.title}</p>
                 <p className="truncate text-[11px] text-muted-foreground">
-                  {d.employee.name} · {d.fileType}
+                  {d.employee.name} · {d.uploadedAt.toLocaleDateString()}
                 </p>
               </div>
               <Badge variant="outline" className="text-[10px]">{d.documentType}</Badge>
@@ -126,8 +136,15 @@ function DocList({ docs }: { docs: Doc[] }) {
                 rel="noopener noreferrer"
                 className="rounded-md border px-2 py-1 text-[10px] hover:bg-muted"
               >
-                <Download className="inline h-3 w-3" />
+                <Eye className="inline h-3 w-3" />
               </Link>
+              <a
+                href={`/api/documents/${d.id}/file?download=1`}
+                className="rounded-md border px-2 py-1 text-[10px] hover:bg-muted"
+                title="Download"
+              >
+                <Download className="inline h-3 w-3" />
+              </a>
               <DeleteDocumentButton id={d.id} title={d.title} />
             </li>
           ))}

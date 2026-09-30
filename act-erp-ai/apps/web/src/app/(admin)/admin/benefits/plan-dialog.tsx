@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createBenefitPlan, updateBenefitPlan, upsertPlanTiers } from "@/server/actions/benefits";
+import { upsertBenefitPlan } from "@/server/actions/benefits";
 import { toastAction } from "@/lib/toast-action";
 import { tierLabel } from "@/lib/benefits";
 
@@ -83,8 +83,33 @@ export function PlanDialog({ plan }: { plan?: PlanForEdit }) {
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // A tier row needs BOTH prices, or neither (neither = this tier is removed).
+    const partial = hasTiers
+      ? TIERS.find((t) => {
+          const a = tierPrices[t].employeeCost.trim() !== "";
+          const b = tierPrices[t].employerCost.trim() !== "";
+          return a !== b;
+        })
+      : undefined;
+    if (partial) {
+      toast.error(`Enter both employee and employer prices for ${tierLabel(partial)}, or clear both to remove the tier.`);
+      return;
+    }
+    if (planYearEnd <= planYearStart) {
+      toast.error("The plan year must end after it starts.");
+      return;
+    }
     startTransition(async () => {
+      const tiers = hasTiers
+        ? TIERS.filter((t) => tierPrices[t].employeeCost.trim() !== "").map((t) => ({
+            tier: t,
+            employeeCost: Number(tierPrices[t].employeeCost),
+            employerCost: Number(tierPrices[t].employerCost),
+          }))
+        : undefined;
       const input = {
+        id: plan?.id,
+        tiers,
         type,
         name,
         carrierName,
@@ -98,24 +123,8 @@ export function PlanDialog({ plan }: { plan?: PlanForEdit }) {
         vestingDescription: vestingDescription || undefined,
         notes: notes || undefined,
       };
-      const planRes = isEdit
-        ? await updateBenefitPlan(plan.id, input)
-        : await createBenefitPlan(input);
+      const planRes = await upsertBenefitPlan(input);
       if (!toastAction(planRes)) return;
-
-      if (hasTiers) {
-        const rows = TIERS.filter(
-          (t) => tierPrices[t].employeeCost.trim() !== "" || tierPrices[t].employerCost.trim() !== "",
-        ).map((t) => ({
-          tier: t,
-          employeeCost: Number(tierPrices[t].employeeCost || 0),
-          employerCost: Number(tierPrices[t].employerCost || 0),
-        }));
-        if (rows.length > 0) {
-          const tierRes = await upsertPlanTiers(planRes.id, rows);
-          if (!toastAction(tierRes)) return;
-        }
-      }
 
       toast.success(isEdit ? "Plan updated" : "Plan created");
       setOpen(false);
@@ -193,7 +202,7 @@ export function PlanDialog({ plan }: { plan?: PlanForEdit }) {
 
           {hasTiers ? (
             <div className="space-y-1.5">
-              <Label className="text-xs">Tier pricing (leave blank to skip a tier)</Label>
+              <Label className="text-xs">Tier pricing (clear both boxes to remove a tier)</Label>
               <div className="space-y-1.5 rounded-md border p-2">
                 {TIERS.map((t) => (
                   <div key={t} className="grid grid-cols-[1fr_90px_90px] items-center gap-2">

@@ -42,6 +42,7 @@ export function UploadDocumentBulkDialog({
   const [docType, setDocType] = useState<DocType>("COMPANY");
   const [erisaDisclosure, setErisaDisclosure] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [allActive, setAllActive] = useState(false);
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
@@ -60,6 +61,7 @@ export function UploadDocumentBulkDialog({
     setDocType("COMPANY");
     setErisaDisclosure(false);
     setSelected(new Set());
+    setAllActive(false);
     setSearch("");
   }
 
@@ -84,7 +86,8 @@ export function UploadDocumentBulkDialog({
     e.preventDefault();
     if (!file) return toast.error("Pick a file first");
     if (title.trim().length < 2) return toast.error("Title is required");
-    if (selected.size === 0) return toast.error("Select at least one employee");
+    if (!allActive && selected.size === 0) return toast.error("Select at least one employee");
+    if (file.size > 15 * 1024 * 1024) return toast.error("File is too large (max 15 MB).");
 
     startTransition(async () => {
       const bytes = await file.arrayBuffer();
@@ -93,7 +96,8 @@ export function UploadDocumentBulkDialog({
           title: title.trim(),
           description: description.trim() || undefined,
           documentType: docType,
-          employeeIds: Array.from(selected),
+          employeeIds: allActive ? [] : Array.from(selected),
+          allActive,
           erisaDisclosure: docType === "BENEFITS" ? erisaDisclosure : undefined,
         },
         { name: file.name, type: file.type || "application/octet-stream", bytes },
@@ -192,8 +196,22 @@ export function UploadDocumentBulkDialog({
             />
           </div>
           <div>
+            <div className="mb-2 flex items-center gap-2 rounded-md border p-2">
+              <Checkbox
+                id="bulk-all-active"
+                checked={allActive}
+                onCheckedChange={(v) => setAllActive(v === true)}
+              />
+              <label htmlFor="bulk-all-active" className="text-xs">
+                All active employees{" "}
+                <span className="text-muted-foreground">
+                  (everyone who is active or on leave when you upload)
+                </span>
+              </label>
+            </div>
+            <div className={allActive ? "pointer-events-none opacity-50" : undefined}>
             <div className="mb-1.5 flex items-center justify-between">
-              <Label>Recipients ({selected.size} selected)</Label>
+              <Label>Recipients ({allActive ? "all active" : `${selected.size} selected`})</Label>
               <button
                 type="button"
                 onClick={selectAllVisible}
@@ -234,14 +252,15 @@ export function UploadDocumentBulkDialog({
                 </ul>
               )}
             </div>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending || !file || selected.size === 0}>
+            <Button type="submit" disabled={pending || !file || (!allActive && selected.size === 0)}>
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              Upload to {selected.size || ""}
+              Upload to {allActive ? "all active" : selected.size || ""}
             </Button>
           </DialogFooter>
         </form>

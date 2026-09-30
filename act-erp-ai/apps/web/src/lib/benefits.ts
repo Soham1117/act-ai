@@ -31,6 +31,8 @@ export function utcToday(): Date {
 /** True if `row` covers `today` — effective on or before today, and not yet
  * ended (endDate is an exclusive boundary: coverage ends ON that date). */
 export function isCurrentCoverage(row: DatedStatus, today: Date = utcToday()): boolean {
+  // A PENDING row is an unconfirmed enrollment; WAIVED is not coverage at all.
+  if (row.status === "PENDING" || row.status === "WAIVED") return false;
   if (row.effectiveDate > today) return false;
   if (row.endDate && row.endDate <= today) return false;
   return true;
@@ -54,6 +56,8 @@ export function coverageState(
   if (row.effectiveDate > today) return "pending";
   if (row.endDate && row.endDate <= today) return "lapsed";
   if (planYearEnd && planYearEnd < today) return "lapsed";
+  // In-date but not yet confirmed by HR: never shown as current coverage.
+  if (row.status === "PENDING") return "pending";
   return "current";
 }
 

@@ -4,11 +4,25 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Bell, CheckCheck } from "lucide-react";
+import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { MarkAllReadButton } from "./mark-all-read-button";
 import { MarkReadButton } from "./mark-read-button";
 
 export const metadata = { title: "Notifications" };
+
+/** Only same-site paths and http(s) URLs are ever rendered as links. */
+function safeHref(link: string | null): { href: string; external: boolean } | null {
+  if (!link) return null;
+  if (link.startsWith("/") && !link.startsWith("//")) return { href: link, external: false };
+  try {
+    const u = new URL(link);
+    if (u.protocol === "https:" || u.protocol === "http:") return { href: u.toString(), external: true };
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 export default async function NotificationsPage() {
   const user = await requireUser();
@@ -69,7 +83,25 @@ export default async function NotificationsPage() {
                       <Badge variant="outline" className="text-[10px]">{n.type}</Badge>
                       <Badge variant={variant} className="text-[10px]">{n.priority}</Badge>
                     </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{n.message}</p>
+                    <p className="mt-0.5 whitespace-pre-wrap break-words text-xs text-muted-foreground">{n.message}</p>
+                    {(() => {
+                      const l = safeHref(n.link);
+                      if (!l) return null;
+                      return l.external ? (
+                        <a
+                          href={l.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-block text-xs text-primary hover:underline"
+                        >
+                          Open link
+                        </a>
+                      ) : (
+                        <Link href={l.href} className="mt-1 inline-block text-xs text-primary hover:underline">
+                          View details
+                        </Link>
+                      );
+                    })()}
                     <p className="mt-1 text-[10px] text-muted-foreground">
                       {formatDistanceToNow(n.createdAt, { addSuffix: true })}
                     </p>

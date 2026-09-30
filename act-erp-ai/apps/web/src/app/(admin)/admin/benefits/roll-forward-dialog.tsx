@@ -52,19 +52,29 @@ export function RollForwardDialog({
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const partial = hasTiers
+      ? TIERS.find((t) => (tierPrices[t].employeeCost.trim() !== "") !== (tierPrices[t].employerCost.trim() !== ""))
+      : undefined;
+    if (partial) {
+      toast.error(`Enter both employee and employer prices for ${tierLabel(partial)}, or clear both to keep last year's price.`);
+      return;
+    }
+    if (planYearEnd <= planYearStart) {
+      toast.error("The new plan year must end after it starts.");
+      return;
+    }
     startTransition(async () => {
+      // Blank rows are NOT sent: the server copies last year's price forward.
       const tiers = hasTiers
-        ? TIERS.filter(
-            (t) => tierPrices[t].employeeCost.trim() !== "" || tierPrices[t].employerCost.trim() !== "",
-          ).map((t) => ({
+        ? TIERS.filter((t) => tierPrices[t].employeeCost.trim() !== "").map((t) => ({
             tier: t,
-            employeeCost: Number(tierPrices[t].employeeCost || 0),
-            employerCost: Number(tierPrices[t].employerCost || 0),
+            employeeCost: Number(tierPrices[t].employeeCost),
+            employerCost: Number(tierPrices[t].employerCost),
           }))
         : undefined;
       const res = await rollForwardPlanYear({ oldPlanId: plan.id, planYearStart, planYearEnd, tiers });
       if (!toastAction(res)) return;
-      toast.success(`Rolled forward — ${plan.openEnrollmentCount} enrollment(s) mirrored to the new plan year`);
+      toast.success(`Rolled forward — ${res.migratedCount} enrollment(s) mirrored to the new plan year`);
       setOpen(false);
     });
   }
@@ -81,8 +91,8 @@ export function RollForwardDialog({
           <DialogTitle>Roll forward {plan.name}</DialogTitle>
           <DialogDescription>
             Clones this plan into a new plan-year row, ends the {plan.openEnrollmentCount} currently-open
-            enrollment(s) on {new Date(plan.planYearEnd).toLocaleDateString()}, and mirrors each of them
-            onto the new plan carrying tier forward. Cost overrides are dropped — re-negotiate them for the
+            enrollment(s) on the new plan year start, and mirrors each of them onto the new plan
+            carrying tier forward. The old plan is deactivated and a plan can only be rolled forward once. Cost overrides are dropped — re-negotiate them for the
             new year if still needed.
           </DialogDescription>
         </DialogHeader>
@@ -100,7 +110,7 @@ export function RollForwardDialog({
 
           {hasTiers && (
             <div className="space-y-1.5">
-              <Label className="text-xs">New tier pricing</Label>
+              <Label className="text-xs">New tier pricing (blank = keep last year&apos;s price)</Label>
               <div className="space-y-1.5 rounded-md border p-2">
                 {TIERS.map((t) => (
                   <div key={t} className="grid grid-cols-[1fr_90px_90px] items-center gap-2">

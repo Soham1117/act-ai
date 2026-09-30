@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Banknote, Download } from "lucide-react";
+import { Banknote, Download, Eye } from "lucide-react";
+import { businessDateOnly, formatDateOnly } from "@/lib/format";
 
 export const metadata = { title: "Payroll" };
 
@@ -26,7 +27,8 @@ export default async function EmployeePayrollPage() {
     ),
     safe(
       db.payrollCalendar.findMany({
-        where: { payDate: { gte: new Date() } },
+        // Pay dates are calendar days: today's pay date still counts as upcoming.
+        where: { payDate: { gte: businessDateOnly() } },
         orderBy: { payDate: "asc" },
         take: 5,
       }),
@@ -41,8 +43,8 @@ export default async function EmployeePayrollPage() {
       <PageHeader title="Payroll" description="Pay stubs, tax docs, and pay periods." />
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard label="Documents" value={docs.length} icon={<Banknote className="h-4 w-4" />} />
-        <StatCard label="Last pay period" value={lastEnd ? lastEnd.toLocaleDateString() : "—"} />
-        <StatCard label="Next pay date" value={calendar[0]?.payDate.toLocaleDateString() ?? "—"} />
+        <StatCard label="Last pay period" value={lastEnd ? formatDateOnly(lastEnd) : "—"} />
+        <StatCard label="Next pay date" value={calendar[0] ? formatDateOnly(calendar[0].payDate) : "—"} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -60,20 +62,30 @@ export default async function EmployeePayrollPage() {
                   <div>
                     <p className="text-sm font-medium">{d.title}</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {d.category} · {d.payPeriodStart.toLocaleDateString()} → {d.payPeriodEnd.toLocaleDateString()}
+                      {d.category} · {formatDateOnly(d.payPeriodStart)} → {formatDateOnly(d.payPeriodEnd)}
                     </p>
                   </div>
                   <span className="text-[10px] text-muted-foreground">
                     {d.uploadedAt.toLocaleDateString()}
                   </span>
-                  <Link
-                    href={`/api/payroll/${d.id}/file`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                  >
-                    <Download className="inline h-3 w-3" />
-                  </Link>
+                  <div className="flex items-center gap-1">
+                    <Link
+                      href={`/api/payroll/${d.id}/file`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                      aria-label={`View ${d.title}`}
+                    >
+                      <Eye className="inline h-3 w-3" />
+                    </Link>
+                    <a
+                      href={`/api/payroll/${d.id}/file?download=1`}
+                      className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                      aria-label={`Download ${d.title}`}
+                    >
+                      <Download className="inline h-3 w-3" />
+                    </a>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -90,11 +102,11 @@ export default async function EmployeePayrollPage() {
               <div key={p.id} className="rounded-md border p-3">
                 <p className="font-medium">{p.title}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Period: {p.payPeriodStart.toLocaleDateString()} → {p.payPeriodEnd.toLocaleDateString()}
+                  Period: {formatDateOnly(p.payPeriodStart)} → {formatDateOnly(p.payPeriodEnd)}
                 </p>
                 <p className="mt-1 text-xs">
                   Pay date:{" "}
-                  <span className="font-mono tabular-nums">{p.payDate.toLocaleDateString()}</span>
+                  <span className="font-mono tabular-nums">{formatDateOnly(p.payDate)}</span>
                 </p>
               </div>
             ))}

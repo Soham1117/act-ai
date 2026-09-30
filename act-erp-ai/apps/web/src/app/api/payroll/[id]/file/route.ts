@@ -1,13 +1,14 @@
 import { getSessionUser } from "@/lib/auth";
-import { getObjectStream } from "@/lib/storage";
+import { storedFileResponse } from "@/lib/file-response";
 import { db } from "@/lib/db";
 
-// Streams a payroll document (paystub) same-origin. Replaces the old pattern
-// of persisting a presigned S3 URL in Payroll.fileUrl — every read now
-// re-checks the caller owns this record (or is an admin).
+// Streams a payroll document (paystub) same-origin. Every read re-checks the
+// caller owns this record (or is an admin). Read-only (terminated, in grace)
+// employees may still download their own documents — getSessionUser resolves
+// them as long as their access level is not NONE.
 export const runtime = "nodejs";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
@@ -21,19 +22,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return new Response("Forbidden", { status: 403 });
   }
 
-  try {
-    const { stream, contentType, contentLength } = await getObjectStream(`payroll/${doc.fileName}`);
-    return new Response(stream, {
-      headers: {
-        "Content-Type": doc.fileType || contentType,
-        ...(contentLength ? { "Content-Length": String(contentLength) } : {}),
-        "Content-Disposition": `inline; filename="${doc.title.replace(/[^\w.\- ]/g, "_")}"`,
-        // no-store: a shared/kiosk browser must never reuse this response for
-        // a different logged-in user via its local HTTP cache.
-        "Cache-Control": "private, no-store",
-      },
-    });
-  } catch {
-    return new Response("Not found", { status: 404 });
-  }
+  return storedFileResponse({
+    req,
+    key: `payroll/${doc.fileName}`,
+    title: doc.title,
+    storedName: doc.fileName,
+    fileType: doc.fileType,
+  });
 }
