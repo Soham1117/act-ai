@@ -60,6 +60,8 @@ export default async function KiosksPage() {
                 ? "Active"
                 : "Inactive";
               const used = (s.slug && usageBySlug[s.slug]) || 0;
+              const daysLeft = Math.ceil((s.expiresAt.getTime() - new Date().getTime()) / 86_400_000);
+              const expiringSoon = !revoked && !expired && daysLeft <= 14;
               return (
                 <li
                   key={s.id}
@@ -89,9 +91,24 @@ export default async function KiosksPage() {
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       Created {s.createdAt.toLocaleDateString()}
-                      {s.lastUsedAt && ` · last used ${s.lastUsedAt.toLocaleDateString()}`}
+                      {s.lastUsedAt ? ` · last used ${s.lastUsedAt.toLocaleString()}` : " · never used"}
                       {!revoked && ` · expires ${s.expiresAt.toLocaleDateString()}`}
                     </p>
+                    {!revoked && (
+                      <p
+                        className={
+                          expired || expiringSoon
+                            ? "text-[11px] font-medium text-destructive"
+                            : "text-[11px] text-muted-foreground"
+                        }
+                      >
+                        {expired
+                          ? "Session expired. Open the kiosk on its device while signed in as admin to re-activate it."
+                          : expiringSoon
+                            ? `Expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. It renews automatically whenever the kiosk is used; if it sits idle, re-activate it from the device.`
+                            : `Session renews to 90 days each time the kiosk is used (${daysLeft} days left).`}
+                      </p>
+                    )}
                   </div>
                   {s.slug && (
                     <Link

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNextCalendarApp, ScheduleXCalendar } from "@schedule-x/react";
 import {
   createViewMonthGrid,
@@ -24,20 +24,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { getScheduleEvents, type ScheduleEvent } from "@/server/actions/schedules";
+import { toastAction } from "@/lib/toast-action";
 
-type RawEvent = {
-  id: string;
-  title: string;
-  start: string; // "YYYY-MM-DD HH:mm"
-  end: string;
-  description?: string;
-  employeeId: string;
-  employeeName: string;
-  departmentId: string | null;
-  departmentName: string | null;
-  jobCode: string;
-  notes: string | null;
-};
+type RawEvent = ScheduleEvent;
 
 type EmployeeOption = {
   id: string;
@@ -52,10 +42,6 @@ type Department = { id: string; name: string };
 const TZ = "America/Chicago";
 function toZonedDateTime(s: string) {
   return Temporal.ZonedDateTime.from(`${s.replace(" ", "T")}:00[${TZ}]`);
-}
-function splitDateTime(s: string) {
-  const [date, time] = s.split(" ");
-  return { date, time };
 }
 
 /**
@@ -72,14 +58,35 @@ function deptColorIndex(deptId: string | null): number {
 }
 
 export function ScheduleCalendar({
-  events,
+  events: initialEvents,
   employees,
   departments,
+  jobCodes,
 }: {
   events: RawEvent[];
   employees: EmployeeOption[];
   departments: Department[];
+  jobCodes: { code: string; title: string }[];
 }) {
+  // The calendar owns its events: any month (past or future) is fetched on
+  // demand as the admin navigates, and re-fetched after every save.
+  const [events, setEvents] = useState<RawEvent[]>(initialEvents);
+  const rangeRef = useRef<{ start: string; end: string } | null>(null);
+  const eventsRef = useRef<RawEvent[]>(initialEvents);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
+  const refetch = useCallback(async (range?: { start: string; end: string }) => {
+    const r = range ?? rangeRef.current;
+    if (!r) return;
+    const res = await getScheduleEvents(r);
+    if (!toastAction(res)) return;
+    // Ignore stale responses if the admin has navigated on.
+    if (rangeRef.current && (rangeRef.current.start !== r.start || rangeRef.current.end !== r.end)) return;
+    setEvents(res.events);
+  }, []);
+
   const { resolvedTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<EditTarget | null>(null);
@@ -88,11 +95,6 @@ export function ScheduleCalendar({
   // Filter state
   const [employeeFilter, setEmployeeFilter] = useState<string[]>([]); // ids
   const [departmentFilter, setDepartmentFilter] = useState<string[]>([]); // ids
-
-  const eventsById = useMemo(
-    () => Object.fromEntries(events.map((e) => [e.id, e])),
-    [events],
-  );
 
   // Filtered subset for the calendar.
   const filteredEvents = useMemo(() => {
@@ -174,18 +176,26 @@ export function ScheduleCalendar({
     isDark: resolvedTheme === "dark",
     calendars: calendarsConfig,
     callbacks: {
+      onRangeUpdate: (range) => {
+        const r = {
+          start: range.start.toPlainDate().toString(),
+          end: range.end.toPlainDate().toString(),
+        };
+        const prev = rangeRef.current;
+        if (prev && prev.start === r.start && prev.end === r.end) return;
+        rangeRef.current = r;
+        void refetch(r);
+      },
       onEventClick: (ev) => {
-        const src = eventsById[String(ev.id)];
+        const src = eventsRef.current.find((x) => x.id === String(ev.id));
         if (!src) return;
-        const { date: startDate, time: startTime } = splitDateTime(src.start);
-        const { time: endTime } = splitDateTime(src.end);
         setEdit({
           id: src.id,
           employeeId: src.employeeId,
           employeeName: src.employeeName,
-          date: startDate,
-          startTime,
-          endTime,
+          date: src.date,
+          startTime: src.startTime,
+          endTime: src.endTime,
           jobCode: src.jobCode,
           notes: src.notes,
         });
@@ -323,8 +333,10 @@ export function ScheduleCalendar({
         open={open}
         onOpenChange={handleOpenChange}
         employees={employees}
+        jobCodes={jobCodes}
         initialDate={initialDate}
         edit={edit}
+        onSaved={() => void refetch()}
       />
     </div>
   );

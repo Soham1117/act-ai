@@ -46,6 +46,12 @@ import {
   updateSchedule,
 } from "@/server/actions/schedules";
 import { toastAction } from "@/lib/toast-action";
+import { isOvernight } from "@/lib/schedule-rules";
+
+/** Surface non-blocking warnings (e.g. approved leave overlap) returned by the server. */
+function showWarnings(warnings: string[] | undefined) {
+  for (const w of warnings ?? []) toast.warning(w, { duration: 10_000 });
+}
 
 type Employee = { id: string; name: string; email: string | null };
 
@@ -76,12 +82,16 @@ export function ShiftDialog({
   employees,
   initialDate,
   edit,
+  jobCodes,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   employees: Employee[];
   initialDate?: string;
   edit?: EditTarget | null;
+  jobCodes: { code: string; title: string }[];
+  onSaved?: () => void;
 }) {
   const isEdit = Boolean(edit);
   const formKey = edit ? `edit:${edit.id}` : `new:${initialDate ?? ""}`;
@@ -97,6 +107,8 @@ export function ShiftDialog({
           employees={employees}
           initialDate={initialDate}
           edit={edit ?? null}
+          jobCodes={jobCodes}
+          onSaved={onSaved}
           onClose={() => onOpenChange(false)}
         />
       </DialogContent>
@@ -112,11 +124,15 @@ function ShiftForm({
   employees,
   initialDate,
   edit,
+  jobCodes,
+  onSaved,
   onClose,
 }: {
   employees: Employee[];
   initialDate?: string;
   edit: EditTarget | null;
+  jobCodes: { code: string; title: string }[];
+  onSaved?: () => void;
   onClose: () => void;
 }) {
   const isEdit = Boolean(edit);
@@ -167,6 +183,7 @@ function ShiftForm({
     }
   }, [mode, date, rangeStart, rangeEnd, weekdays]);
 
+  const overnight = Boolean(startTime && endTime && isOvernight(startTime, endTime));
   const totalShifts = expandedDates.length * Math.max(selected.length, 1);
 
   function toggleEmployee(id: string) {
@@ -195,8 +212,10 @@ function ShiftForm({
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (endTime <= startTime) {
-      toast.error("End time must be after start time.");
+    if (!startTime || !endTime || endTime === startTime) {
+      toast.error(
+        "Start and end can't be the same. For an overnight shift, set the end earlier than the start.",
+      );
       return;
     }
 
@@ -212,6 +231,8 @@ function ShiftForm({
         });
         if (!toastAction(res)) return;
         toast.success("Shift updated");
+        showWarnings(res.warnings);
+        onSaved?.();
         onClose();
         return;
       }
@@ -232,6 +253,8 @@ function ShiftForm({
         });
         if (!toastAction(res)) return;
         toast.success("Shift created");
+        showWarnings(res.warnings);
+        onSaved?.();
         onClose();
         return;
       }
@@ -254,6 +277,8 @@ function ShiftForm({
         `Created ${result.created} shift${result.created === 1 ? "" : "s"}` +
           (result.skipped ? ` · ${result.skipped} skipped (conflicts)` : ""),
       );
+      showWarnings(result.warnings);
+      onSaved?.();
       onClose();
     });
   }
@@ -265,6 +290,7 @@ function ShiftForm({
       if (!toastAction(res)) return;
       toast.success("Shift deleted");
       setConfirmDelete(false);
+      onSaved?.();
       onClose();
     });
   }
@@ -430,6 +456,12 @@ function ShiftForm({
           </div>
         )}
 
+        {overnight && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+            Overnight shift: ends at {endTime} the next day (+1 day).
+          </p>
+        )}
+
         {!isEdit && mode === "range" && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -505,9 +537,17 @@ function ShiftForm({
             <Label className="text-xs">Job code</Label>
             <Input
               value={jobCode}
+              list="shift-job-codes"
               onChange={(e) => setJobCode(e.target.value.toUpperCase())}
               className="font-mono"
             />
+            <datalist id="shift-job-codes">
+              {jobCodes.map((j) => (
+                <option key={j.code} value={j.code}>
+                  {j.title}
+                </option>
+              ))}
+            </datalist>
           </div>
         </div>
         <div className="space-y-1.5">

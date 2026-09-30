@@ -16,6 +16,10 @@ type Entry = {
   source: TimeEntrySource;
   kioskLabel: string | null;
   kioskSlug: string | null;
+  approvalNotes: string | null;
+  editReason: string | null;
+  edited: boolean;
+  autoClosed: boolean;
 };
 
 function fmtTime(iso: string | null) {
@@ -80,13 +84,35 @@ export function TimeEntriesList({ entries }: { entries: Entry[] }) {
             <span className="font-mono text-xs text-muted-foreground">{e.jobCode}</span>
             <SourceBadge source={e.source} kioskLabel={e.kioskLabel} />
             <div className="flex items-center gap-2">
-              <span className="font-mono text-sm tabular-nums">
+              <span
+                className={
+                  "font-mono text-sm tabular-nums" +
+                  (e.approvalStatus === "REJECTED" ? " text-muted-foreground line-through" : "")
+                }
+              >
                 {formatHours(e.totalWorkMin)}
               </span>
               <Badge variant={variant} className="text-[10px]">
                 {e.approvalStatus}
               </Badge>
             </div>
+            {e.approvalStatus === "REJECTED" && (
+              <p className="col-span-full rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                Rejected{e.approvalNotes ? `: ${e.approvalNotes}` : "."} Talk to an admin if a
+                correction is needed.
+              </p>
+            )}
+            {e.approvalStatus !== "REJECTED" && e.approvalNotes && (
+              <p className="col-span-full text-xs text-muted-foreground">
+                Admin note: {e.approvalNotes}
+              </p>
+            )}
+            {(e.edited || e.autoClosed) && e.editReason && (
+              <p className="col-span-full text-xs text-muted-foreground">
+                {e.autoClosed ? "Auto-closed (pending admin review). " : "Edited by an admin. "}
+                {e.editReason}
+              </p>
+            )}
           </li>
         );
       })}

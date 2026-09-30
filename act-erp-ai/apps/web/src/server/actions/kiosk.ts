@@ -1,12 +1,13 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createHash, randomBytes } from "crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireAdmin, requireUser } from "@/lib/auth";
+import { ReadOnlyAccountError, requireAdmin, requireWritableUser } from "@/lib/auth";
+import { READ_ONLY_MESSAGE } from "@/lib/access";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { audit } from "@/lib/audit";
 import { rateLimited } from "@/lib/rate-limit";
@@ -16,11 +17,27 @@ import {
   getKioskNetworkAccess,
   kioskNetworkDeniedMessage,
 } from "@/lib/kiosk-network";
-import { DEFAULT_KIOSK_PIN } from "@/lib/kiosk-pin";
-import { _clockIn, _clockOut, _startBreak, _endBreak } from "./time-clock";
+import { DEFAULT_KIOSK_PIN, isDefaultPin, validateNewPin } from "@/lib/kiosk-pin";
+import { parseKioskIdInput } from "@/lib/kiosk-id";
+import {
+  clearFailures,
+  isLocked,
+  minutesUntilUnlock,
+  recordFailure,
+} from "@/lib/kiosk-rate-limit";
+import { clientIpFromHeaders } from "@/lib/ip-network";
+import { isStaleShift } from "@/lib/time-rules";
+import { _clockIn, _clockOut, _startBreak, _endBreak } from "@/server/time-core";
 
 const COOKIE = "act_kiosk";
 const KIOSK_TTL_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PIN_FAIL_WINDOW_MS = 5 * 60_000;
+const PIN_MAX_FAILS_PER_EMPLOYEE = 5;
+const PIN_MAX_FAILS_PER_IP = 20;
+const NOT_ACTIVE_MESSAGE = "This account isn't active for kiosk use. Please see an admin.";
+const NOT_ACTIVATED_MESSAGE =
+  "This kiosk session is not active on this device. An admin must activate the kiosk here first.";
 
 function hash(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -144,14 +161,38 @@ export async function getActiveKioskSession(slug: string) {
   return session;
 }
 
+/**
+ * Validates the device cookie and slides the 90-day expiry forward on use, so
+ * a kiosk that is used regularly never silently expires.
+ */
 async function requireActiveKiosk(slug: string) {
   const session = await getActiveKioskSession(slug);
   if (!session) return null;
+  const now = new Date();
+  const extend = session.expiresAt.getTime() - now.getTime() < (KIOSK_TTL_DAYS - 1) * DAY_MS;
+  const expiresAt = extend ? new Date(now.getTime() + KIOSK_TTL_DAYS * DAY_MS) : session.expiresAt;
   await db.kioskSession.update({
     where: { id: session.id },
-    data: { lastUsedAt: new Date() },
+    data: { lastUsedAt: now, ...(extend ? { expiresAt } : {}) },
   });
-  return session;
+  if (extend) {
+    try {
+      const jar = await cookies();
+      const raw = jar.get(COOKIE)?.value;
+      if (raw) {
+        jar.set(COOKIE, raw, {
+          httpOnly: true,
+          secure: await requestUsesHttps(),
+          sameSite: "lax",
+          path: "/",
+          maxAge: KIOSK_TTL_DAYS * 24 * 60 * 60,
+        });
+      }
+    } catch {
+      // Cookie writes aren't possible outside a server action; DB expiry still slid.
+    }
+  }
+  return { ...session, expiresAt };
 }
 
 /** Sign out of the kiosk on this device. */
@@ -173,8 +214,12 @@ type KioskLookupOk = {
   profilePic: string | null;
   jobTitle: string | null;
   hasPin: boolean;
+  /** PIN is still the temporary default; must be changed before punching. */
+  mustChangePin: boolean;
   status: "ACTIVE" | "ON_BREAK" | "OUT";
   activeEntryId: string | null;
+  /** An earlier shift was left open >16h; clocking in closes it and flags it for review. */
+  staleShift: boolean;
 };
 
 export type KioskRosterEmployee = {
@@ -186,6 +231,11 @@ export type KioskRosterEmployee = {
   status: "ACTIVE" | "ON_BREAK" | "OUT";
 };
 
+/** An open entry older than the max shift length is treated as "out" (clock-in will close it). */
+function openEntry<T extends { clockIn: Date }>(e: T | undefined): T | undefined {
+  return e && !isStaleShift(e.clockIn) ? e : undefined;
+}
+
 /** Active employees for the kiosk picker (grid/list). Requires device cookie. */
 export async function kioskListEmployees(
   slug: string,
@@ -193,9 +243,7 @@ export async function kioskListEmployees(
   try {
     const session = await requireActiveKiosk(slug);
     if (!session) {
-      return fail(
-        "This kiosk session is not active on this device. An admin must activate the kiosk here first.",
-      );
+      return fail(NOT_ACTIVATED_MESSAGE);
     }
     if (rateLimited(`roster:${session.id}`, 20, 60_000)) {
       return fail("Too many refreshes — wait a moment and try again.");
@@ -214,7 +262,7 @@ export async function kioskListEmployees(
           where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
           take: 1,
           orderBy: { clockIn: "desc" },
-          select: { status: true },
+          select: { status: true, clockIn: true },
         },
       },
     });
@@ -226,7 +274,10 @@ export async function kioskListEmployees(
         name: row.name,
         profilePic: row.profilePic,
         jobTitle: row.jobTitle,
-        status: (row.timeEntries[0]?.status ?? "OUT") as "ACTIVE" | "ON_BREAK" | "OUT",
+        status: (openEntry(row.timeEntries[0])?.status ?? "OUT") as
+          | "ACTIVE"
+          | "ON_BREAK"
+          | "OUT",
       })),
     });
   } catch (err) {
@@ -244,28 +295,57 @@ export async function kioskLookup(
     // rotates egress IPs; the device cookie is the ongoing trust boundary.
     const session = await requireActiveKiosk(slug);
     if (!session) {
-      return fail(
-        "This kiosk session is not active on this device. An admin must activate the kiosk here first.",
-      );
+      return fail(NOT_ACTIVATED_MESSAGE);
     }
     if (rateLimited(`lookup:${session.id}`, 30, 60_000)) {
       return fail("Too many lookups — wait a moment and try again.");
     }
-    const employee = await db.employee.findUnique({
-      where: { employeeId: employeeId.trim() },
-      include: {
-        timeEntries: {
-          where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
-          take: 1,
-          orderBy: { clockIn: "desc" },
-        },
+    const parsed = parseKioskIdInput(employeeId);
+    if (parsed.kind === "empty") {
+      return fail("Enter your employee ID or the digits at the end of it.");
+    }
+    const include = {
+      timeEntries: {
+        where: { status: { in: ["ACTIVE", "ON_BREAK"] as ("ACTIVE" | "ON_BREAK")[] } },
+        take: 1,
+        orderBy: { clockIn: "desc" as const },
       },
-    });
+    };
+    let employee;
+    if (parsed.kind === "full") {
+      employee = await db.employee.findFirst({
+        where: { employeeId: { equals: parsed.id, mode: "insensitive" } },
+        include,
+      });
+    } else {
+      const candidates = await db.employee.findMany({
+        where: {
+          OR: [
+            { employeeId: { endsWith: `-${parsed.padded}` } },
+            { employeeId: { endsWith: `-${parsed.digits}` } },
+          ],
+        },
+        include,
+        take: 10,
+      });
+      const active = candidates.filter((c) => c.employmentStatus === "ACTIVE");
+      const pool = active.length > 0 ? active : candidates;
+      if (pool.length > 1) {
+        return fail(
+          "More than one employee matches those digits. Enter the full ID or pick yourself from the list.",
+        );
+      }
+      employee = pool[0] ?? null;
+    }
     if (!employee) {
       return fail("Unknown employee ID. Check the ID and try again.");
     }
+    if (employee.employmentStatus !== "ACTIVE") {
+      return fail(NOT_ACTIVE_MESSAGE);
+    }
 
-    const active = employee.timeEntries[0];
+    const rawOpen = employee.timeEntries[0];
+    const active = openEntry(rawOpen);
     return ok({
       id: employee.id,
       employeeId: employee.employeeId,
@@ -274,64 +354,98 @@ export async function kioskLookup(
       profilePic: employee.profilePic,
       jobTitle: employee.jobTitle,
       hasPin: !!employee.kioskPinHash,
+      mustChangePin: await isDefaultPin(employee.kioskPinHash),
       status: (active?.status ?? "OUT") as "ACTIVE" | "ON_BREAK" | "OUT",
       activeEntryId: active?.id ?? null,
+      staleShift: !!rawOpen && !active,
     });
   } catch (err) {
     return failFromUnknown(err);
   }
 }
 
+const pinSchema = z.string().regex(/^\d{4,6}$/, "PIN must be 4-6 digits");
+
 const actionSchema = z.object({
   slug: z.string(),
   employeeId: z.string(),
-  pin: z.string().regex(/^\d{4,6}$/, "PIN must be 4-6 digits"),
+  pin: pinSchema,
   action: z.enum(["CLOCK_IN", "CLOCK_OUT", "START_BREAK", "END_BREAK"]),
 });
 
+/**
+ * Shared PIN gate for kiosk actions. Only FAILED attempts count toward the
+ * limit (keyed by kiosk session + employee, and by kiosk session + IP);
+ * successful punches never do.
+ */
+async function authenticateKioskPin(
+  sessionId: string,
+  employee: { id: string; kioskPinHash: string | null; employmentStatus: string },
+  pin: string,
+  slug: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (employee.employmentStatus !== "ACTIVE") {
+    return { ok: false, error: NOT_ACTIVE_MESSAGE };
+  }
+  const ip = clientIpFromHeaders(await headers()) ?? "unknown";
+  const empKey = `pin:${sessionId}:${employee.id}`;
+  const ipKey = `pinip:${sessionId}:${ip}`;
+  if (isLocked(empKey, PIN_MAX_FAILS_PER_EMPLOYEE) || isLocked(ipKey, PIN_MAX_FAILS_PER_IP)) {
+    const mins = Math.max(minutesUntilUnlock(empKey), minutesUntilUnlock(ipKey), 1);
+    return {
+      ok: false,
+      error: `Too many incorrect PIN attempts. Try again in about ${mins} minute${mins === 1 ? "" : "s"}.`,
+    };
+  }
+  if (!employee.kioskPinHash) {
+    return {
+      ok: false,
+      error: "No kiosk PIN is set for this employee. Ask an admin to reset your PIN.",
+    };
+  }
+  const pinOk = await verifyPassword(pin, employee.kioskPinHash);
+  if (!pinOk) {
+    recordFailure(empKey, PIN_FAIL_WINDOW_MS);
+    recordFailure(ipKey, PIN_FAIL_WINDOW_MS);
+    await audit({
+      action: "kiosk.pin_failed",
+      resource: `Employee:${employee.id}`,
+      diff: { kioskSlug: slug, ip },
+    });
+    return {
+      ok: false,
+      error: "Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.",
+    };
+  }
+  clearFailures(empKey);
+  return { ok: true };
+}
+
 export async function kioskAction(
   input: z.infer<typeof actionSchema>,
-): Promise<ActionResult<{ id: string | null; status: string | null }>> {
+): Promise<ActionResult<{ id: string | null; status: string | null; autoClosed?: boolean }>> {
   try {
     const session = await requireActiveKiosk(input.slug);
-    if (!session) {
-      return fail(
-        "This kiosk session is not active on this device. An admin must activate the kiosk here first.",
-      );
-    }
+    if (!session) return fail(NOT_ACTIVATED_MESSAGE);
     const data = actionSchema.parse(input);
 
-    const employee = await db.employee.findUnique({
-      where: { employeeId: data.employeeId },
+    const employee = await db.employee.findFirst({
+      where: { employeeId: { equals: data.employeeId.trim(), mode: "insensitive" } },
     });
     if (!employee) {
       return fail("Unknown employee ID. Check the ID and try again.");
     }
+    const auth = await authenticateKioskPin(session.id, employee, data.pin, session.slug);
+    if (!auth.ok) return fail(auth.error);
 
-    const limitKey = `pin:${session.id}:${employee.id}`;
-    if (rateLimited(limitKey, 5, 5 * 60_000)) {
-      return fail("Too many incorrect attempts. Try again in a few minutes.");
-    }
-    if (!employee.kioskPinHash) {
-      return fail(
-        "No kiosk PIN is set for this employee. Set one in Settings before using the kiosk.",
-      );
-    }
-    const pinOk = await verifyPassword(data.pin, employee.kioskPinHash);
-    if (!pinOk) {
-      await audit({
-        action: "kiosk.pin_failed",
-        resource: `Employee:${employee.id}`,
-        diff: { kioskSlug: session.slug },
-      });
-      return fail(
-        "Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.",
-      );
+    // Still on the temporary PIN: the punch must not proceed until it is changed.
+    if (data.pin === DEFAULT_KIOSK_PIN || (await isDefaultPin(employee.kioskPinHash))) {
+      return fail("You must set a new PIN before you can clock in or out.");
     }
 
     const meta = { kioskSlug: session.slug ?? input.slug, kioskLabel: session.label };
 
-    let entryResult: ActionResult<{ id: string; status: string }>;
+    let entryResult: Awaited<ReturnType<typeof _clockIn>>;
     switch (data.action) {
       case "CLOCK_IN":
         entryResult = await _clockIn(employee.id, undefined, "KIOSK", meta);
@@ -359,13 +473,69 @@ export async function kioskAction(
         kioskSlug: session.slug,
         kioskLabel: session.label,
         timeEntryId: entryResult.id,
+        autoClosedShift: entryResult.autoClosed ?? false,
       },
     });
 
     revalidatePath(`/kiosk/${input.slug}`);
     revalidatePath("/admin/time-tracking");
     revalidatePath("/admin");
-    return ok({ id: entryResult.id, status: entryResult.status });
+    return ok({
+      id: entryResult.id,
+      status: entryResult.status,
+      autoClosed: entryResult.autoClosed ?? false,
+    });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+const changePinSchema = z.object({
+  slug: z.string(),
+  employeeId: z.string(),
+  currentPin: pinSchema,
+  newPin: z.string(),
+});
+
+/**
+ * Forced PIN change at the kiosk. Only allowed while the employee's PIN is
+ * still the temporary default (set on account creation or admin reset).
+ */
+export async function kioskChangePin(
+  input: z.infer<typeof changePinSchema>,
+): Promise<ActionResult> {
+  try {
+    const session = await requireActiveKiosk(input.slug);
+    if (!session) return fail(NOT_ACTIVATED_MESSAGE);
+    const data = changePinSchema.parse(input);
+
+    const employee = await db.employee.findFirst({
+      where: { employeeId: { equals: data.employeeId.trim(), mode: "insensitive" } },
+    });
+    if (!employee) return fail("Unknown employee ID. Check the ID and try again.");
+
+    const auth = await authenticateKioskPin(session.id, employee, data.currentPin, session.slug);
+    if (!auth.ok) return fail(auth.error);
+
+    if (!(await isDefaultPin(employee.kioskPinHash))) {
+      return fail(
+        "Your PIN has already been changed. Change it from Settings after signing in to the portal.",
+      );
+    }
+    const weak = validateNewPin(data.newPin);
+    if (weak) return fail(weak);
+
+    await db.employee.update({
+      where: { id: employee.id },
+      data: { kioskPinHash: await hashPassword(data.newPin) },
+    });
+    await audit({
+      action: "kiosk.pin_changed",
+      resource: `Employee:${employee.id}`,
+      actor: { id: employee.userId, email: employee.email },
+      diff: { forced: true, kioskSlug: session.slug },
+    });
+    return ok();
   } catch (err) {
     return failFromUnknown(err);
   }
@@ -414,15 +584,20 @@ export async function setMyKioskPin(
   currentPassword: string,
   pin: string,
 ): Promise<ActionResult> {
-  const user = await requireUser();
+  let user;
+  try {
+    user = await requireWritableUser();
+  } catch (err) {
+    if (err instanceof ReadOnlyAccountError) return fail(READ_ONLY_MESSAGE);
+    throw err;
+  }
   if (!user.employeeId) {
     return fail(
       "Your account has no employee profile yet. Ask an admin to create one before you can set a kiosk PIN.",
     );
   }
-  if (!/^\d{4,6}$/.test(pin)) {
-    return fail("PIN must be 4–6 digits. Enter a new PIN and try again.");
-  }
+  const weak = validateNewPin(pin);
+  if (weak) return fail(weak);
 
   try {
     const row = await db.user.findUnique({

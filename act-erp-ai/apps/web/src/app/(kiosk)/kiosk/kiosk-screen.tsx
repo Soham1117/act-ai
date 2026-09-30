@@ -24,6 +24,7 @@ import { Logo } from "@/components/logo";
 import {
   endKioskSession,
   kioskAction,
+  kioskChangePin,
   kioskListEmployees,
   kioskLookup,
   type KioskRosterEmployee,
@@ -42,12 +43,17 @@ type LookupMatch = ActionOk<{
   profilePic: string | null;
   jobTitle: string | null;
   hasPin: boolean;
+  mustChangePin: boolean;
   status: "ACTIVE" | "ON_BREAK" | "OUT";
   activeEntryId: string | null;
+  staleShift: boolean;
 }>;
 
-const EMPLOYEE_ID_PREFIX = "EMP-2026-";
+type KioskActionName = "CLOCK_IN" | "CLOCK_OUT" | "START_BREAK" | "END_BREAK";
+
 const ROSTER_REFRESH_MS = 60_000;
+/** Auto-cancel an employee selection after this long without any keypress or tap. */
+const IDLE_CANCEL_MS = 30_000;
 
 type ViewMode = "grid" | "list";
 
@@ -72,12 +78,18 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
   const [showIdEntry, setShowIdEntry] = useState(false);
-  const [input, setInput] = useState(EMPLOYEE_ID_PREFIX);
+  const [input, setInput] = useState("");
   const [match, setMatch] = useState<LookupMatch | null>(null);
   const [pin, setPin] = useState("");
+  const [step, setStep] = useState<"pin" | "newpin">("pin");
+  const [pendingAction, setPendingAction] = useState<KioskActionName | null>(null);
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [activity, setActivity] = useState(0);
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   const pinRef = useRef<HTMLInputElement>(null);
+  const newPinRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const loadRoster = useCallback(async () => {
@@ -97,25 +109,39 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
   }, []);
 
   useEffect(() => {
-    void loadRoster();
+    // First load is deferred one tick so state is only ever set from a callback,
+    // never synchronously in the effect body.
+    const first = setTimeout(() => void loadRoster(), 0);
     const id = setInterval(() => void loadRoster(), ROSTER_REFRESH_MS);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
   }, [loadRoster]);
 
+  const resetSelection = useCallback(() => {
+    setMatch(null);
+    setPin("");
+    setStep("pin");
+    setPendingAction(null);
+    setNewPin("");
+    setConfirmPin("");
+    setTimeout(() => searchRef.current?.focus(), 0);
+  }, []);
+
+  // Idle auto-cancel: only runs while an employee is selected (never on the
+  // roster), restarts on every keypress/tap (activity), and is paused while
+  // a request is in flight.
   useEffect(() => {
-    if (!match) return;
-    const id = setTimeout(() => {
-      setMatch(null);
-      setPin("");
-      setTimeout(() => searchRef.current?.focus(), 0);
-    }, 12_000);
+    if (!match || pending) return;
+    const id = setTimeout(resetSelection, IDLE_CANCEL_MS);
     return () => clearTimeout(id);
-  }, [match]);
+  }, [match, pending, activity, resetSelection]);
 
   useEffect(() => {
-    if (match) pinRef.current?.focus();
+    if (match) (step === "newpin" ? newPinRef : pinRef).current?.focus();
     else if (showIdEntry) inputRef.current?.focus();
-  }, [match, pending, showIdEntry]);
+  }, [match, pending, showIdEntry, step]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -134,39 +160,92 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
       if (!toastAction(r)) return;
       setMatch(r);
       setPin("");
+      setStep("pin");
+      setPendingAction(null);
+      setNewPin("");
+      setConfirmPin("");
       setShowIdEntry(false);
-      setInput(EMPLOYEE_ID_PREFIX);
+      setInput("");
     });
   }
 
   function submitId(value: string) {
     const trimmed = value.trim().toUpperCase();
-    if (!trimmed || trimmed === EMPLOYEE_ID_PREFIX) return;
+    if (!trimmed) return;
     selectByEmployeeId(trimmed);
   }
 
-  function act(action: "CLOCK_IN" | "CLOCK_OUT" | "START_BREAK" | "END_BREAK") {
+  async function runAction(m: LookupMatch, action: KioskActionName, pinValue: string) {
+    const res = await kioskAction({ slug, employeeId: m.employeeId, pin: pinValue, action });
+    if (!toastAction(res)) {
+      setPin("");
+      return false;
+    }
+    const labels: Record<KioskActionName, string> = {
+      CLOCK_IN: "Clocked in",
+      CLOCK_OUT: "Clocked out",
+      START_BREAK: "Break started",
+      END_BREAK: "Break ended",
+    };
+    toast.success(`${labels[action]} · ${m.name}`);
+    if (res.autoClosed) {
+      toast.warning(
+        "Your previous shift was left open more than 16 hours. It was closed automatically and flagged for an admin to review.",
+        { duration: 10_000 },
+      );
+    }
+    resetSelection();
+    void loadRoster();
+    return true;
+  }
+
+  function act(action: KioskActionName) {
     if (!match) return;
     if (!/^\d{4,6}$/.test(pin)) {
       toast.error("Enter your 4-6 digit PIN");
       return;
     }
+    if (match.mustChangePin) {
+      // Temporary PIN: choose a new one before the punch proceeds.
+      setPendingAction(action);
+      setNewPin("");
+      setConfirmPin("");
+      setStep("newpin");
+      return;
+    }
     startTransition(async () => {
-      const res = await kioskAction({ slug, employeeId: match.employeeId, pin, action });
-      if (!toastAction(res)) {
-        setPin("");
+      await runAction(match, action, pin);
+    });
+  }
+
+  function submitNewPin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!match || !pendingAction) return;
+    if (!/^\d{4,6}$/.test(newPin)) {
+      toast.error("Your new PIN must be 4 to 6 digits.");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      toast.error("The two PINs do not match. Re-enter them.");
+      return;
+    }
+    startTransition(async () => {
+      const changed = await kioskChangePin({
+        slug,
+        employeeId: match.employeeId,
+        currentPin: pin,
+        newPin,
+      });
+      if (!toastAction(changed)) {
+        // A wrong temporary PIN sends them back to re-enter it; a weak PIN stays here.
+        if (/incorrect pin|too many/i.test(changed.error)) {
+          setStep("pin");
+          setPin("");
+        }
         return;
       }
-      const labels: Record<typeof action, string> = {
-        CLOCK_IN: "Clocked in",
-        CLOCK_OUT: "Clocked out",
-        START_BREAK: "Break started",
-        END_BREAK: "Break ended",
-      };
-      toast.success(`${labels[action]} · ${match.name}`);
-      setMatch(null);
-      setPin("");
-      void loadRoster();
+      toast.success("PIN updated. Use your new PIN from now on.");
+      await runAction(match, pendingAction, newPin);
     });
   }
 
@@ -359,7 +438,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                             className="h-8 px-2 text-xs"
                             onClick={() => {
                               setShowIdEntry(false);
-                              setInput(EMPLOYEE_ID_PREFIX);
+                              setInput("");
                             }}
                           >
                             <X className="h-3.5 w-3.5" />
@@ -385,18 +464,14 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                               setInput(e.target.value.toUpperCase().slice(0, 24))
                             }
                             disabled={pending}
-                            placeholder="EMP-2026-0001"
+                            placeholder="Full ID or last digits"
                             className="h-14 text-center font-mono text-xl tabular-nums tracking-[0.18em]"
                           />
                           <Button
                             type="submit"
                             size="lg"
                             className="h-11 w-full text-sm"
-                            disabled={
-                              pending ||
-                              input.trim().length === 0 ||
-                              input.trim().toUpperCase() === EMPLOYEE_ID_PREFIX
-                            }
+                            disabled={pending || input.trim().length === 0}
                           >
                             {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Continue
@@ -414,7 +489,11 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.96 }}
               >
-                <Card className="shadow-sm">
+                <Card
+                  className="shadow-sm"
+                  onKeyDownCapture={() => setActivity((n) => n + 1)}
+                  onPointerDownCapture={() => setActivity((n) => n + 1)}
+                >
                   <CardContent className="space-y-5 p-6">
                     <div className="flex items-center gap-4">
                       <span className="relative h-14 w-14 overflow-hidden rounded-full ring-2 ring-border">
@@ -441,15 +520,75 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                       </Badge>
                     </div>
 
-                    {!match.hasPin ? (
+                    {match.staleShift && step === "pin" && (
+                      <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-center text-xs text-amber-700 dark:text-amber-300">
+                        Your last shift was never clocked out. Clocking in now will close it and
+                        flag it for an admin to review.
+                      </p>
+                    )}
+
+                    {step === "newpin" ? (
+                      <form onSubmit={submitNewPin} className="space-y-3">
+                        <p className="text-center text-sm font-medium">Choose your new PIN</p>
+                        <p className="text-center text-xs text-muted-foreground">
+                          You are using a temporary PIN. Pick 4 to 6 digits that are not easy to
+                          guess (no 1234 or 0000), then your punch will go through.
+                        </p>
+                        <Input
+                          ref={newPinRef}
+                          type="password"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          maxLength={6}
+                          value={newPin}
+                          onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          disabled={pending}
+                          placeholder="New PIN"
+                          className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                        />
+                        <Input
+                          type="password"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          maxLength={6}
+                          value={confirmPin}
+                          onChange={(e) =>
+                            setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 6))
+                          }
+                          disabled={pending}
+                          placeholder="Confirm PIN"
+                          className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                        />
+                        <Button
+                          type="submit"
+                          size="lg"
+                          className="h-12 w-full text-sm"
+                          disabled={pending || newPin.length < 4 || confirmPin.length < 4}
+                        >
+                          {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Save PIN and continue
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="lg"
+                          className="h-10 w-full text-xs"
+                          disabled={pending}
+                          onClick={resetSelection}
+                        >
+                          <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
+                        </Button>
+                      </form>
+                    ) : !match.hasPin ? (
                       <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-center text-xs text-destructive">
-                        No kiosk PIN set for this account. Set one in Settings before
-                        clocking in/out here.
+                        No kiosk PIN set for this account. Ask an admin to reset your PIN.
                       </p>
                     ) : (
                       <div className="space-y-1.5">
                         <label className="block text-center text-xs text-muted-foreground">
-                          Enter your PIN to confirm
+                          {match.mustChangePin
+                            ? "Enter the temporary PIN from your admin"
+                            : "Enter your PIN to confirm"}
                         </label>
                         <Input
                           ref={pinRef}
@@ -468,7 +607,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className={cn("grid grid-cols-2 gap-2", step === "newpin" && "hidden")}>
                       {match.status === "OUT" && (
                         <Button
                           size="lg"
@@ -518,10 +657,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                         size="lg"
                         className="col-span-2 h-10 text-xs"
                         disabled={pending}
-                        onClick={() => {
-                          setMatch(null);
-                          setPin("");
-                        }}
+                        onClick={resetSelection}
                       >
                         <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
                       </Button>

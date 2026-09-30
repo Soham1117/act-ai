@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmployeeScheduleCalendar } from "./employee-schedule-calendar";
 import { addDays, startOfMonth, endOfMonth } from "date-fns";
+import { isOvernight, shiftDateTimes } from "@/lib/schedule-rules";
 
 export const metadata = { title: "Schedule" };
 
@@ -16,8 +17,9 @@ export default async function ScheduleViewPage() {
     try { return await p; } catch { return fallback; }
   };
 
-  const start = startOfMonth(new Date());
-  const end = endOfMonth(addDays(new Date(), 60));
+  // Initial window; the calendar fetches other months on demand.
+  const start = addDays(startOfMonth(new Date()), -7);
+  const end = addDays(endOfMonth(new Date()), 7);
 
   const schedules = await safe(
     db.schedule.findMany({
@@ -27,19 +29,26 @@ export default async function ScheduleViewPage() {
     [],
   );
 
-  const events = schedules.map((s) => ({
-    id: s.id,
-    title: s.jobCode,
-    start: `${s.date.toISOString().split("T")[0]} ${s.startTime}`,
-    end: `${s.date.toISOString().split("T")[0]} ${s.endTime}`,
-    description: s.notes ?? "",
-  }));
+  const events = schedules.map((s) => {
+    const { start: evStart, end: evEnd } = shiftDateTimes(
+      s.date.toISOString().split("T")[0]!,
+      s.startTime,
+      s.endTime,
+    );
+    return {
+      id: s.id,
+      title: `${s.jobCode}${isOvernight(s.startTime, s.endTime) ? " (+1 day)" : ""}`,
+      start: evStart,
+      end: evEnd,
+      description: s.notes ?? "",
+    };
+  });
 
   return (
     <>
       <PageHeader
         title="My schedule"
-        description={`${schedules.length} shift${schedules.length === 1 ? "" : "s"} ahead.`}
+        description="Your shifts. Use the calendar arrows to view other months. Overnight shifts show +1 day."
       />
       <Card>
         <CardContent className="p-2 sm:p-4">

@@ -11,8 +11,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Activity, Clock, MonitorSmartphone } from "lucide-react";
 import { TimeEntriesList } from "./time-entries-list";
-import { formatBusinessTime, formatHours } from "@/lib/format";
-import { startOfMonth, startOfWeek } from "date-fns";
+import { businessDateOnly, formatBusinessTime, formatHours } from "@/lib/format";
+import { isStaleShift, startOfBusinessMonth, startOfBusinessWeek } from "@/lib/time-rules";
 
 export const metadata = { title: "Timesheet" };
 
@@ -41,9 +41,13 @@ export default async function TimeTrackingPage() {
     );
   }
 
-  const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const monthStart = startOfMonth(now);
+  // Week (Mon-Sun) and month boundaries are business-timezone calendar days,
+  // matching how TimeEntry.date is stored.
+  const today = businessDateOnly();
+  const weekStart = startOfBusinessWeek(today);
+  const monthStart = startOfBusinessMonth(today);
+  // Rejected entries never count toward hours.
+  const counted = { approvalStatus: { not: "REJECTED" as const } };
 
   const [active, recent, weekAgg, monthAgg] = await Promise.all([
     safe(
@@ -57,27 +61,28 @@ export default async function TimeTrackingPage() {
       db.timeEntry.findMany({
         where: { employeeId },
         orderBy: [{ date: "desc" }, { clockIn: "desc" }],
-        take: 25,
+        take: 50,
       }),
       [],
     ),
     safe(
       db.timeEntry.aggregate({
         _sum: { totalWorkMin: true },
-        where: { employeeId, date: { gte: weekStart } },
+        where: { employeeId, date: { gte: weekStart }, ...counted },
       }),
       { _sum: { totalWorkMin: 0 } },
     ),
     safe(
       db.timeEntry.aggregate({
         _sum: { totalWorkMin: true },
-        where: { employeeId, date: { gte: monthStart } },
+        where: { employeeId, date: { gte: monthStart }, ...counted },
       }),
       { _sum: { totalWorkMin: 0 } },
     ),
   ]);
 
   const onBreak = active?.status === "ON_BREAK";
+  const staleActive = active ? isStaleShift(active.clockIn) : false;
 
   return (
     <>
@@ -96,6 +101,12 @@ export default async function TimeTrackingPage() {
               <p className="mt-1 text-base font-semibold">
                 {active ? (onBreak ? "On break" : "Clocked in") : "Clocked out"}
               </p>
+              {active && staleActive && (
+                <p className="mt-0.5 text-[11px] font-medium text-destructive">
+                  This shift has been open over 16 hours. It will be closed and sent to an
+                  admin for review at your next punch.
+                </p>
+              )}
               {active && (
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   Since {formatBusinessTime(active.clockIn)}
@@ -125,7 +136,7 @@ export default async function TimeTrackingPage() {
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
             <CardTitle className="text-base">Recent entries</CardTitle>
-            <CardDescription>Last 25 sessions.</CardDescription>
+            <CardDescription>Last 50 sessions. Rejected entries don&apos;t count toward your hours.</CardDescription>
           </div>
           <Badge variant="outline" className="gap-1.5 text-[11px]">
             <MonitorSmartphone className="h-3 w-3" />
@@ -147,6 +158,10 @@ export default async function TimeTrackingPage() {
               source: e.source,
               kioskLabel: e.kioskLabel,
               kioskSlug: e.kioskSlug,
+              approvalNotes: e.approvalNotes,
+              editReason: e.editReason,
+              edited: e.lastEditedById !== null,
+              autoClosed: e.autoClosed,
             }))}
           />
         </CardContent>

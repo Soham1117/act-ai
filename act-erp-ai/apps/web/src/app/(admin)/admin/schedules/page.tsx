@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { addDays, startOfMonth, endOfMonth } from "date-fns";
+import { isOvernight, shiftDateTimes } from "@/lib/schedule-rules";
 
 export const metadata = { title: "Schedules" };
 
@@ -11,10 +12,12 @@ export default async function SchedulesPage() {
     try { return await p; } catch { return fallback; }
   };
 
-  const start = startOfMonth(new Date());
-  const end = endOfMonth(addDays(new Date(), 60));
+  // Initial window only. The calendar fetches any other month (past or
+  // future) on demand as the admin navigates.
+  const start = addDays(startOfMonth(new Date()), -7);
+  const end = addDays(endOfMonth(new Date()), 7);
 
-  const [schedules, employees, departments] = await Promise.all([
+  const [schedules, employees, departments, jobCodes] = await Promise.all([
     safe(
       db.schedule.findMany({
         where: { date: { gte: start, lte: end } },
@@ -54,15 +57,25 @@ export default async function SchedulesPage() {
       }),
       [],
     ),
+    safe(
+      db.jobCode.findMany({
+        where: { isActive: true },
+        orderBy: { code: "asc" },
+        select: { code: true, title: true },
+      }),
+      [],
+    ),
   ]);
 
   const events = schedules.map((s) => {
-    const dateStr = s.date.toISOString().split("T")[0];
+    const dateStr = s.date.toISOString().split("T")[0]!;
+    const over = isOvernight(s.startTime, s.endTime);
+    const { start: evStart, end: evEnd } = shiftDateTimes(dateStr, s.startTime, s.endTime);
     return {
       id: s.id,
-      title: `${s.employee.name} · ${s.jobCode}`,
-      start: `${dateStr} ${s.startTime}`,
-      end: `${dateStr} ${s.endTime}`,
+      title: `${s.employee.name} · ${s.jobCode}${over ? " (+1 day)" : ""}`,
+      start: evStart,
+      end: evEnd,
       description: s.notes ?? "",
       employeeId: s.employeeId,
       employeeName: s.employee.name,
@@ -70,6 +83,10 @@ export default async function SchedulesPage() {
       departmentName: s.employee.department?.name ?? null,
       jobCode: s.jobCode,
       notes: s.notes,
+      date: dateStr,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      overnight: over,
     };
   });
 
@@ -85,7 +102,7 @@ export default async function SchedulesPage() {
     <>
       <PageHeader
         title="Schedules"
-        description={`${schedules.length} shifts in the next 60 days · ${employees.length} active employees`}
+        description={`${employees.length} active employees. Use the calendar arrows or date picker to view and edit any month, past or future. Shifts that end before they start run overnight.`}
       />
       <Card>
         <CardContent className="p-2 sm:p-4">
@@ -93,6 +110,7 @@ export default async function SchedulesPage() {
             events={events}
             employees={employeesForPicker}
             departments={departments}
+            jobCodes={jobCodes}
           />
         </CardContent>
       </Card>
