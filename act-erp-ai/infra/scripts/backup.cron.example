@@ -1,0 +1,11 @@
+# Nightly database backup at 02:15 UTC (evening Central). Install with `crontab -e`
+# as the user that is in the docker group. Adjust paths/bucket.
+#
+# The script prints one OK line on success and an ERROR line (non-zero exit)
+# on failure; both go to the log file. Check it, or wire the exit code to a
+# monitor (e.g. `... && curl -fsS https://hc-ping.com/<uuid>` for healthchecks.io).
+MAILTO=""
+15 2 * * * BACKUP_S3_URI=s3://YOUR-BACKUP-BUCKET/act-erp /home/ubuntu/act-erp-ai/infra/scripts/backup-db.sh >> /var/log/act-erp-backup.log 2>&1
+
+# Restore test: do this by hand once after setting up, then monthly (see DEPLOY-LITE.md):
+#   infra/scripts/restore-db.sh s3://YOUR-BACKUP-BUCKET/act-erp/db/<year>/<newest>.dump.gz

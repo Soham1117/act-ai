@@ -6,8 +6,23 @@ an agent that retrieves **only from documents they are allowed to see**, over bo
 unstructured text (vector + full-text) and structured data (scoped SQL), with a
 PDF visualizer that highlights cited passages.
 
-> Status: **design locked, pre-build.** This document is the source of truth for
-> the architecture. The build order lives in `IMPLEMENTATION_PLAN.md`.
+> Status: **built; the AI half is shipped but switched off in production.**
+> This document is the source of truth for the architecture. The build order
+> lives in `IMPLEMENTATION_PLAN.md`.
+>
+> Two things changed after the original design was locked; read §16 before
+> §3 and §13:
+> 1. **The AI feature is behind `AI_ENABLED` (default `false`)** and is not
+>    deployed today. The core ERP (employees, HR, time tracking, leave,
+>    payroll, benefits, documents) is the production workload.
+> 2. **Deployment is a single box, not ECS.** `infra/aws/DEPLOY-LITE.md` +
+>    `infra/docker-compose.prod-lite.yml` (Lightsail, Docker Compose, Caddy for
+>    TLS) is the live path. §3/§13 describe the full ECS Fargate design, which
+>    remains the target for when the AI services ship — its runbook is
+>    `infra/aws/DEPLOY.md`.
+>
+> §16 also covers the ERP-side subsystems built after the original spec
+> (kiosk time clock, login 2FA, hire-packet import, benefits mirror).
 
 ---
 
@@ -130,9 +145,30 @@ act-erp-ai/
 pgvector columns are declared in Prisma (`Unsupported("vector(1024)")` or raw SQL
 migration). Embeddings standardize on **1024 dims** (Titan v2 / Cohere).
 
-### Business tables (existing ERP — unchanged)
-Users, Employee, Department, time/leave/requests/etc. (see current erp schema).
+### Business tables (existing ERP)
+Users, Employee, Department, JobCode, time/schedules/leave/requests/
+reimbursements/payroll/documents/notifications/audit (see `schema.prisma`).
 `User.role ∈ {ADMIN, EMPLOYEE}` remains the role primitive.
+
+Tables added after the original spec (details in §16):
+
+```
+LoginChallenge     -- pending emailed-2FA sign-in: codeHash, attempts, expiresAt, consumedAt
+KioskSession       -- a registered shop-floor terminal: slug, cookieHash, revokedAt
+HirePacketImport   -- uploaded new-hire ZIP + proposed field changes awaiting admin review
+PayrollCalendar    -- pay periods (start/end/payDate/status)
+BenefitPlan / BenefitPlanTier / BenefitEnrollment / RetirementElection
+                   -- read-only mirror of broker-administered benefits (no PHI,
+                      no dependent identities, no 401(k) balances)
+CompanyDefault     -- org-wide settings
+ChatSession / ChatMessage
+                   -- persisted Assistant threads; `citations` JSON keeps [E#]
+                      chips working after reload (AI feature only)
+```
+
+`User` also gained `username` (login identifier for employees with no company
+mailbox) and `personalEmail` (2FA destination for admins with no Employee row);
+`User.email` is now **optional**.
 
 ### New AI tables
 
@@ -369,7 +405,7 @@ No EC2, no GPU, no Lambda, no Redis, no ElastiCache.
 ## 14. Local development
 
 Single `infra/docker-compose.yml`:
-- `postgres` (pgvector image) — schema applied via Prisma migrate.
+- `postgres` (pgvector image) — schema applied with `prisma db push` (this project has no migration history; see apps/web/README.md).
 - `web`, `agent`, `worker`.
 - `localstack` — S3 + SQS locally, mirroring AWS without cloud access.
 

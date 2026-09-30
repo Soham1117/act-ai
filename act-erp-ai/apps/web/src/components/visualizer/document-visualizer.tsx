@@ -19,9 +19,17 @@ interface Props {
 }
 
 export function DocumentVisualizer({ pdfUrl, pageDimensions, jumpTarget, highlights = {} }: Props) {
-  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
-  const [state, setState] = useState<State>("loading");
-  const [numPages, setNumPages] = useState(0);
+  // Load result is keyed by pdfUrl, so the loading state is derived rather than
+  // reset synchronously inside the effect.
+  const [loaded, setLoaded] = useState<{
+    url: string;
+    doc: PDFDocumentProxy | null;
+    numPages: number;
+  } | null>(null);
+  const current = loaded?.url === pdfUrl ? loaded : null;
+  const doc = current?.doc ?? null;
+  const numPages = current?.numPages ?? 0;
+  const state: State = !current ? "loading" : current.doc ? "ready" : "error";
   const [width, setWidth] = useState(0);
   const [near, setNear] = useState<Set<number>>(new Set([1, 2, 3]));
 
@@ -30,16 +38,13 @@ export function DocumentVisualizer({ pdfUrl, pageDimensions, jumpTarget, highlig
 
   useEffect(() => {
     let cancelled = false;
-    setState("loading");
-    setDoc(null);
     loadPdf(pdfUrl)
       .then((d) => {
-        if (cancelled) return;
-        setDoc(d);
-        setNumPages(d.numPages);
-        setState("ready");
+        if (!cancelled) setLoaded({ url: pdfUrl, doc: d, numPages: d.numPages });
       })
-      .catch(() => !cancelled && setState("error"));
+      .catch(() => {
+        if (!cancelled) setLoaded({ url: pdfUrl, doc: null, numPages: 0 });
+      });
     return () => {
       cancelled = true;
     };
@@ -77,14 +82,19 @@ export function DocumentVisualizer({ pdfUrl, pageDimensions, jumpTarget, highlig
     return () => io.disconnect();
   }, [state, numPages]);
 
+  const jumpPage = jumpTarget?.page;
+  const jumpNonce = jumpTarget?.nonce;
   useEffect(() => {
-    if (!jumpTarget || state !== "ready" || width === 0) return;
-    const el = pageRefs.current.get(jumpTarget.page);
+    if (jumpPage === undefined || state !== "ready" || width === 0) return;
+    const el = pageRefs.current.get(jumpPage);
     if (!el) return;
-    setNear((prev) => new Set(prev).add(jumpTarget.page).add(jumpTarget.page + 1));
-    const id = requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "start" }));
-    return () => cancelAnimationFrame(id);
-  }, [jumpTarget?.nonce, jumpTarget?.page, state, width]);
+    const raf = requestAnimationFrame(() => {
+      setNear((prev) => new Set(prev).add(jumpPage).add(jumpPage + 1));
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(raf);
+    // jumpNonce re-triggers the jump for the same page (repeat citation click).
+  }, [jumpNonce, jumpPage, state, width]);
 
   const pages = useMemo(() => Array.from({ length: numPages }, (_, i) => i + 1), [numPages]);
 

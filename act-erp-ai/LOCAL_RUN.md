@@ -48,7 +48,7 @@ matching the AI service default).
 ## 4. Create an admin (one time)
 ```bash
 cd apps/web
-pnpm tsx --env-file=.env.local scripts/create-admin.ts you@actools.com 'StrongPass#1' 'Your Name'
+pnpm tsx --env-file=.env.local scripts/create-admin.ts you@actools.com 'StrongPass#1' --name 'Your Name' --with-employee
 ```
 
 ## 5. Walk through it

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requireUser, requireWritableUser } from "@/lib/auth";
 import { aiEnabled } from "@/lib/features";
 import { uploadFile } from "@/lib/storage";
 import { enqueueIngestion } from "@/lib/queue";
@@ -32,6 +32,8 @@ function detectKind(fileName: string, mimeType: string) {
   return EXT_TO_KIND[ext] ?? null;
 }
 
+const MAX_KNOWLEDGE_BYTES = 40 * 1024 * 1024;
+
 const uploadSchema = z.object({
   title: z.string().min(2),
   /** Admin only: PRIVATE (with grants) or ORG (everyone). Employees forced PRIVATE+self. */
@@ -54,8 +56,8 @@ export async function uploadKnowledgeDocument(
       "The knowledge base is not enabled on this deployment. Contact an admin if you expected it to be available.",
     );
   }
-  const user = await requireUser();
   try {
+    const user = await requireWritableUser();
     const data = uploadSchema.parse(input);
     const isAdmin = user.role === "ADMIN";
 
@@ -69,6 +71,11 @@ export async function uploadKnowledgeDocument(
     const visibility = isAdmin ? data.visibility : "PRIVATE";
     const ownerUserId = isAdmin ? null : user.id;
     const grantUserIds = isAdmin && visibility === "PRIVATE" ? data.grantUserIds : [];
+
+    if (file.bytes.byteLength === 0) return fail("The file is empty.");
+    if (file.bytes.byteLength > MAX_KNOWLEDGE_BYTES) {
+      return fail(`File is too large (max ${MAX_KNOWLEDGE_BYTES / (1024 * 1024)} MB).`);
+    }
 
     const buf = Buffer.from(file.bytes);
     const checksum = createHash("sha256").update(buf).digest("hex");
@@ -124,11 +131,69 @@ export async function uploadKnowledgeDocument(
       diff: { title: data.title, fileKind, visibility, grants: grantUserIds.length },
     });
 
-    await enqueueIngestion(doc.id);
+    const enqueued = await enqueueOrMarkFailed(doc.id);
 
     revalidatePath("/admin/knowledge");
     revalidatePath("/dashboard/knowledge");
+    if (!enqueued) {
+      return fail(
+        "The file was saved but processing could not be started (the processing queue is unavailable). An admin can retry it from the Knowledge base page.",
+      );
+    }
     return ok({ id: doc.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+/**
+ * Enqueue ingestion; if the queue is unreachable, mark the document FAILED with
+ * a reason (instead of leaving it QUEUED forever) so it is visible and retryable.
+ */
+async function enqueueOrMarkFailed(documentId: string): Promise<boolean> {
+  try {
+    await enqueueIngestion(documentId);
+    return true;
+  } catch (e) {
+    console.error("[knowledge] enqueue failed for", documentId, e);
+    await db.knowledgeDocument
+      .update({
+        where: { id: documentId },
+        data: {
+          status: "FAILED",
+          failureReason: "Could not start processing (queue unavailable). Use Retry.",
+        },
+      })
+      .catch((e2) => console.error("[knowledge] could not mark FAILED", e2));
+    return false;
+  }
+}
+
+/** Retry ingestion of a FAILED (or stuck QUEUED) document (admin). */
+export async function retryKnowledgeDocument(documentId: string): Promise<ActionResult> {
+  if (!aiEnabled) return fail("The knowledge base is not enabled on this deployment.");
+  try {
+    const user = await requireUser();
+    if (user.role !== "ADMIN") return fail("Only admins can retry document processing.");
+    const doc = await db.knowledgeDocument.findUnique({
+      where: { id: documentId },
+      select: { id: true, status: true },
+    });
+    if (!doc) return fail("That document no longer exists.");
+    if (doc.status === "READY") return fail("That document is already processed.");
+    await db.knowledgeDocument.update({
+      where: { id: documentId },
+      data: { status: "QUEUED", failureReason: null },
+    });
+    const enqueued = await enqueueOrMarkFailed(documentId);
+    await audit({
+      action: "knowledge.retry",
+      resource: `KnowledgeDocument:${documentId}`,
+      diff: { previousStatus: doc.status, enqueued },
+    });
+    revalidatePath("/admin/knowledge");
+    if (!enqueued) return fail("The processing queue is still unavailable. Try again shortly.");
+    return ok();
   } catch (err) {
     return failFromUnknown(err);
   }

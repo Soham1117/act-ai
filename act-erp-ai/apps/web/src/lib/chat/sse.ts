@@ -18,7 +18,15 @@ export async function* streamChat(
     body: JSON.stringify({ messages, selected_doc_ids: selectedDocIds }),
     signal,
   });
-  if (!res.ok || !res.body) throw new Error(`chat failed: ${res.status}`);
+  if (!res.ok || !res.body) {
+    // The gateway returns { error } with a user-friendly message (e.g. 502
+    // when the agent service is down).
+    const friendly = await res
+      .json()
+      .then((j: { error?: unknown }) => (typeof j?.error === "string" ? j.error : null))
+      .catch(() => null);
+    throw new Error(friendly ?? `chat failed: ${res.status}`);
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

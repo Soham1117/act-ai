@@ -1,4 +1,14 @@
+import { cache } from "react";
 import { db } from "@/lib/db";
+import {
+  addDateOnlyDays,
+  businessDayKey,
+  dateOnlyMonthLabel,
+  dateOnlyShortLabel,
+  dateOnlyWeekStart,
+  scheduledRange,
+  startOfBusinessWeek,
+} from "@/lib/business-time";
 import {
   addDays,
   differenceInHours,
@@ -6,15 +16,38 @@ import {
   endOfDay,
   format,
   startOfDay,
-  startOfMonth,
-  startOfWeek,
   subDays,
   subMonths,
   subWeeks,
 } from "date-fns";
 
-const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-  try { return await p; } catch { return fallback; }
+/** A shift open longer than this is considered stale ("needs attention"), not live. */
+export const STALE_SHIFT_HOURS = 16;
+
+/** Per-request collector of failed dashboard queries (React cache = one per render). */
+const failureCollector = cache(() => ({ labels: [] as string[] }));
+
+/** Names of dashboard queries that failed during this request. Read AFTER awaiting the data. */
+export function dashboardFailures(): string[] {
+  return failureCollector().labels;
+}
+
+/**
+ * Run a dashboard query; on failure log it server-side, remember it so the page
+ * can show a visible "some data failed to load" banner, and return the fallback.
+ */
+export const safe = async <T,>(p: Promise<T>, fallback: T, label = "query"): Promise<T> => {
+  try {
+    return await p;
+  } catch (e) {
+    console.error(`[dashboard] ${label} failed`, e);
+    try {
+      failureCollector().labels.push(label);
+    } catch {
+      /* outside a request scope */
+    }
+    return fallback;
+  }
 };
 
 /** Hours by department for the last `weeks` weeks. */
@@ -34,7 +67,7 @@ export async function hoursByDepartmentWeekly(weeks = 4) {
 
   const buckets = new Map<string, Record<string, number>>();
   for (const r of rows) {
-    const wk = format(startOfWeek(r.date, { weekStartsOn: 1 }), "MMM d");
+    const wk = dateOnlyShortLabel(dateOnlyWeekStart(r.date));
     const dept = r.employee.department?.name ?? "Other";
     const bucket = buckets.get(wk) ?? {};
     bucket[dept] = (bucket[dept] ?? 0) + r.totalWorkMin / 60;
@@ -59,7 +92,7 @@ export async function hoursTrendWeekly(weeks = 12) {
   );
   const buckets = new Map<string, number>();
   for (const r of rows) {
-    const wk = format(startOfWeek(r.date, { weekStartsOn: 1 }), "MMM d");
+    const wk = dateOnlyShortLabel(dateOnlyWeekStart(r.date));
     buckets.set(wk, (buckets.get(wk) ?? 0) + r.totalWorkMin / 60);
   }
   return Array.from(buckets.entries()).map(([week, hours]) => ({
@@ -139,21 +172,22 @@ export async function headcountGrowth() {
 
   const months: { month: string; count: number }[] = [];
   for (let i = 71; i >= 0; i--) {
-    const m = startOfMonth(subMonths(new Date(), i));
+    const nowKey = businessDayKey();
+    const m = new Date(Date.UTC(nowKey.getUTCFullYear(), nowKey.getUTCMonth() - i, 1));
     const count = employees.filter((e) => {
       if (!e.dateOfHire) return false;
       if (e.dateOfHire > m) return false;
       if (e.terminationDate && e.terminationDate <= m) return false;
       return true;
     }).length;
-    months.push({ month: format(m, "MMM yy"), count });
+    months.push({ month: dateOnlyMonthLabel(m), count });
   }
   return months;
 }
 
 /** Top N employees by hours this week. */
 export async function topEmployeesThisWeek(n = 10) {
-  const start = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const start = businessDayKey(startOfBusinessWeek());
   const grouped = await safe(
     db.timeEntry.groupBy({
       by: ["employeeId"],
@@ -203,32 +237,50 @@ export async function recentActivity() {
 // Extra admin charts (appended at bottom of admin home)
 // ──────────────────────────────────────────────────────────────────────
 
-/** Clocked-in vs scheduled-right-now snapshot. */
+/**
+ * Open time entries split into live (started within STALE_SHIFT_HOURS) and
+ * stale (open far longer than any real shift — a forgotten clock-out).
+ */
+export async function openShiftSnapshot() {
+  const cutoff = new Date(Date.now() - STALE_SHIFT_HOURS * 3600 * 1000);
+  const rows = await safe(
+    db.timeEntry.findMany({
+      where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
+      select: { employeeId: true, clockIn: true },
+    }),
+    [] as Array<{ employeeId: string; clockIn: Date }>,
+    "open shifts",
+  );
+  const live = new Set<string>();
+  const stale = new Set<string>();
+  for (const r of rows) (r.clockIn >= cutoff ? live : stale).add(r.employeeId);
+  return { live, stale };
+}
+
+/** Clocked-in vs scheduled-right-now snapshot (business-timezone aware, overnight-safe). */
 export async function clockedVsScheduled() {
   const now = new Date();
-  const today = startOfDay(now);
-  const tomorrow = endOfDay(now);
-  const [clockedInRows, scheduledToday] = await Promise.all([
+  // Include yesterday so overnight shifts that started yesterday are still "now".
+  const todayKey = businessDayKey(now);
+  const [open, scheduledRows] = await Promise.all([
+    openShiftSnapshot(),
     safe(
-      db.timeEntry.findMany({
-        where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
-        select: { employeeId: true },
+      db.schedule.findMany({
+        where: { date: { gte: addDateOnlyDays(todayKey, -1), lte: todayKey } },
+        select: { employeeId: true, date: true, startTime: true, endTime: true, employee: { select: { employmentStatus: true } } },
       }),
-      [] as Array<{ employeeId: string }>,
-    ),
-    safe(
-      db.scheduledWork.findMany({
-        where: { date: { gte: today, lte: tomorrow } },
-        select: { employeeId: true, startTime: true, endTime: true },
-      }),
-      [] as Array<{ employeeId: string; startTime: Date; endTime: Date }>,
+      [] as Array<{ employeeId: string; date: Date; startTime: string; endTime: string; employee: { employmentStatus: string } }>,
+      "schedules",
     ),
   ]);
-  const clockedIds = new Set(clockedInRows.map((r) => r.employeeId));
-  const scheduledNow = scheduledToday.filter(
-    (s) => s.startTime <= now && s.endTime >= now,
-  );
-  const scheduledIds = new Set(scheduledNow.map((s) => s.employeeId));
+  const scheduledToday = scheduledRows.filter((s) => s.date.getTime() === todayKey.getTime());
+  const scheduledIds = new Set<string>();
+  for (const s of scheduledRows) {
+    if (s.employee.employmentStatus !== "ACTIVE") continue;
+    const r = scheduledRange(s.date, s.startTime, s.endTime);
+    if (r && r.start <= now && r.end >= now) scheduledIds.add(s.employeeId);
+  }
+  const clockedIds = open.live;
   const noShow = [...scheduledIds].filter((id) => !clockedIds.has(id)).length;
   const unscheduledClockedIn = [...clockedIds].filter((id) => !scheduledIds.has(id)).length;
   return {
@@ -237,20 +289,23 @@ export async function clockedVsScheduled() {
     noShow,
     unscheduledClockedIn,
     scheduledTodayTotal: scheduledToday.length,
+    /** Open shifts older than STALE_SHIFT_HOURS — need admin attention. */
+    staleOpen: open.stale.size,
   };
 }
 
 /** Per-department headcount + last-7-day utilization (worked / scheduled %). */
 export async function departmentUtilization() {
-  const since = subDays(startOfDay(new Date()), 7);
+  const since = addDateOnlyDays(businessDayKey(), -7);
   const [depts, employees, entries, scheduled] = await Promise.all([
-    safe(db.department.findMany({ select: { id: true, name: true } }), []),
+    safe(db.department.findMany({ select: { id: true, name: true } }), [], "departments"),
     safe(
       db.employee.findMany({
         where: { employmentStatus: "ACTIVE" },
         select: { id: true, departmentId: true },
       }),
       [] as Array<{ id: string; departmentId: string | null }>,
+      "employees",
     ),
     safe(
       db.timeEntry.findMany({
@@ -258,13 +313,15 @@ export async function departmentUtilization() {
         select: { totalWorkMin: true, employeeId: true },
       }),
       [] as Array<{ totalWorkMin: number; employeeId: string }>,
+      "time entries",
     ),
     safe(
-      db.scheduledWork.findMany({
-        where: { date: { gte: since } },
-        select: { startTime: true, endTime: true, totalBreakMin: true, employeeId: true },
+      db.schedule.findMany({
+        where: { date: { gte: since, lte: businessDayKey() } },
+        select: { date: true, startTime: true, endTime: true, employeeId: true },
       }),
-      [] as Array<{ startTime: Date; endTime: Date; totalBreakMin: number; employeeId: string }>,
+      [] as Array<{ date: Date; startTime: string; endTime: string; employeeId: string }>,
+      "schedules",
     ),
   ]);
   const deptByEmp = new Map(employees.map((e) => [e.id, e.departmentId]));
@@ -283,7 +340,9 @@ export async function departmentUtilization() {
   for (const s of scheduled) {
     const d = deptByEmp.get(s.employeeId);
     if (!d) continue;
-    const mins = differenceInMinutes(s.endTime, s.startTime) - (s.totalBreakMin ?? 0);
+    const range = scheduledRange(s.date, s.startTime, s.endTime);
+    if (!range) continue;
+    const mins = differenceInMinutes(range.end, range.start);
     scheduledByDept.set(d, (scheduledByDept.get(d) ?? 0) + Math.max(0, mins) / 60);
   }
   return depts
@@ -352,7 +411,7 @@ export async function payrollCostTrend(periods = 6) {
 
 /** Top employees this week by hours, with weekly threshold for OT highlighting. */
 export async function overtimeRiskWeek(n = 8) {
-  const start = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const start = businessDayKey(startOfBusinessWeek());
   const grouped = await safe(
     db.timeEntry.groupBy({
       by: ["employeeId"],
@@ -492,7 +551,7 @@ export async function requestsFunnel90() {
       byType.set(k, { type: k, pending: 0, approved: 0, rejected: 0, other: 0, ttls: [] });
     const b = byType.get(k)!;
     if (r.status === "PENDING" || r.status === "PROCESSING") b.pending++;
-    else if (r.status === "APPROVED") b.approved++;
+    else if (r.status === "COMPLETED") b.approved++; // RequestStatus has no APPROVED; COMPLETED is the success outcome
     else if (r.status === "REJECTED") b.rejected++;
     else b.other++;
     if (r.status !== "PENDING" && r.status !== "PROCESSING") {

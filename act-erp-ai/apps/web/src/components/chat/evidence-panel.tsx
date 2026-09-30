@@ -14,27 +14,33 @@ interface DocView {
 }
 
 export function EvidencePanel({ citation, onClose }: { citation: CitationInfo | null; onClose: () => void }) {
-  const [view, setView] = useState<DocView | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [nonce, setNonce] = useState(0);
+  // The fetch result is keyed by document id, so "loading" is derived (the
+  // result is for another document / not here yet) instead of being set
+  // synchronously inside the effect. `nonce` bumps on every completed load so
+  // the viewer re-jumps to the cited page.
+  const docId = citation?.document_id;
+  const [result, setResult] = useState<{ docId: string; view: DocView | null; nonce: number } | null>(null);
 
   useEffect(() => {
-    if (!citation) return;
+    if (!docId) return;
     let cancelled = false;
-    setLoading(true);
-    fetch(`/api/knowledge/${citation.document_id}/view`)
+    fetch(`/api/knowledge/${docId}/view`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("view failed"))))
       .then((d: DocView) => {
-        if (cancelled) return;
-        setView(d);
-        setNonce((n) => n + 1);
+        if (!cancelled) setResult((prev) => ({ docId, view: d, nonce: (prev?.nonce ?? 0) + 1 }));
       })
-      .catch(() => !cancelled && setView(null))
-      .finally(() => !cancelled && setLoading(false));
+      .catch(() => {
+        if (!cancelled) setResult((prev) => ({ docId, view: null, nonce: (prev?.nonce ?? 0) + 1 }));
+      });
     return () => {
       cancelled = true;
     };
-  }, [citation?.document_id]);
+  }, [docId]);
+
+  const current = docId && result?.docId === docId ? result : null;
+  const loading = !!docId && !current;
+  const view = current?.view ?? null;
+  const nonce = current?.nonce ?? 0;
 
   if (!citation) return null;
 

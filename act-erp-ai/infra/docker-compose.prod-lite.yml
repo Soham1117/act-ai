@@ -31,10 +31,53 @@ services:
         - env_prod
     restart: unless-stopped
     env_file: ../apps/web/.env.prod
+    environment:
+      # Business timezone for any server-local date math. The DB stores UTC
+      # regardless; lib/business-time.ts is explicit about the zone, this is
+      # defence in depth (and makes server logs read in local time).
+      TZ: America/Chicago
+      # Listen on all interfaces so the healthcheck (and Caddy) can reach the
+      # server; Docker otherwise sets HOSTNAME to the container id.
+      HOSTNAME: 0.0.0.0
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      # node:22-slim has no curl/wget; use Node's built-in fetch.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     # No published port either — Caddy is the only public entrypoint.
+
+  # One-shot admin tooling (schema push, create-admin, data scripts). Not started
+  # by `up`; run on demand. Built from the Dockerfile's `build` stage, which (unlike
+  # the slim runtime image) contains the Prisma CLI, tsx, scripts/ and src/.
+  #
+  #   docker compose -f docker-compose.prod-lite.yml run --rm tools prisma db push
+  #   docker compose -f docker-compose.prod-lite.yml run --rm tools tsx scripts/<script>.ts [args]
+  tools:
+    profiles: ["tools"]
+    build:
+      context: ../apps/web
+      dockerfile: ../../infra/Dockerfile.web
+      target: build
+      secrets:
+        - env_prod
+    image: act-erp-lite-tools
+    entrypoint: ["pnpm", "exec"]
+    working_dir: /app
+    env_file: ../apps/web/.env.prod
+    environment:
+      TZ: America/Chicago
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   caddy:
     image: caddy:2-alpine
@@ -46,6 +89,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    # Deliberately NOT gated on web's healthcheck: the live Caddyfile also
+    # serves other sites, and a web/DB hiccup must not keep Caddy (TLS for
+    # everything) from starting.
     depends_on:
       - web
 

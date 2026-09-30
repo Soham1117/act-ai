@@ -3,7 +3,10 @@
 #
 # Overwrite X-Forwarded-For / X-Real-IP with the TCP peer so kiosk IP
 # allowlisting cannot be confused by client-supplied XFF junk.
-erp.yourcompany.com {
+persona.americancompletiontools.com {
+	# HSTS: browsers refuse plain HTTP for this host for a year. No includeSubDomains/preload —
+	# other sites share this Caddy. Other security headers are set by the app (next.config.ts).
+	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy web:3000 {
 		header_up X-Forwarded-For {remote_host}
 		header_up X-Real-IP {remote_host}

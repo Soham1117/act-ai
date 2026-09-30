@@ -9,8 +9,16 @@ import { getAvatarUrl } from "@/lib/format";
 
 export const metadata = { title: "My team" };
 
-export default async function MyTeamPage() {
+const PEERS_PAGE_SIZE = 30;
+
+export default async function MyTeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const user = await requireUser();
+  const sp = await searchParams;
+  const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
   if (!user.employeeId) return <p className="text-sm text-muted-foreground">No employee record.</p>;
 
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
@@ -29,6 +37,13 @@ export default async function MyTeamPage() {
   );
   if (!me) return <p className="text-sm text-muted-foreground">Employee record missing.</p>;
 
+  const peerWhere = me.departmentId
+    ? { departmentId: me.departmentId, id: { not: me.id }, employmentStatus: "ACTIVE" as const }
+    : null;
+  const peerTotal = peerWhere ? await safe(db.employee.count({ where: peerWhere }), 0) : 0;
+  const peerPages = Math.max(1, Math.ceil(peerTotal / PEERS_PAGE_SIZE));
+  const page = Math.min(requestedPage, peerPages);
+
   const [reports, peers] = await Promise.all([
     safe(
       db.employee.findMany({
@@ -38,16 +53,13 @@ export default async function MyTeamPage() {
       }),
       [],
     ),
-    me.departmentId
+    peerWhere
       ? safe(
           db.employee.findMany({
-            where: {
-              departmentId: me.departmentId,
-              id: { not: me.id },
-              employmentStatus: "ACTIVE",
-            },
-            orderBy: { name: "asc" },
-            take: 25,
+            where: peerWhere,
+            orderBy: [{ name: "asc" }, { id: "asc" }],
+            skip: (page - 1) * PEERS_PAGE_SIZE,
+            take: PEERS_PAGE_SIZE,
           }),
           [],
         )
@@ -58,7 +70,7 @@ export default async function MyTeamPage() {
     <>
       <PageHeader
         title="My team"
-        description={`${me.department?.name ?? "—"} · ${peers.length + 1} people`}
+        description={`${me.department?.name ?? "—"} · ${peerTotal + 1} people`}
       />
 
       {/* Org tree: supervisor → me → reports */}
@@ -67,6 +79,7 @@ export default async function MyTeamPage() {
           <Section title="Reports to">
             <PersonCard
               id={me.supervisor.id}
+              anchor="supervisor"
               name={me.supervisor.name}
               email={me.supervisor.email}
               jobTitle={me.supervisor.jobTitle}
@@ -80,6 +93,7 @@ export default async function MyTeamPage() {
         <Section title="Me">
           <PersonCard
             id={me.id}
+            anchor="me"
             name={me.name}
             email={me.email}
             jobTitle={me.jobTitle}
@@ -96,6 +110,7 @@ export default async function MyTeamPage() {
                 <PersonCard
                   key={r.id}
                   id={r.id}
+                  anchor="report"
                   name={r.name}
                   email={r.email}
                   jobTitle={r.jobTitle}
@@ -110,7 +125,7 @@ export default async function MyTeamPage() {
         {peers.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Department peers ({peers.length})</CardTitle>
+              <CardTitle className="text-base">Department peers ({peerTotal})</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -118,6 +133,7 @@ export default async function MyTeamPage() {
                   <PersonCard
                     key={p.id}
                     id={p.id}
+                    anchor="peer"
                     name={p.name}
                     email={p.email}
                     jobTitle={p.jobTitle}
@@ -125,6 +141,27 @@ export default async function MyTeamPage() {
                   />
                 ))}
               </div>
+              {peerPages > 1 && (
+                <nav className="mt-4 flex items-center justify-between text-xs" aria-label="Peers pagination">
+                  {page > 1 ? (
+                    <Link href={`/dashboard/team?page=${page - 1}`} className="underline">
+                      Previous
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="text-muted-foreground">
+                    Page {page} of {peerPages}
+                  </span>
+                  {page < peerPages ? (
+                    <Link href={`/dashboard/team?page=${page + 1}`} className="underline">
+                      Next
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+                </nav>
+              )}
             </CardContent>
           </Card>
         )}
@@ -144,6 +181,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function PersonCard({
   id,
+  anchor,
   name,
   email,
   jobTitle,
@@ -152,6 +190,8 @@ function PersonCard({
   tone,
 }: {
   id: string;
+  /** Section prefix so the same person appearing in two sections never duplicates a DOM id. */
+  anchor: string;
   name: string;
   email: string | null;
   jobTitle?: string | null;
@@ -165,7 +205,8 @@ function PersonCard({
     "";
   return (
     <Link
-      href={`/dashboard/team#${id}`}
+      id={`${anchor}-${id}`}
+      href={`#${anchor}-${id}`}
       className={`flex items-center gap-3 rounded-md border p-3 transition-colors hover:bg-muted/50 ${ring}`}
     >
       <span className="relative h-10 w-10 overflow-hidden rounded-full bg-muted">

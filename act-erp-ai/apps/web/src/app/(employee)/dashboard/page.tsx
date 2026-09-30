@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { loadLeaveBalances } from "@/lib/leave-balance-db";
 import { requireUser } from "@/lib/auth";
 import { PageHeader, StatCard } from "@/components/page-header";
 import {
@@ -24,22 +25,19 @@ import {
   ClipboardList,
   TrendingUp,
 } from "lucide-react";
-import { formatBusinessTime, formatHours } from "@/lib/format";
+import { BUSINESS_TIME_ZONE, formatBusinessTime, formatHours } from "@/lib/format";
 import {
-  addDays,
-  differenceInMinutes,
-  endOfDay,
-  endOfMonth,
-  format,
-  formatDistanceToNow,
-  getDaysInMonth,
-  startOfDay,
-  startOfMonth,
-  startOfWeek,
-  subDays,
-  subMonths,
-  subWeeks,
-} from "date-fns";
+  addDateOnlyDays,
+  businessDayKey,
+  businessHour,
+  dateOnlyShortLabel,
+  dateOnlyWeekStart,
+  scheduledInstant,
+  scheduledRange,
+  startOfBusinessMonth,
+  startOfBusinessWeek,
+} from "@/lib/business-time";
+import { differenceInMinutes, formatDistanceToNow, subMonths } from "date-fns";
 import {
   LeaveBalanceDonut,
   PaySnapshotChart,
@@ -56,11 +54,14 @@ export default async function EmployeeHomePage() {
   const user = await requireUser();
   const employeeId = user.employeeId;
   const now = new Date();
-  const todayStart = startOfDay(now);
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
-  const next7End = endOfDay(addDays(now, 7));
+  // Schedule/time-entry `date` columns are date-only (UTC midnight) values for
+  // the BUSINESS (Central) calendar day, so every boundary below is date-only.
+  const todayStart = businessDayKey(now);
+  const weekStart = businessDayKey(startOfBusinessWeek(now));
+  const monthStart = new Date(Date.UTC(todayStart.getUTCFullYear(), todayStart.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(todayStart.getUTCFullYear(), todayStart.getUTCMonth() + 1, 0));
+  const next7End = addDateOnlyDays(todayStart, 7);
+  const dk = (d: Date) => d.toISOString().slice(0, 10);
 
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
     try {
@@ -191,22 +192,22 @@ export default async function EmployeeHomePage() {
   // by the "Scheduled vs worked · this week" chart further down.
   const byDay = new Map<string, number>();
   for (let i = 0; i < 7; i++) {
-    byDay.set(format(addDays(weekStart, i), "yyyy-MM-dd"), 0);
+    byDay.set(dk(addDateOnlyDays(weekStart, i)), 0);
   }
   for (const e of weeklyEntries) {
-    const k = format(e.date, "yyyy-MM-dd");
+    const k = dk(e.date);
     byDay.set(k, (byDay.get(k) ?? 0) + e.totalWorkMin);
   }
 
   // Per-day buckets for the monthly hours chart. One entry per calendar day
   // of the current month. `weekday` lets the chart color each day distinctly.
-  const monthDays = getDaysInMonth(now);
+  const monthDays = monthEnd.getUTCDate();
   const byDayMonth = new Map<string, number>();
   for (let i = 0; i < monthDays; i++) {
-    byDayMonth.set(format(addDays(monthStart, i), "yyyy-MM-dd"), 0);
+    byDayMonth.set(dk(addDateOnlyDays(monthStart, i)), 0);
   }
   for (const e of monthlyEntries) {
-    const k = format(e.date, "yyyy-MM-dd");
+    const k = dk(e.date);
     if (byDayMonth.has(k)) {
       byDayMonth.set(k, (byDayMonth.get(k) ?? 0) + e.totalWorkMin);
     }
@@ -214,21 +215,21 @@ export default async function EmployeeHomePage() {
   const monthlyChartData = Array.from(byDayMonth.entries()).map(([k, mins]) => {
     const d = new Date(k);
     return {
-      day: format(d, "d"),
+      day: String(d.getUTCDate()),
       hours: Math.round((mins / 60) * 10) / 10,
-      weekday: d.getDay(),
+      weekday: d.getUTCDay(),
     };
   });
 
   // ─── Extra employee analytics (appended at bottom) ────────────────
-  const trendStart = subWeeks(weekStart, 7); // last 8 weeks incl current
+  const trendStart = addDateOnlyDays(weekStart, -49); // last 8 weeks incl current
   const payStart = subMonths(now, 6);
-  const punctualityStart = subDays(todayStart, 30);
+  const punctualityStart = addDateOnlyDays(todayStart, -30);
 
   const [
     trendEntries,
     weekScheduled,
-    nextLeaves,
+    leaveBalances,
     payCalendars,
     payEntries,
     employeeRate,
@@ -247,38 +248,16 @@ export default async function EmployeeHomePage() {
       : Promise.resolve([] as Array<{ date: Date; totalWorkMin: number }>),
     employeeId
       ? safe(
-          db.scheduledWork.findMany({
-            where: { employeeId, date: { gte: weekStart, lte: addDays(weekStart, 7) } },
-            select: { date: true, startTime: true, endTime: true, totalBreakMin: true },
+          db.schedule.findMany({
+            where: { employeeId, date: { gte: weekStart, lte: addDateOnlyDays(weekStart, 6) } },
+            select: { date: true, startTime: true, endTime: true },
           }),
-          [] as Array<{
-            date: Date;
-            startTime: Date;
-            endTime: Date;
-            totalBreakMin: number;
-          }>,
+          [] as Array<{ date: Date; startTime: string; endTime: string }>,
         )
-      : Promise.resolve(
-          [] as Array<{
-            date: Date;
-            startTime: Date;
-            endTime: Date;
-            totalBreakMin: number;
-          }>,
-        ),
-    employeeId
-      ? safe(
-          db.leaveRequest.findMany({
-            where: {
-              employeeId,
-              status: "APPROVED",
-              endDate: { gte: todayStart },
-            },
-            select: { totalDays: true },
-          }),
-          [] as Array<{ totalDays: number }>,
-        )
-      : Promise.resolve([] as Array<{ totalDays: number }>),
+      : Promise.resolve([] as Array<{ date: Date; startTime: string; endTime: string }>),
+    // Leave balance from the shared policy-based loader (same source as the
+    // Leave page and admin views).
+    employeeId ? safe(loadLeaveBalances(employeeId), null) : Promise.resolve(null),
     safe(
       db.payrollCalendar.findMany({
         orderBy: { payPeriodEnd: "desc" },
@@ -320,6 +299,7 @@ export default async function EmployeeHomePage() {
           db.timeEntry.findMany({
             where: { employeeId, date: { gte: punctualityStart, lte: todayStart } },
             select: { date: true, clockIn: true },
+            orderBy: { clockIn: "asc" },
           }),
           [] as Array<{ date: Date; clockIn: Date }>,
         )
@@ -329,13 +309,10 @@ export default async function EmployeeHomePage() {
   // 8-week personal hours trend
   const trendBuckets = new Map<string, number>();
   for (let i = 7; i >= 0; i--) {
-    trendBuckets.set(
-      format(startOfWeek(subWeeks(now, i), { weekStartsOn: 1 }), "MMM d"),
-      0,
-    );
+    trendBuckets.set(dateOnlyShortLabel(addDateOnlyDays(weekStart, -7 * i)), 0);
   }
   for (const e of trendEntries) {
-    const wk = format(startOfWeek(e.date, { weekStartsOn: 1 }), "MMM d");
+    const wk = dateOnlyShortLabel(dateOnlyWeekStart(e.date));
     if (trendBuckets.has(wk)) {
       trendBuckets.set(wk, (trendBuckets.get(wk) ?? 0) + e.totalWorkMin / 60);
     }
@@ -348,27 +325,28 @@ export default async function EmployeeHomePage() {
   // Scheduled vs worked this week (per weekday)
   const scheduledByDay = new Map<string, number>();
   for (let i = 0; i < 7; i++) {
-    scheduledByDay.set(format(addDays(weekStart, i), "yyyy-MM-dd"), 0);
+    scheduledByDay.set(dk(addDateOnlyDays(weekStart, i)), 0);
   }
   for (const s of weekScheduled) {
-    const k = format(s.date, "yyyy-MM-dd");
+    const k = dk(s.date);
     if (!scheduledByDay.has(k)) continue;
-    const mins = Math.max(
-      0,
-      differenceInMinutes(s.endTime, s.startTime) - (s.totalBreakMin ?? 0),
-    );
+    const range = scheduledRange(s.date, s.startTime, s.endTime);
+    if (!range) continue;
+    const mins = Math.max(0, differenceInMinutes(range.end, range.start));
     scheduledByDay.set(k, (scheduledByDay.get(k) ?? 0) + mins / 60);
   }
   const scheduledVsWorkedData = Array.from(byDay.entries()).map(([k, mins]) => ({
-    day: format(new Date(k), "EEE"),
+    day: new Date(k).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" }),
     scheduled: Math.round((scheduledByDay.get(k) ?? 0) * 10) / 10,
     worked: Math.round((mins / 60) * 10) / 10,
   }));
 
   // Leave balance breakdown
-  const upcomingApprovedDays = nextLeaves.reduce((s, l) => s + l.totalDays, 0);
-  const taken = employee?.leavesTaken ?? 0;
-  const remaining = Math.max(0, (employee?.leavesRemaining ?? 0) - upcomingApprovedDays);
+  // Donut slices are disjoint: taken (approved, dated up to today), approved
+  // upcoming, and what's left after pending + approved (no double counting).
+  const upcomingApprovedDays = leaveBalances?.totals.upcoming ?? 0;
+  const taken = leaveBalances?.totals.taken ?? 0;
+  const remaining = Math.max(0, leaveBalances?.totals.available ?? 0);
 
   // Pay snapshot · last 6 pay periods
   const defaultRate = Number(employeeRate ?? 25);
@@ -389,20 +367,21 @@ export default async function EmployeeHomePage() {
               cost += hrs * rate;
             }
             return {
-              period: format(p.payPeriodEnd, "MMM d"),
+              period: dateOnlyShortLabel(p.payPeriodEnd),
               estimate: Math.round(cost),
               hours: Math.round(hours),
             };
           });
 
   // Reimbursement timeline · last 6 months grouped by status
+  const monthKey = (d: Date) =>
+    d.toLocaleDateString("en-US", { timeZone: BUSINESS_TIME_ZONE, month: "short" });
   const reimbursementBuckets = new Map<
     string,
     { month: string; PENDING: number; APPROVED: number; PAID: number; REJECTED: number }
   >();
   for (let i = 5; i >= 0; i--) {
-    const m = startOfMonth(subMonths(now, i));
-    const key = format(m, "MMM");
+    const key = monthKey(startOfBusinessMonth(now, i));
     reimbursementBuckets.set(key, {
       month: key,
       PENDING: 0,
@@ -412,7 +391,7 @@ export default async function EmployeeHomePage() {
     });
   }
   for (const r of reimbsMonthly) {
-    const key = format(r.createdAt, "MMM");
+    const key = monthKey(r.createdAt);
     const b = reimbursementBuckets.get(key);
     if (!b) continue;
     if (r.status === "PENDING" || r.status === "UNDER_REVIEW") b.PENDING += 1;
@@ -425,41 +404,42 @@ export default async function EmployeeHomePage() {
   // Punctuality · last 30 days
   const entriesByDate = new Map<string, Date>();
   for (const e of entriesForPunctuality) {
-    const k = format(e.date, "yyyy-MM-dd");
+    const k = dk(e.date);
     if (!entriesByDate.has(k)) entriesByDate.set(k, e.clockIn);
   }
   let onTime = 0;
   let late = 0;
   let missed = 0;
   for (const s of schedulesForPunctuality) {
-    const k = format(s.date, "yyyy-MM-dd");
+    const k = dk(s.date);
+    // Scheduled wall-clock time (business timezone) on the schedule's date.
+    const scheduled = scheduledInstant(s.date, s.startTime);
+    if (!scheduled) continue;
     const ci = entriesByDate.get(k);
     if (!ci) {
-      missed += 1;
+      // A shift that has not started yet is not "missed".
+      if (scheduled <= now) missed += 1;
       continue;
     }
-    const [hh, mm] = s.startTime.split(":").map(Number);
-    const scheduled = new Date(s.date);
-    scheduled.setHours(hh, mm, 0, 0);
     const diff = differenceInMinutes(ci, scheduled);
     if (diff <= 10) onTime += 1;
     else late += 1;
   }
 
-  const hour = now.getHours();
+  const hour = businessHour(now);
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = user.name.split(" ")[0];
 
-  const totalLeaves = employee?.totalLeaves ?? 0;
-  const leavesRemaining = employee?.leavesRemaining ?? 0;
+  const totalLeaves = leaveBalances?.totals.allowed ?? 0;
+  const leavesRemaining = leaveBalances?.totals.available ?? 0;
   const leavesUsedPct =
     totalLeaves > 0
-      ? Math.round(((totalLeaves - leavesRemaining) / totalLeaves) * 100)
+      ? Math.round(((leaveBalances?.totals.used ?? 0) / totalLeaves) * 100)
       : 0;
 
   const todayShift = upcomingShifts.find(
-    (s) => s.date.toDateString() === todayStart.toDateString(),
+    (s) => s.date.getTime() === todayStart.getTime(),
   );
 
   return (
@@ -512,7 +492,7 @@ export default async function EmployeeHomePage() {
               <Activity className="h-4 w-4 text-primary" /> Hours this month
             </CardTitle>
             <CardDescription>
-              Daily hours clocked across {format(now, "MMMM yyyy")} (
+              Daily hours clocked across {now.toLocaleDateString("en-US", { timeZone: BUSINESS_TIME_ZONE, month: "long", year: "numeric" })} (
               {formatHours(monthHours._sum.totalWorkMin ?? 0)} total).
             </CardDescription>
           </CardHeader>
@@ -597,14 +577,14 @@ export default async function EmployeeHomePage() {
                   >
                     <div className="flex h-9 w-9 flex-col items-center justify-center rounded-md border bg-muted/30 text-center">
                       <span className="text-[9px] uppercase text-muted-foreground">
-                        {format(s.date, "MMM")}
+                        {s.date.toLocaleDateString("en-US", { timeZone: "UTC", month: "short" })}
                       </span>
                       <span className="text-sm font-semibold leading-none">
-                        {format(s.date, "d")}
+                        {s.date.getUTCDate()}
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium">{format(s.date, "EEEE")}</p>
+                      <p className="text-sm font-medium">{s.date.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long" })}</p>
                       <p className="font-mono text-[11px] text-muted-foreground">
                         {s.startTime} → {s.endTime} · {s.jobCode}
                       </p>

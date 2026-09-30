@@ -1,9 +1,12 @@
-# ACT ERP
+# ACT ERP (`apps/web`)
 
-American Completion Tools — internal workforce management platform. Successor to the legacy `old/employee-dashboard` build.
+American Completion Tools — internal workforce management platform. Next.js 16
+app that owns the UI, authentication, RBAC, the Prisma schema for **every**
+table in the system, and the gateway to the optional AI assistant (`apps/ai`).
 
-> 📋 **Single source of truth for design + scope:** `../revamp_plan.md` (one level up).
-> 📚 **Reference for legacy behaviour:** `../old_PROJECT_OVERVIEW.md`.
+> 📐 **Architecture & decisions:** [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md)
+> 🚀 **Deploy:** [`../../infra/aws/DEPLOY-LITE.md`](../../infra/aws/DEPLOY-LITE.md) (the live path)
+> 🧑‍🔧 **Handover / ops:** [`../../HANDOVER.md`](../../HANDOVER.md)
 
 ---
 
@@ -16,18 +19,56 @@ American Completion Tools — internal workforce management platform. Successor 
 | UI | shadcn/ui (new-york style, slate base, **emerald** accent) + Tailwind v3 |
 | Fonts | Geist Sans · Geist Mono · JetBrains Mono (numerics) |
 | State | React Query v5 (client) · Server Actions (mutations) · React `cache` (per-request) |
-| Auth | Supabase Auth (JWT, refresh rotation, RLS, MFA) |
-| Database | Postgres (Supabase) + Prisma 6 + `pgvector` + `pg_trgm` |
-| Storage | Supabase Storage (S3-compatible underneath) |
-| Calendar | Schedule-X (added in Phase 3) |
+| Auth | **NextAuth v5** (credentials + JWT) with optional emailed 6-digit 2FA |
+| Database | Postgres 16 + Prisma 6 + `pgvector` (self-hosted container; RDS in the full design) |
+| Storage | **S3** (or any S3-compatible store via `AWS_ENDPOINT_URL`; LocalStack locally) |
+| Queue | **SQS** — ingestion jobs only, used solely when `AI_ENABLED=true` |
+| Email | Microsoft Graph (`Mail.Send`) in production, Amazon SES as fallback |
+| Doc extraction | AWS Textract + optional Anthropic Claude gap-fill (hire-packet import) |
+| Calendar | Schedule-X |
 | Charts | shadcn `chart` block (Recharts under the hood) |
 | Tables | TanStack Table v8 |
 | Forms | react-hook-form + zod |
-| Icons | Lucide |
-| Toasts | Sonner |
-| Animations | Framer Motion |
-| Logger | pino |
+| Icons | Lucide · Toasts | Sonner · Animations | Framer Motion |
 | Package manager | pnpm |
+
+There is **no Supabase** anywhere in the runtime — auth, storage, and realtime
+were migrated off it (Phase 3b). Notifications poll `/api/notifications/unread`
+rather than using a realtime socket.
+
+---
+
+## Feature surface
+
+| Area | Routes |
+|---|---|
+| Admin | employees, departments, job codes, schedules, time-tracking, leave, requests, reimbursements, payroll, benefits, documents, onboarding, notifications, activity (audit), settings, **kiosks** |
+| Employee | my details, time-tracking, schedule, leave, requests, reimbursements, payroll, benefits, documents, team, notifications, settings |
+| Shop floor | `/kiosk/[slug]` — shared time-clock terminal (see below) |
+| Assistant (optional) | `/admin/chat`, `/dashboard/chat`, `/admin/knowledge` — only when `AI_ENABLED=true` |
+
+Notable subsystems:
+
+- **Kiosk time clock** — an admin registers a kiosk, then physically activates
+  it at the terminal; activation is restricted to `KIOSK_ALLOWED_NETWORKS` and
+  writes a hashed device cookie (`KioskSession.cookieHash`). Punches thereafter
+  trust the device cookie, **not** the IP — facility egress IPs rotate on
+  Starlink. Employees clock in/out with their employee ID + a 4-digit PIN
+  (default `3214` until changed in employee settings; admins can reset it).
+- **Login 2FA** — with `LOGIN_2FA_ENABLED=true`, a verified password creates a
+  `LoginChallenge` (hashed 6-digit code, 5-attempt cap, expiring) and the code
+  is emailed; NextAuth completes sign-in from the code. Set it to `false` for
+  direct username/email + password sign-in. Users may sign in with **either**
+  `email` or `username` — shop-floor hires often have no company mailbox.
+- **Hire-packet import** — an admin uploads a ZIP of new-hire forms; files are
+  classified, parsed with per-form templates over Textract text, optionally
+  gap-filled with Claude (`ANTHROPIC_API_KEY`, off when unset), and surfaced as
+  reviewable proposed field changes (`HirePacketImport`).
+- **Benefits** — a read-only mirror of what the broker administers. No PHI, no
+  dependent identities, no 401(k) balances; see the comment block in
+  `prisma/schema.prisma`.
+- **Payroll** — paystub PDF parsing + matching (`lib/paystub-parser.ts`,
+  `lib/paystub-match.ts`), W-2 consent tracking.
 
 ---
 
@@ -42,28 +83,33 @@ pnpm install
 ```bash
 cp .env.example .env.local
 ```
-Then fill in:
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase Dashboard → Settings → API)
-- `SUPABASE_SERVICE_ROLE_KEY` (same page; **server-only**)
-- `DATABASE_URL` (Settings → Database → Connection string → **Transaction** pooler)
-- `DIRECT_URL` (Settings → Database → Connection string → **Direct connection**)
+Fill in at minimum `DATABASE_URL`, `AUTH_SECRET` (`openssl rand -base64 32`),
+`S3_BUCKET`, and the email provider vars. `src/lib/env.ts` validates everything
+at boot and fails fast on a half-configured deploy.
 
-### 3. Migrate the database
+### 3. Create the schema
+This project uses `db push` (there are no Prisma migration files):
 ```bash
-pnpm prisma:migrate --name init
+pnpm db:push
 ```
-This applies the schema to Supabase Postgres. The `pgvector` and `pg_trgm` extensions are enabled automatically.
+> ⚠️ **Always re-apply `prisma/sql/01_rag_pgvector_rls.sql` afterwards.** The
+> generated `tsv` column + GIN index, the two HNSW vector indexes, and the RLS
+> role/policies live outside the Prisma schema and `db push` silently drops
+> them. Only matters when the AI feature is in use, but it costs nothing to be
+> consistent.
 
-### 4. Seed realistic demo data
+### 3b. Upgrading an existing database
+There is no migration history (`prisma/migrations` does not exist on purpose:
+`db push` and `migrate` must not be mixed). After pulling a release that changes
+`schema.prisma`: back up, `pnpm db:push`, then run the idempotent data scripts
+(safe to re-run): `scripts/normalize-emails.ts`, `scripts/seed-leave-policy.ts`,
+`scripts/backfill-payroll-sha256.ts`. On the production box use the `tools` compose
+service; see `infra/aws/DEPLOY-LITE.md` (section 5b). Raw SQL that `db push` cannot
+express lives in `prisma/sql/` (`02_*.reference.sql` is reference only).
+
+### 4. Create the first admin
 ```bash
-pnpm seed:all
-```
-Provisions 48 Supabase auth users + employees, fills 12 months of timesheets,
-leaves, reimbursements, requests, notifications, payroll periods + audit
-events. Prints a credentials table at the end. Primary admin login:
-
-```
-marcus.holloway@actools.com / Holloway$2026
+pnpm tsx --env-file=.env.local scripts/create-admin.ts you@actools.com 'StrongPass#1' --name 'Your Name' --with-employee
 ```
 
 ### 5. Run
@@ -72,13 +118,8 @@ pnpm dev
 ```
 Open [http://localhost:3000](http://localhost:3000).
 
-### Optional: migrate from legacy MongoDB
-```bash
-LEGACY_MONGO_URI="mongodb+srv://…" pnpm export:mongo
-```
-Dumps every legacy collection to `data/raw/<collection>.csv`. Useful if you
-need the historical data carried forward — `seed:all` produces a fresh
-believable dataset on its own.
+Full multi-service walkthrough (Postgres + LocalStack + the AI services):
+[`../../LOCAL_RUN.md`](../../LOCAL_RUN.md).
 
 ---
 
@@ -86,30 +127,34 @@ believable dataset on its own.
 
 ```
 src/
-├── app/                  # Next.js App Router
-│   ├── (auth)/           # Phase 1 — login / onboard / unauthorized
-│   ├── (admin)/          # Phase 2+ — admin dashboard
-│   ├── (employee)/       # Phase 2+ — employee self-service
-│   ├── (kiosk)/          # Phase 3 — shop-floor time clock
-│   ├── api/v1/           # REST surface (future mobile)
-│   ├── layout.tsx
-│   └── page.tsx          # Phase 0 status screen
+├── app/                     # Next.js App Router
+│   ├── (admin)/admin/       # admin dashboard
+│   ├── (employee)/dashboard/# employee self-service
+│   ├── (kiosk)/kiosk/       # shop-floor time clock
+│   ├── api/                 # auth, chat gateway, knowledge file/view,
+│   │                        #   notifications, documents, payroll, …
+│   ├── login/ onboard/ auth/ privacy/ unauthorized/
+│   └── layout.tsx
 ├── components/
-│   ├── ui/               # shadcn primitives (do not edit)
-│   ├── providers.tsx     # Theme + React Query + Toaster
-│   └── ...               # feature components added per phase
+│   ├── ui/                  # shadcn primitives (do not edit)
+│   ├── chat/ visualizer/    # Assistant UI + pdf.js citation viewer
+│   ├── knowledge/           # knowledge-base admin UI
+│   ├── admin-sidebar.tsx · employee-sidebar.tsx · providers.tsx · …
+├── server/actions/          # server actions (the mutation surface)
 ├── lib/
-│   ├── auth/             # getSessionUser, requireAdmin
-│   ├── supabase/         # client, server, middleware, service-role
-│   ├── db.ts             # Prisma singleton
-│   ├── env.ts            # @t3-oss/env-nextjs validation
-│   ├── storage.ts        # Supabase Storage wrapper
-│   └── utils.ts          # cn() helper
-├── hooks/                # use-toast, use-mobile (shadcn)
-└── middleware.ts         # auth + role gate
+│   ├── auth/                # auth.config.ts (edge) · auth.ts (Node) · password
+│   ├── chat/ knowledge/ hire-packet/
+│   ├── aws.ts storage.ts queue.ts email.ts
+│   ├── kiosk-network.ts kiosk-pin.ts ip-network.ts rate-limit.ts
+│   ├── db.ts env.ts features.ts audit.ts
+│   └── paystub-parser.ts paystub-match.ts benefits.ts …
+├── hooks/
+├── types/
+└── proxy.ts                 # edge auth gate (Next 16's renamed middleware)
 
 prisma/
-└── schema.prisma         # Phase 0 subset (User, Employee, Department, JobCode, AuditLog)
+├── schema.prisma            # AUTHORITY for every table (ERP + AI)
+└── sql/01_rag_pgvector_rls.sql   # tsv/GIN, HNSW, RLS role + policies
 ```
 
 ---
@@ -118,35 +163,35 @@ prisma/
 
 | Command | What it does |
 |---|---|
-| `pnpm dev` | Next.js dev server (Turbopack) on `http://localhost:3000` |
-| `pnpm build` | Production build |
-| `pnpm start` | Production server |
+| `pnpm dev` | Next.js dev server on `http://localhost:3000` |
+| `pnpm build` / `pnpm start` | Production build / server (standalone output) |
 | `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm test` / `pnpm test:watch` | Vitest |
 | `pnpm lint` / `pnpm lint:fix` | ESLint |
 | `pnpm format` / `pnpm format:check` | Prettier |
-| `pnpm prisma:migrate --name <name>` | Generate + apply a new migration |
-| `pnpm prisma:generate` | Regenerate Prisma client only |
-| `pnpm prisma:studio` | Visual DB browser |
-| `pnpm prisma:reset` | Drop + recreate the DB (⚠ data loss) |
-| `pnpm db:push` | Push schema changes without a migration (dev shortcut) |
+| `pnpm db:push` | Push schema changes (the workflow this project uses) |
+| `pnpm prisma:generate` / `prisma:studio` | Regenerate client / visual DB browser |
+| `pnpm copy-pdf-worker` | Copy the pdf.js worker into `public/` (runs on postinstall) |
+| `pnpm export:mongo` | Dump legacy MongoDB collections to CSV (`LEGACY_MONGO_URI=…`) |
+
+Dev-only helper scripts (**never run in production**): `scripts/create-admin.ts`,
+`scripts/seed-30-days.ts`, `scripts/seed-recent.ts`, `scripts/seed-topup.ts`,
+`scripts/upload-knowledge.ts <dir>`, `scripts/requeue-failed.ts`.
 
 ---
 
-## Status
+## Feature flag: `AI_ENABLED`
 
-**Phase 0 — Scaffold ✅**
+Off by default. When `false`:
 
-What's wired:
-- Next.js 16 + TypeScript + App Router
-- shadcn/ui (new-york) + Tailwind v3 + emerald theme + dark default
-- 42 shadcn components installed (button, card, input, form, table, dialog, sheet, sidebar, sonner, chart, calendar, command, …)
-- Prisma 6 schema for identity + employees + audit log
-- Supabase clients (browser, server, service-role, middleware)
-- Auth helpers (`requireUser`, `requireAdmin`)
-- Storage abstraction
-- React Query + Theme + Toaster providers
-- ESLint + Prettier + Tailwind class sorting
+- Assistant / Knowledge base nav entries are hidden,
+- `/admin/chat`, `/dashboard/chat`, `/admin/knowledge` render "Page not found",
+- `POST /api/chat` returns 503 and `/api/knowledge/[id]/{file,view}` return 404,
+- knowledge upload refuses instead of enqueueing to SQS,
+- `SQS_QUEUE_URL`, `AGENT_SERVICE_URL`, `INTERNAL_SERVICE_TOKEN` are unused and
+  may be left unset.
 
-**Next: Phase 1 — Auth + Sidebar shell.**
-
-See `../revamp_plan.md` §9 for the full phased roadmap.
+Setting `AI_ENABLED=true` without those three fails at boot with a clear
+message rather than 500ing on first use. The current production deploy runs
+with the flag **off** — see
+[`../../infra/aws/LITE-MIGRATION-PLAN.md`](../../infra/aws/LITE-MIGRATION-PLAN.md).

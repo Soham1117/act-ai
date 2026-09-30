@@ -1,7 +1,21 @@
-# TEMPORARY — plain HTTP by IP, no domain/TLS. DNS for
-# persona.americancompletiontools.com isn't set up yet. Swap back to the
-# domain block (see Caddyfile.example) once DNS resolves, so this gets real
-# HTTPS. Employees should not use this IP link once the real domain is live.
-:80 {
-	reverse_proxy web:3000
+persona.americancompletiontools.com {
+    # HSTS: browsers refuse plain HTTP for this host for a year. No includeSubDomains/preload —
+    # other sites share this Caddy. Other security headers are set by the app (next.config.ts).
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy web:3000 {
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+inventory.americancompletiontools.com {
+    reverse_proxy act-inventory-app:3000
+}
+
+form.dynamichealing.in {
+    reverse_proxy dh-form:8765 {
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
 }

@@ -24,22 +24,35 @@ export async function POST(req: NextRequest) {
 
   const allowed = await allowedDocumentIds(user);
 
-  const upstream = await fetch(`${env.AGENT_SERVICE_URL}/chat`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${env.INTERNAL_SERVICE_TOKEN}`,
-    },
-    body: JSON.stringify({
-      user_id: user.id,
-      allowed_doc_ids: allowed,
-      selected_doc_ids: selected,
-      messages,
-    }),
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${env.AGENT_SERVICE_URL}/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${env.INTERNAL_SERVICE_TOKEN}`,
+      },
+      body: JSON.stringify({
+        user_id: user.id,
+        allowed_doc_ids: allowed,
+        selected_doc_ids: selected,
+        messages,
+      }),
+    });
+  } catch (e) {
+    console.error("[chat] agent service unreachable", e);
+    return Response.json(
+      { error: "The assistant is temporarily unavailable. Please try again in a few minutes." },
+      { status: 502 },
+    );
+  }
 
   if (!upstream.ok || !upstream.body) {
-    return new Response("Agent service error", { status: 502 });
+    console.error("[chat] agent service returned", upstream.status);
+    return Response.json(
+      { error: "The assistant is temporarily unavailable. Please try again in a few minutes." },
+      { status: 502 },
+    );
   }
 
   return new Response(upstream.body, {

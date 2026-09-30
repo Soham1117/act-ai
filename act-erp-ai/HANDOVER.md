@@ -71,7 +71,7 @@ and the row-level-security role/policies. **`prisma db push` silently drops all
 of them.** The rule, forever:
 
 ```bash
-prisma db push            # (or migrate deploy)
+prisma db push            # this project uses db push; there are no migrations (never use migrate deploy)
 psql < apps/web/prisma/sql/01_rag_pgvector_rls.sql   # ALWAYS re-apply after
 ```
 

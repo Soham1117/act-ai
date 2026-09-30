@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { KnowledgeUploadDialog } from "@/components/knowledge/upload-dialog";
+import { KnowledgeRetryButton } from "@/components/knowledge/retry-button";
 
 export const metadata = { title: "Knowledge base" };
 
@@ -20,7 +21,7 @@ export default async function KnowledgePage() {
   await requireAdmin();
   const docs = await db.knowledgeDocument.findMany({
     orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, fileKind: true, visibility: true, status: true, createdAt: true },
+    select: { id: true, title: true, fileKind: true, visibility: true, status: true, failureReason: true, createdAt: true },
   });
 
   return (
@@ -61,6 +62,12 @@ export default async function KnowledgePage() {
                 <Badge variant={d.status === "READY" ? "default" : d.status === "FAILED" ? "destructive" : "outline"}>
                   {d.status.toLowerCase()}
                 </Badge>
+                {d.status === "FAILED" && d.failureReason && (
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">{d.failureReason}</p>
+                )}
+                {(d.status === "FAILED" || d.status === "QUEUED") && (
+                  <KnowledgeRetryButton documentId={d.id} />
+                )}
               </TableCell>
             </TableRow>
           ))}

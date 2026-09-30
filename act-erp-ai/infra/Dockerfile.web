@@ -32,6 +32,9 @@ RUN --mount=type=secret,id=env_prod,target=/app/.env.production \
 FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# Business timezone (the database always stores UTC). Also set in compose.
+ENV TZ=America/Chicago
+ENV HOSTNAME=0.0.0.0
 # Requires `output: "standalone"` in next.config.ts (added in Phase 8 deploy prep).
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static

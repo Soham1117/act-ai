@@ -3,42 +3,42 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
+import { Download } from "lucide-react";
+import { activityPrefixes, activityWhere, prefixLabel } from "@/server/queries/activity";
 
 export const metadata = { title: "Activity" };
 
-const PAGE_SIZE = 200;
+const PAGE_SIZE = 100;
 
 export default async function AdminActivityPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; action?: string }>;
+  searchParams: Promise<{ q?: string; action?: string; page?: string }>;
 }) {
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const actionFilter = sp.action?.trim() ?? "";
+  const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
 
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-    try { return await p; } catch { return fallback; }
+    try { return await p; } catch (e) { console.error("[activity] query failed", e); return fallback; }
   };
+
+  const where = activityWhere(q, actionFilter);
+  const [total, prefixes] = await Promise.all([
+    safe(db.auditLog.count({ where }), 0),
+    activityPrefixes(),
+  ]);
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(requestedPage, pages);
 
   const items = await safe(
     db.auditLog.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      where: {
-        AND: [
-          q
-            ? {
-                OR: [
-                  { actorEmail: { contains: q, mode: "insensitive" } },
-                  { resource: { contains: q, mode: "insensitive" } },
-                  { action: { contains: q, mode: "insensitive" } },
-                ],
-              }
-            : {},
-          actionFilter ? { action: { startsWith: actionFilter } } : {},
-        ],
-      },
+      where,
       select: {
         id: true,
         action: true,
@@ -51,6 +51,26 @@ export default async function AdminActivityPage({
     }),
     [],
   );
+
+  const qs = (p: number) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (actionFilter) params.set("action", actionFilter);
+    if (p > 1) params.set("page", String(p));
+    const str = params.toString();
+    return `/admin/activity${str ? `?${str}` : ""}`;
+  };
+  const exportHref = (() => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (actionFilter) params.set("action", actionFilter);
+    const str = params.toString();
+    return `/admin/activity/export${str ? `?${str}` : ""}`;
+  })();
+  // Keep a filter chosen via URL selectable even if no rows use it any more.
+  const options = prefixes.some((p) => p.value === actionFilter) || !actionFilter
+    ? prefixes
+    : [...prefixes, { value: actionFilter, label: prefixLabel(actionFilter) }];
 
   return (
     <>
@@ -72,12 +92,11 @@ export default async function AdminActivityPage({
           className="h-9 rounded-md border bg-background px-2 text-sm"
         >
           <option value="">All actions</option>
-          <option value="kiosk.">Kiosk</option>
-          <option value="employee.">Employee</option>
-          <option value="leave.">Leave</option>
-          <option value="reimbursement.">Reimbursement</option>
-          <option value="document.">Document</option>
-          <option value="onboarding.">Onboarding</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </select>
         <button
           type="submit"
@@ -85,6 +104,12 @@ export default async function AdminActivityPage({
         >
           Filter
         </button>
+        <a
+          href={exportHref}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted"
+        >
+          <Download className="h-4 w-4" /> Export CSV
+        </a>
       </form>
 
       <Card>
@@ -126,10 +151,26 @@ export default async function AdminActivityPage({
         </CardContent>
       </Card>
 
-      {items.length === PAGE_SIZE && (
-        <p className="mt-3 text-center text-[11px] text-muted-foreground">
-          Showing the latest {PAGE_SIZE} entries. Refine the search to find older activity.
-        </p>
+      {pages > 1 && (
+        <nav className="mt-3 flex items-center justify-between text-xs" aria-label="Pagination">
+          {page > 1 ? (
+            <Link href={qs(page - 1)} className="underline">
+              Newer
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-muted-foreground">
+            Page {page} of {pages} · {total} entries
+          </span>
+          {page < pages ? (
+            <Link href={qs(page + 1)} className="underline">
+              Older
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
       )}
     </>
   );

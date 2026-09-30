@@ -1,6 +1,14 @@
 import Image from "next/image";
 import { db } from "@/lib/db";
-import { dashboardData, dashboardExtras } from "@/server/queries/dashboard";
+import {
+  dashboardData,
+  dashboardExtras,
+  dashboardFailures,
+  openShiftSnapshot,
+  STALE_SHIFT_HOURS,
+  safe,
+} from "@/server/queries/dashboard";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Activity,
@@ -9,6 +17,7 @@ import {
   Briefcase,
   Building2,
   CalendarRange,
+  AlertTriangle,
   Clock,
   GitBranch,
   Plane,
@@ -38,25 +47,25 @@ import {
 export const metadata = { title: "Admin home" };
 
 export default async function AdminHomePage() {
-  const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-    try { return await p; } catch { return fallback; }
-  };
-
   const [
     activeEmployees,
-    clockedIn,
+    openShifts,
     pendingApprovals,
     departments,
     charts,
     extras,
   ] = await Promise.all([
-    safe(db.employee.count({ where: { employmentStatus: "ACTIVE" } }), 0),
-    safe(db.timeEntry.count({ where: { status: { in: ["ACTIVE", "ON_BREAK"] } } }), 0),
-    safe(db.timeEntry.count({ where: { approvalStatus: "PENDING", clockOut: { not: null } } }), 0),
-    safe(db.department.count(), 0),
+    safe(db.employee.count({ where: { employmentStatus: "ACTIVE" } }), 0, "active employees"),
+    openShiftSnapshot(),
+    safe(db.timeEntry.count({ where: { approvalStatus: "PENDING", clockOut: { not: null } } }), 0, "pending approvals"),
+    safe(db.department.count(), 0, "departments"),
     dashboardData(),
     dashboardExtras(),
   ]);
+  const clockedIn = openShifts.live.size;
+  const staleOpen = openShifts.stale.size;
+  // Read after all queries settled: any swallowed failure is listed here.
+  const failures = dashboardFailures();
 
   const headcountDonut = charts.headcountByDept.map((d) => ({
     department: d.department,
@@ -69,6 +78,38 @@ export default async function AdminHomePage() {
 
   return (
     <>
+      {failures.length > 0 && (
+        <div
+          role="alert"
+          className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <div className="font-medium">Some data failed to load</div>
+            <div className="text-xs opacity-90">
+              Numbers and charts below may be incomplete (zeros can mean &quot;failed&quot;, not &quot;none&quot;).
+              Reload the page; if it persists check the server logs.
+            </div>
+          </div>
+        </div>
+      )}
+      {staleOpen > 0 && (
+        <Link
+          href="/admin/time-tracking"
+          className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 hover:bg-amber-500/15 dark:text-amber-400"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <div className="font-medium">
+              {staleOpen} open shift{staleOpen === 1 ? "" : "s"} need attention
+            </div>
+            <div className="text-xs opacity-90">
+              Clocked in for more than {STALE_SHIFT_HOURS} hours (likely a missed clock-out). Not counted as
+              &quot;Clocked in now&quot;. Review in Time tracking.
+            </div>
+          </div>
+        </Link>
+      )}
       {/* Welcome + KPI tiles in a single row on wide screens. */}
       <div className="mb-6 grid items-end gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]">
         <div>
@@ -250,6 +291,15 @@ export default async function AdminHomePage() {
           </CardHeader>
           <CardContent>
             <ClockedVsScheduledChart data={extras.clocked} />
+            {extras.clocked.staleOpen > 0 && (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                {extras.clocked.staleOpen} stale open shift(s) excluded —{" "}
+                <Link href="/admin/time-tracking" className="underline">
+                  needs attention
+                </Link>
+                .
+              </p>
+            )}
           </CardContent>
         </Card>
 
