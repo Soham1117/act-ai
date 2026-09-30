@@ -5,8 +5,8 @@ import { clientIpFromHeaders } from "@/lib/ip-network";
 
 /**
  * Write an audit log entry. Call from server actions on writes you want
- * tracked. Failures are swallowed — audit-log failures should never block
- * the primary action.
+ * tracked. A failure never blocks the primary action but is always logged
+ * (console.error) so a missing audit row is visible in the server logs.
  */
 export async function audit(args: {
   action: string;
@@ -36,10 +36,11 @@ export async function audit(args: {
       },
     });
   } catch (e) {
-    // Don't surface audit-log failures.
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[audit] write failed:", e);
-    }
+    // Never block the primary action, but never lose the failure silently
+    // either: a missing audit row must be visible in the server logs (in
+    // production too). The action name + resource are logged so the event can
+    // be reconstructed by hand.
+    console.error("[audit] write failed", { action: args.action, resource: args.resource }, e);
   }
 }
 

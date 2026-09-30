@@ -5,6 +5,13 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { authConfig } from "./auth.config";
 import { verifyPassword } from "./password";
+import { accessLevelFor } from "@/lib/access";
+
+const accessSelect = {
+  employmentStatus: true,
+  terminationDate: true,
+  updatedAt: true,
+} as const;
 
 const challengeCredsSchema = z.object({
   challengeId: z.string().min(1),
@@ -43,10 +50,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               role: true,
               tokenVersion: true,
               passwordHash: true,
+              employee: { select: accessSelect },
             },
           });
           if (!user?.passwordHash) return null;
           if (!(await verifyPassword(parsed.data.password, user.passwordHash)))
+            return null;
+          if (accessLevelFor({ role: user.role, employee: user.employee }) === "NONE")
             return null;
           return {
             id: user.id,
@@ -64,7 +74,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { id: challengeId },
           include: {
             user: {
-              select: { id: true, email: true, role: true, tokenVersion: true },
+              select: {
+                id: true,
+                email: true,
+                role: true,
+                tokenVersion: true,
+                employee: { select: accessSelect },
+              },
             },
           },
         });
@@ -84,6 +100,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           });
           return null;
         }
+
+        if (
+          accessLevelFor({ role: challenge.user.role, employee: challenge.user.employee }) ===
+          "NONE"
+        )
+          return null;
 
         await db.loginChallenge.update({
           where: { id: challengeId },
