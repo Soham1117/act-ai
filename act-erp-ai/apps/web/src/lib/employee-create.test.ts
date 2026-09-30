@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { nextEmployeeIdFrom, resolveEmailHireMode } from "./employee-create";
+import {
+  combineAddressLines,
+  nextEmployeeIdFrom,
+  resolveEmailHireMode,
+} from "./employee-create";
+
+describe("combineAddressLines", () => {
+  it("keeps both populated street lines", () => {
+    expect(combineAddressLines("123 Main St", "Suite 200")).toBe(
+      "123 Main St, Suite 200",
+    );
+  });
+
+  it("trims values and omits blank lines", () => {
+    expect(combineAddressLines(" 123 Main St ", " ")).toBe("123 Main St");
+    expect(combineAddressLines("", undefined)).toBeNull();
+  });
+});
 
 describe("resolveEmailHireMode", () => {
   it("creates when no user exists for the email", () => {

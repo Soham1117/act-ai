@@ -12,7 +12,11 @@ import { uploadFile } from "@/lib/storage";
 import { validateUpload } from "@/lib/upload-validation";
 import { notifyEmployees } from "@/lib/notify";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
-import { resolveEmailHireMode, generateEmployeeId } from "@/lib/employee-create";
+import {
+  combineAddressLines,
+  resolveEmailHireMode,
+  generateEmployeeId,
+} from "@/lib/employee-create";
 import {
   normalizeEmail,
   nullableNormalizedEmail,
@@ -54,6 +58,11 @@ const employeeSchema = z
     departmentId: z.string().optional().nullable(),
     jobTitle: z.string().trim().optional().nullable(),
     phoneNumber: z.string().trim().optional().nullable(),
+    address: z.string().trim().optional().nullable(),
+    address2: z.string().trim().optional().nullable(),
+    city: z.string().trim().optional().nullable(),
+    state: z.string().trim().max(50).optional().nullable(),
+    zipCode: z.string().trim().max(20).optional().nullable(),
     employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
     compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
     compensationValue: z.coerce.number().min(0, "Pay can't be negative").optional().nullable(),
@@ -161,6 +170,10 @@ export async function createEmployee(
           departmentId: data.departmentId || null,
           jobTitle: data.jobTitle || null,
           phoneNumber: data.phoneNumber || null,
+          address: combineAddressLines(data.address, data.address2),
+          city: data.city || null,
+          state: data.state || null,
+          zipCode: data.zipCode || null,
           employmentType: data.employmentType,
           compensationType: data.compensationType,
           compensationValue: data.compensationValue ?? null,

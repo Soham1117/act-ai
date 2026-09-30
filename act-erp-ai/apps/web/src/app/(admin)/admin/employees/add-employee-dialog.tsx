@@ -60,6 +60,11 @@ const schema = z
     departmentId: z.string(),
     jobTitle: z.string().optional(),
     phoneNumber: z.string().optional(),
+    address: z.string().optional(),
+    address2: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().max(50).optional(),
+    zipCode: z.string().max(20).optional(),
     employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
     compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
     compensationValue: z.string().optional(),
@@ -82,6 +87,11 @@ const defaults: Values = {
   departmentId: NONE,
   jobTitle: "",
   phoneNumber: "",
+  address: "",
+  address2: "",
+  city: "",
+  state: "",
+  zipCode: "",
   employmentType: "FULL_PART_TIME",
   compensationType: "HOURLY_RATE",
   compensationValue: "",
@@ -106,6 +116,11 @@ export function AddEmployeeDialog({
         departmentId: values.departmentId === NONE ? null : values.departmentId,
         jobTitle: values.jobTitle || null,
         phoneNumber: values.phoneNumber || null,
+        address: values.address || null,
+        address2: values.address2 || null,
+        city: values.city || null,
+        state: values.state || null,
+        zipCode: values.zipCode || null,
         compensationValue: parseMoneyInput(values.compensationValue ?? ""),
       });
       if (!toastAction(res)) return;
@@ -128,7 +143,7 @@ export function AddEmployeeDialog({
           <Plus className="mr-2 h-4 w-4" /> Add employee
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New employee</DialogTitle>
           <DialogDescription>
@@ -200,6 +215,21 @@ export function AddEmployeeDialog({
             </Field>
             <Field label="Phone">
               <Input {...form.register("phoneNumber")} placeholder="(281) 555-0142" />
+            </Field>
+            <Field label="Address line 1">
+              <Input {...form.register("address")} autoComplete="address-line1" />
+            </Field>
+            <Field label="Address line 2">
+              <Input {...form.register("address2")} autoComplete="address-line2" />
+            </Field>
+            <Field label="City">
+              <Input {...form.register("city")} autoComplete="address-level2" />
+            </Field>
+            <Field label="State">
+              <Input {...form.register("state")} autoComplete="address-level1" />
+            </Field>
+            <Field label="ZIP code">
+              <Input {...form.register("zipCode")} autoComplete="postal-code" />
             </Field>
             <Field label="Department">
               <Select

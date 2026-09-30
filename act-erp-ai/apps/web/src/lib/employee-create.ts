@@ -29,6 +29,17 @@ export function nextEmployeeIdFrom(existingIds: string[], year: number): string 
   return `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
 }
 
+/** Store the optional second street line without requiring a schema change. */
+export function combineAddressLines(
+  address: string | null | undefined,
+  address2: string | null | undefined,
+): string | null {
+  const lines = [address, address2]
+    .map((line) => line?.trim())
+    .filter((line): line is string => Boolean(line));
+  return lines.length ? lines.join(", ") : null;
+}
+
 type EmployeeIdClient = {
   $executeRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<number>;
   employee: {
