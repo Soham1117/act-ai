@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import Link from "next/link";
 import { submitRequest } from "@/server/actions/requests";
 import { toastAction } from "@/lib/toast-action";
 
@@ -77,6 +78,13 @@ export function RequestDialog({
               </SelectContent>
             </Select>
           </div>
+          {type === "LEAVE_REQUEST" && (
+            <p className="rounded-md border bg-muted/50 p-3 text-xs">
+              Time off is requested on the{" "}
+              <Link href="/dashboard/leave" className="font-medium underline">Leave page</Link>, where your
+              balance and dates are checked automatically. This form can&apos;t create a leave request.
+            </p>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs">Subject</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} />
@@ -87,7 +95,7 @@ export function RequestDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={pending || title.length < 2 || description.length < 2}>
+            <Button type="submit" disabled={pending || type === "LEAVE_REQUEST" || title.length < 2 || description.length < 2}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Submit
             </Button>

@@ -16,7 +16,7 @@ export default async function AdminRequestsPage() {
     try { return await p; } catch { return fallback; }
   };
 
-  const [pending, processing, all] = await Promise.all([
+  const [pending, processing, all, counts] = await Promise.all([
     safe(
       db.request.findMany({
         where: { status: "PENDING" },
@@ -41,7 +41,14 @@ export default async function AdminRequestsPage() {
       }),
       [],
     ),
+    // Totals come from counts, not from the (capped) list above.
+    safe(
+      db.request.groupBy({ by: ["status"], _count: true }),
+      [] as Array<{ status: string; _count: number }>,
+    ),
   ]);
+  const countBy = Object.fromEntries(counts.map((c) => [c.status, c._count])) as Record<string, number>;
+  const totalCount = counts.reduce((s, c) => s + c._count, 0);
 
   return (
     <>
@@ -50,16 +57,16 @@ export default async function AdminRequestsPage() {
         description="General-purpose request queue (12 types)."
       />
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="Pending" value={pending.length} icon={<ClipboardList className="h-4 w-4 text-primary" />} />
-        <StatCard label="Processing" value={processing.length} />
-        <StatCard label="Total" value={all.length} />
+        <StatCard label="Pending" value={countBy.PENDING ?? 0} icon={<ClipboardList className="h-4 w-4 text-primary" />} />
+        <StatCard label="Processing" value={countBy.PROCESSING ?? 0} />
+        <StatCard label="Total" value={totalCount} />
       </div>
 
       <Tabs defaultValue="pending" className="mt-6 space-y-4">
         <TabsList>
-          <TabsTrigger value="pending">Pending ({pending.length})</TabsTrigger>
-          <TabsTrigger value="processing">Processing ({processing.length})</TabsTrigger>
-          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="pending">Pending ({countBy.PENDING ?? 0})</TabsTrigger>
+          <TabsTrigger value="processing">Processing ({countBy.PROCESSING ?? 0})</TabsTrigger>
+          <TabsTrigger value="all">All (latest {all.length} of {totalCount})</TabsTrigger>
         </TabsList>
         <TabsContent value="pending"><RequestList rows={pending} /></TabsContent>
         <TabsContent value="processing"><RequestList rows={processing} /></TabsContent>
@@ -73,6 +80,7 @@ type RequestRow = {
   id: string;
   title: string;
   description: string;
+  adminNotes: string | null;
   type: string;
   status: "PENDING" | "PROCESSING" | "COMPLETED" | "REJECTED";
   createdAt: Date;
@@ -110,14 +118,17 @@ function RequestList({ rows }: { rows: RequestRow[] }) {
                     <Badge variant="outline" className="text-[10px]">{r.type.replace(/_/g, " ")}</Badge>
                   </div>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{r.description}</p>
+                  {r.adminNotes && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      <span className="font-medium">Admin note:</span> {r.adminNotes}
+                    </p>
+                  )}
                   <p className="mt-0.5 text-[10px] text-muted-foreground">
                     {r.employee.name} · {formatDistanceToNow(r.createdAt, { addSuffix: true })}
                   </p>
                 </div>
                 <Badge variant={variant} className="text-[10px]">{r.status}</Badge>
-                {(r.status === "PENDING" || r.status === "PROCESSING") && (
-                  <RequestStatusButtons id={r.id} current={r.status} />
-                )}
+                <RequestStatusButtons id={r.id} current={r.status} />
               </li>
             );
           })}
