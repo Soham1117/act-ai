@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Brand } from "@/components/brand";
 import {
@@ -8,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { OnboardingForm } from "./onboarding-form";
 
@@ -47,17 +49,37 @@ export default async function OnboardTokenPage({
                   : "This invite has expired. Ask your admin for a new one."}
               </CardDescription>
             </CardHeader>
-            <CardContent />
+            <CardContent className="space-y-3">
+              <Button asChild className="w-full">
+                <Link href="/login">Go to sign in</Link>
+              </Button>
+              {!completed && (
+                <p className="text-center text-xs text-muted-foreground">
+                  Already finished onboarding? Sign in with the username or email you chose.
+                </p>
+              )}
+            </CardContent>
           </Card>
         </main>
       </div>
     );
   }
 
-  const departments = await db.department.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  // Terms set by the admin on the invite. Shown for information only; the
+  // new hire can't change them and the server ignores anything they send.
+  const department = invite.departmentId
+    ? await db.department.findUnique({
+        where: { id: invite.departmentId },
+        select: { name: true },
+      })
+    : null;
+  const terms = [
+    invite.jobTitle ? `Role: ${invite.jobTitle}` : null,
+    department ? `Department: ${department.name}` : null,
+    invite.dateOfHire
+      ? `Start date: ${invite.dateOfHire.toLocaleDateString("en-US", { timeZone: "UTC" })}`
+      : null,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -73,12 +95,17 @@ export default async function OnboardTokenPage({
               {invite.expiresAt.toLocaleDateString()}.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <OnboardingForm
-              token={token}
-              suggestedEmail={invite.email ?? ""}
-              departments={departments}
-            />
+          <CardContent className="space-y-4">
+            {terms.length > 0 && (
+              <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <p className="mb-1 font-medium text-foreground">Your position</p>
+                <p>{terms.join(" · ")}</p>
+                <p className="mt-1">
+                  Your employee ID, pay and these details are set by your admin.
+                </p>
+              </div>
+            )}
+            <OnboardingForm token={token} suggestedEmail={invite.email ?? ""} />
           </CardContent>
         </Card>
       </main>

@@ -28,6 +28,12 @@ export default async function SettingsPage() {
       })
     : null;
   const personalEmail = employeeRow?.personalEmail;
+  const canWrite = user.accessLevel === "FULL";
+  const readOnlyNote = (
+    <p className="text-xs text-muted-foreground">
+      Your account is read-only, so this can&apos;t be changed right now.
+    </p>
+  );
   return (
     <>
       <PageHeader title="Settings" description="Account, security, and appearance." />
@@ -65,7 +71,8 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle className="text-base">Password</CardTitle>
             <CardDescription>
-              Change your password. Requires the current one.
+              Change your password. Requires the current one. You can do this even
+              when your account is read-only.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -82,7 +89,7 @@ export default async function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <KioskPinForm />
+              {canWrite ? <KioskPinForm /> : readOnlyNote}
             </CardContent>
           </Card>
         )}
@@ -98,10 +105,14 @@ export default async function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <PersonalEmailForm
-                current={personalEmail ?? ""}
-                required={env.LOGIN_2FA_ENABLED === "true"}
-              />
+              {canWrite ? (
+                <PersonalEmailForm
+                  current={personalEmail ?? ""}
+                  required={env.LOGIN_2FA_ENABLED === "true"}
+                />
+              ) : (
+                readOnlyNote
+              )}
             </CardContent>
           </Card>
         )}
@@ -113,7 +124,11 @@ export default async function SettingsPage() {
               <CardDescription>Paper by default, unless you opt in.</CardDescription>
             </CardHeader>
             <CardContent>
-              <W2ConsentForm consented={!!employeeRow?.w2ConsentAt} />
+              {canWrite ? (
+                <W2ConsentForm consented={!!employeeRow?.w2ConsentAt} />
+              ) : (
+                readOnlyNote
+              )}
             </CardContent>
           </Card>
         )}
@@ -125,7 +140,11 @@ export default async function SettingsPage() {
               <CardDescription>Paper by default, unless you opt in.</CardDescription>
             </CardHeader>
             <CardContent>
-              <BenefitsConsentForm consented={!!employeeRow?.benefitsEConsentAt} />
+              {canWrite ? (
+                <BenefitsConsentForm consented={!!employeeRow?.benefitsEConsentAt} />
+              ) : (
+                readOnlyNote
+              )}
             </CardContent>
           </Card>
         )}

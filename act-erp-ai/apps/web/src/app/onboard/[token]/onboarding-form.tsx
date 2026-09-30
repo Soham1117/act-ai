@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -16,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -24,16 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toastAction } from "@/lib/toast-action";
-import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
 import { submitOnboarding, type OnboardingSubmit } from "@/server/actions/onboarding";
-
-type Department = { id: string; name: string };
 
 const STEPS = [
   "Personal",
   "Address",
   "Identity",
-  "Employment",
   "Documents",
   "Account",
 ] as const;
@@ -53,10 +49,11 @@ const DOCUMENT_SLOTS: Array<{
   { id: "personal", label: "Personal Documents", type: "PERSONAL" },
 ];
 
-type FormState = Omit<OnboardingSubmit, "compensationValue"> & {
+type FormState = OnboardingSubmit & {
   confirmPassword: string;
-  /** Display string with commas — parsed on submit. */
-  compensationValue: string;
+  email: string;
+  username: string;
+  personalEmail: string;
 };
 
 const initial: FormState = {
@@ -79,29 +76,24 @@ const initial: FormState = {
   ssnLast4: "",
   emergencyName: "",
   emergencyPhone: "",
-  employeeId: "",
-  departmentId: null,
-  jobTitle: "",
-  position: "",
-  dateOfHire: "",
-  employmentType: "FULL_PART_TIME",
-  compensationType: "HOURLY_RATE",
-  compensationValue: "",
 };
+
+// Documents: same allowlist the server enforces (it re-checks the contents).
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_EXT = ["pdf", "png", "jpg", "jpeg"];
 
 const NONE = "__none__";
 
 export function OnboardingForm({
   token,
   suggestedEmail,
-  departments,
 }: {
   token: string;
   suggestedEmail: string;
-  departments: Department[];
 }) {
-  const router = useRouter();
   const [step, setStep] = useState(0);
+  const [done, setDone] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>({ ...initial, email: suggestedEmail });
   const [files, setFiles] = useState<Record<string, File | null>>({});
@@ -127,6 +119,17 @@ export function OnboardingForm({
 
   function onPick(id: string, list: FileList | null) {
     const f = list?.[0] ?? null;
+    if (f) {
+      const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ALLOWED_EXT.includes(ext)) {
+        toast.error(`${f.name}: only PDF, PNG or JPG files are accepted.`);
+        return;
+      }
+      if (f.size > MAX_FILE_BYTES) {
+        toast.error(`${f.name} is larger than 10 MB. Compress it and try again.`);
+        return;
+      }
+    }
     setFiles((prev) => ({ ...prev, [id]: f }));
   }
 
@@ -140,6 +143,7 @@ export function OnboardingForm({
       toast.error("Passwords don't match");
       return;
     }
+    setSubmitError(null);
     startTransition(async () => {
       const fileEntries = await Promise.all(
         DOCUMENT_SLOTS.flatMap((slot) => {
@@ -157,17 +161,45 @@ export function OnboardingForm({
         }),
       );
 
-      const { confirmPassword, compensationValue, ...rest } = form;
+      const { confirmPassword, ...rest } = form;
       void confirmPassword;
       const res = await submitOnboarding(
         token,
-        { ...rest, compensationValue: parseMoneyInput(compensationValue) },
+        {
+          ...rest,
+          email: rest.email.trim().toLowerCase(),
+          username: rest.username.trim().toLowerCase(),
+          personalEmail: rest.personalEmail.trim().toLowerCase(),
+        },
         fileEntries,
       );
-      if (!toastAction(res)) return;
-      toast.success("Onboarding complete!");
-      router.push("/login");
+      if (!res.ok) {
+        // Keep the (possibly long, per-file) message on screen, not just a toast.
+        setSubmitError(res.error);
+        toastAction(res);
+        return;
+      }
+      setDone(true);
     });
+  }
+
+  if (done) {
+    return (
+      <div className="space-y-4 py-4 text-center">
+        <CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold">Thanks, you&apos;re all set</h2>
+          <p className="text-sm text-muted-foreground">
+            Your account has been created and sent to an administrator for approval. You can
+            sign in now to look around; you&apos;ll be able to make changes (time off, requests,
+            reimbursements) once you&apos;re approved.
+          </p>
+        </div>
+        <Button asChild>
+          <Link href="/login">Go to sign in</Link>
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -342,105 +374,10 @@ export function OnboardingForm({
       )}
 
       {step === 3 && (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Employee ID *">
-            <Input
-              value={form.employeeId}
-              onChange={(e) => update("employeeId", e.target.value.toUpperCase())}
-              placeholder="ACT001"
-              className="font-mono"
-              required
-            />
-          </Field>
-          <Field label="Department">
-            <Select
-              value={form.departmentId ?? NONE}
-              onValueChange={(v) => update("departmentId", v === NONE ? null : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="—" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>—</SelectItem>
-                {departments.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Job title">
-            <Input
-              value={form.jobTitle ?? ""}
-              onChange={(e) => update("jobTitle", e.target.value)}
-            />
-          </Field>
-          <Field label="Position">
-            <Input
-              value={form.position ?? ""}
-              onChange={(e) => update("position", e.target.value)}
-            />
-          </Field>
-          <Field label="Date of hire">
-            <Input
-              type="date"
-              value={form.dateOfHire ?? ""}
-              onChange={(e) => update("dateOfHire", e.target.value)}
-            />
-          </Field>
-          <Field label="Employment type *">
-            <Select
-              value={form.employmentType}
-              onValueChange={(v) =>
-                update("employmentType", v as FormState["employmentType"])
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="FULL_PART_TIME">Full-time / Part-time</SelectItem>
-                <SelectItem value="CONTRACT_HOURLY">Contract / Hourly</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Compensation type *">
-            <Select
-              value={form.compensationType}
-              onValueChange={(v) =>
-                update("compensationType", v as FormState["compensationType"])
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="HOURLY_RATE">Hourly rate</SelectItem>
-                <SelectItem value="MONTHLY_SALARY">Monthly salary</SelectItem>
-                <SelectItem value="TOTAL_COMPENSATION">Total compensation</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Compensation value">
-            <Input
-              type="text"
-              inputMode="decimal"
-              placeholder="60,000"
-              value={form.compensationValue}
-              onChange={(e) =>
-                update("compensationValue", formatMoneyInput(e.target.value))
-              }
-            />
-          </Field>
-        </div>
-      )}
-
-      {step === 4 && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
             Upload any documents now if you have them — you can also upload later. Max
-            10MB per file. PDF, JPG, PNG accepted.
+            10 MB per file. PDF, JPG and PNG only.
           </p>
           {DOCUMENT_SLOTS.map((slot) => (
             <FileSlot
@@ -454,11 +391,16 @@ export function OnboardingForm({
         </div>
       )}
 
-      {step === 5 && (
+      {step === 4 && (
         <div className="space-y-3">
+          {submitError && (
+            <Alert variant="destructive" className="py-2.5">
+              <AlertDescription className="text-xs">{submitError}</AlertDescription>
+            </Alert>
+          )}
           <p className="text-xs text-muted-foreground">
             Create a username and password for sign-in. Email addresses are optional while
-            email verification is paused.
+            email verification is paused. Emails and usernames are not case-sensitive.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Work email (leave blank if you don't have one)">
@@ -471,7 +413,9 @@ export function OnboardingForm({
             <Field label="Username (only if no work email above) *">
               <Input
                 value={form.username ?? ""}
-                onChange={(e) => update("username", e.target.value.toLowerCase())}
+                onChange={(e) =>
+                  update("username", e.target.value.toLowerCase().replace(/\s/g, ""))
+                }
                 placeholder="jsmith"
               />
             </Field>
@@ -580,7 +524,7 @@ function FileSlot({
           <input
             type="file"
             className="hidden"
-            accept="application/pdf,image/*"
+            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
             onChange={(e) => onPick(e.target.files)}
           />
         </label>
@@ -612,11 +556,11 @@ function validateStep(step: number, f: FormState): string | null {
       if (!/^\d{4}$/.test(f.ssnLast4 ?? ""))
         return "Enter the last 4 digits of your SSN.";
       return null;
-    case 3:
-      if (!f.employeeId || f.employeeId.length < 2) return "Employee ID is required.";
-      return null;
-    case 5:
-      if (!f.email && !f.username) return "Enter either a work email or a username.";
+    case 4:
+      if (!f.email.trim() && !f.username.trim())
+        return "Enter either a work email or a username.";
+      if (f.username.trim() && !/^[a-z0-9._-]{3,32}$/.test(f.username.trim().toLowerCase()))
+        return "Username: letters, numbers, . _ - only, 3-32 characters.";
       if (!f.password || f.password.length < 8)
         return "Password must be at least 8 characters.";
       return null;

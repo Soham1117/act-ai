@@ -13,7 +13,7 @@ import {
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { ArrowUpDown, MoreHorizontal, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,10 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { getAvatarUrl } from "@/lib/format";
 import { getDepartmentConfig } from "@/lib/departments";
-import { bulkDeleteEmployees } from "@/server/actions/employees";
-import { toast } from "sonner";
-import { toastAction } from "@/lib/toast-action";
-import { useTransition } from "react";
+import { BulkActions } from "./bulk-actions";
 
 export type Row = {
   id: string;
@@ -49,7 +46,9 @@ export type Row = {
   jobTitle: string | null;
   departmentName: string | null;
   employmentType: "FULL_PART_TIME" | "CONTRACT_HOURLY";
-  employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED";
+  employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW";
+  /** Admin accounts can't be bulk-selected (server also refuses). */
+  isAdmin: boolean;
   dateOfHire: string | null;
   profilePic: string | null;
 };
@@ -59,7 +58,12 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
   const [globalFilter, setGlobalFilter] = React.useState("");
   const [rowSelection, setRowSelection] = React.useState({});
   const [showInactive, setShowInactive] = React.useState(false);
-  const [pending, startTransition] = useTransition();
+
+  // Row ids (not array indexes) key the selection, and it resets whenever the
+  // visible set changes, so a hidden/filtered-out row can never be acted on.
+  React.useEffect(() => {
+    setRowSelection({});
+  }, [showInactive, globalFilter]);
 
   const visibleRows = React.useMemo(
     () => (showInactive ? rows : rows.filter((r) => r.employmentStatus !== "TERMINATED")),
@@ -88,6 +92,8 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(v) => row.toggleSelected(!!v)}
+            disabled={row.original.isAdmin}
+            title={row.original.isAdmin ? "Admin accounts can't be bulk-selected" : undefined}
             aria-label="Select row"
           />
         ),
@@ -160,15 +166,19 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
         cell: ({ getValue }) => {
           const v = getValue() as Row["employmentStatus"];
           const variant =
-            v === "ACTIVE" ? "success" : v === "ON_LEAVE" ? "warning" : "destructive";
-          return <Badge variant={variant}>{v.replace("_", " ")}</Badge>;
+            v === "ACTIVE"
+              ? "success"
+              : v === "ON_LEAVE" || v === "PENDING_REVIEW"
+                ? "warning"
+                : "destructive";
+          return <Badge variant={variant}>{v.replace(/_/g, " ")}</Badge>;
         },
       },
       {
         accessorKey: "email",
         header: "Email",
         cell: ({ getValue }) => (
-          <span className="text-muted-foreground">{getValue() as string}</span>
+          <span className="text-muted-foreground">{(getValue() as string | null) ?? "—"}</span>
         ),
       },
       {
@@ -195,6 +205,8 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
   const table = useReactTable({
     data: visibleRows,
     columns,
+    getRowId: (r) => r.id,
+    enableRowSelection: (row) => !row.original.isAdmin,
     state: { sorting, globalFilter, rowSelection },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
@@ -206,7 +218,11 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
     initialState: { pagination: { pageSize: 25 } },
   });
 
-  const selectedIds = table.getSelectedRowModel().rows.map((r) => r.original.id);
+  // Selected AND currently visible (passes the search filter + inactive toggle).
+  const selected = table
+    .getFilteredRowModel()
+    .rows.filter((r) => r.getIsSelected() && !r.original.isAdmin)
+    .map((r) => ({ id: r.original.id, name: r.original.name }));
 
   return (
     <div className="space-y-3">
@@ -220,23 +236,8 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
             className="pl-8 h-9"
           />
         </div>
-        {selectedIds.length > 0 && (
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={pending}
-            onClick={() =>
-              startTransition(async () => {
-                const res = await bulkDeleteEmployees(selectedIds);
-                if (!toastAction(res)) return;
-                toast.success(`Deleted ${res.count} employee${res.count === 1 ? "" : "s"}`);
-                setRowSelection({});
-              })
-            }
-          >
-            <Trash2 className="mr-2 h-3.5 w-3.5" />
-            Delete {selectedIds.length}
-          </Button>
+        {selected.length > 0 && (
+          <BulkActions selected={selected} onDone={() => setRowSelection({})} />
         )}
         <div className="ml-auto flex items-center gap-3">
           <div className="flex items-center gap-2">

@@ -41,7 +41,8 @@ export type HirePacketProposals = Partial<
 
 export type HirePacketFileResult = {
   fileName: string;
-  documentId: string;
+  /** null when the file was skipped (invalid type/contents) — see warnings. */
+  documentId: string | null;
   formType: HirePacketFormType;
   textSource: "digital" | "textract";
   warnings: string[];
@@ -96,4 +97,9 @@ export const HIRE_PACKET_FIELD_GROUPS: {
 
 export const MAX_HIRE_ZIP_BYTES = 50 * 1024 * 1024;
 export const MAX_HIRE_ZIP_FILES = 30;
+/** Largest single file inside the zip, and cap on total uncompressed size (zip-bomb guard). */
+export const MAX_HIRE_ENTRY_BYTES = 15 * 1024 * 1024;
+export const MAX_HIRE_TOTAL_UNCOMPRESSED_BYTES = 150 * 1024 * 1024;
+/** A job stuck in PROCESSING longer than this is considered dead and is re-claimed. */
+export const HIRE_JOB_STALE_MS = 10 * 60 * 1000;
 export const MIN_DIGITAL_TEXT_CHARS = 200;

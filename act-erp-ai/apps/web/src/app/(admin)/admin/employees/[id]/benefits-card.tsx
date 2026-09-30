@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Plus, Repeat, Square } from "lucide-react";
+import { CheckCircle2, Loader2, Plus, Repeat, Square } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,8 @@ import {
   endEnrollment,
   upsertRetirementElection,
   endRetirementElection,
+  confirmEnrollment,
+  confirmRetirementElection,
 } from "@/server/actions/benefits";
 import { toastAction } from "@/lib/toast-action";
 import { benefitTypeLabel, tierLabel, coverageState, utcToday } from "@/lib/benefits";
@@ -124,6 +126,9 @@ export function BenefitsCard({
                   </div>
                   {isOpen && (
                     <div className="flex gap-1.5">
+                      {e.status === "PENDING" && (
+                        <ConfirmButton onConfirm={() => confirmEnrollment(e.id)} label="Confirm enrollment" />
+                      )}
                       {e.status === "ENROLLED" && e.tier && (
                         <ChangeTierDialog enrollment={e} plans={healthPlans} />
                       )}
@@ -167,6 +172,9 @@ export function BenefitsCard({
                   </div>
                   {isOpen && (
                     <div className="flex gap-1.5">
+                      {el.status === "PENDING" && (
+                        <ConfirmButton onConfirm={() => confirmRetirementElection(el.id)} label="Confirm election" />
+                      )}
                       <EndElectionDialog electionId={el.id} />
                     </div>
                   )}
@@ -177,6 +185,33 @@ export function BenefitsCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function ConfirmButton({
+  onConfirm,
+  label,
+}: {
+  onConfirm: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  label: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={pending}
+      onClick={() =>
+        startTransition(async () => {
+          const res = await onConfirm();
+          if (!toastAction(res)) return;
+          toast.success("Confirmed");
+        })
+      }
+    >
+      {pending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
+      {label}
+    </Button>
   );
 }
 

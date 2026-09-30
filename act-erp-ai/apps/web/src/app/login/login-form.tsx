@@ -13,6 +13,13 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { requestLoginChallenge, verifyLoginChallenge } from "@/server/actions/auth";
 
+/** Only same-site paths; never follow an external `next` URL. */
+function safeNext(next: string | undefined): string {
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")
+    ? next
+    : "/";
+}
+
 const credsSchema = z.object({
   identifier: z.string().min(1, "Enter your email or username"),
   password: z.string().min(1, "Required"),
@@ -48,7 +55,7 @@ export function LoginForm({
       }
       if (!res.challengeId) {
         router.refresh();
-        router.push(next || "/");
+        router.push(safeNext(next));
         return;
       }
       setChallengeId(res.challengeId);
@@ -66,7 +73,7 @@ export function LoginForm({
         return;
       }
       router.refresh();
-      router.push(next || "/");
+      router.push(safeNext(next));
     });
   }
 

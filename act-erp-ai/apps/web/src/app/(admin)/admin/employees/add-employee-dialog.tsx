@@ -28,11 +28,13 @@ import {
 import { createEmployee } from "@/server/actions/employees";
 import { toastAction } from "@/lib/toast-action";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
+import { AdminPasswordField } from "./password-field";
 
 const NONE = "__none__";
 
 const optionalEmail = z
   .string()
+  .trim()
   .email()
   .optional()
   .or(z.literal("").transform(() => undefined));
@@ -43,7 +45,8 @@ const schema = z
     email: optionalEmail,
     username: z
       .string()
-      .regex(/^[a-z0-9._-]{3,32}$/, "Lowercase letters, numbers, . _ - only, 3-32 chars")
+      .trim()
+      .regex(/^[A-Za-z0-9._-]{3,32}$/, "Letters, numbers, . _ - only, 3-32 chars")
       .optional()
       .or(z.literal("").transform(() => undefined)),
     personalEmail: optionalEmail,
@@ -129,8 +132,10 @@ export function AddEmployeeDialog({
         <DialogHeader>
           <DialogTitle>New employee</DialogTitle>
           <DialogDescription>
-            Creates the auth account + employee record. Phase 6 onboarding will handle
-            this via invite links instead.
+            Creates the login and the employee record with a temporary password the
+            employee must change at first sign-in. To let the hire fill in their own
+            details, send an onboarding invite instead. Emails and usernames are
+            saved in lowercase.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
@@ -167,8 +172,16 @@ export function AddEmployeeDialog({
                 placeholder="6789"
               />
             </Field>
-            <Field label="Password" error={form.formState.errors.password?.message}>
-              <Input type="text" {...form.register("password")} />
+            <Field
+              label="Temporary password"
+              error={form.formState.errors.password?.message}
+            >
+              <AdminPasswordField
+                value={form.watch("password")}
+                onChange={(v) =>
+                  form.setValue("password", v, { shouldDirty: true, shouldValidate: true })
+                }
+              />
             </Field>
             <Field label="Gender">
               <Select

@@ -10,6 +10,7 @@ import {
 import { db } from "../db";
 import { rateLimited } from "../rate-limit";
 import { hashPassword as hashPersonaPassword, verifyPassword as verifyPersonaPassword } from "../auth/password";
+import { accessLevelFor } from "../access";
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
 const ASSERTION_TTL_SECONDS = 60;
@@ -203,7 +204,13 @@ function userFromPrisma(row: {
   name: string;
   passwordHash: string | null;
   personalEmail: string | null;
-  employee: { personalEmail: string | null; employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" } | null;
+  role: "ADMIN" | "EMPLOYEE";
+  employee: {
+    personalEmail: string | null;
+    employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW";
+    terminationDate: Date | null;
+    updatedAt: Date;
+  } | null;
 }): IdentityUserRecord {
   return {
     id: row.id,
@@ -212,7 +219,10 @@ function userFromPrisma(row: {
     passwordHash: row.passwordHash,
     personalEmail: row.personalEmail,
     employeePersonalEmail: row.employee?.personalEmail ?? null,
-    active: row.employee?.employmentStatus !== "TERMINATED",
+    // Same rule as the ERP sign-in: refuse once access is NONE (terminated past
+    // the 60-day grace window). Terminated-within-grace and pending-review
+    // accounts are still read-only users, not refused here.
+    active: accessLevelFor({ role: row.role, employee: row.employee }) !== "NONE",
   };
 }
 
@@ -222,7 +232,15 @@ const identityUserSelect = {
   name: true,
   passwordHash: true,
   personalEmail: true,
-  employee: { select: { personalEmail: true, employmentStatus: true } },
+  role: true,
+  employee: {
+    select: {
+      personalEmail: true,
+      employmentStatus: true,
+      terminationDate: true,
+      updatedAt: true,
+    },
+  },
 } as const;
 
 const prismaIdentityStore: IdentityStore = {

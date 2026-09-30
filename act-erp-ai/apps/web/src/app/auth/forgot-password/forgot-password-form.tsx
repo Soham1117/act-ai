@@ -5,15 +5,17 @@ import { Button } from "@/components/ui/button";
 
 /**
  * Credentials auth has no self-service email reset (no mail provider wired).
- * Admins reset passwords from the employee admin page; new hires set theirs
- * during onboarding. This page just explains that.
+ * Admins reset passwords from the employee admin page (the employee is then
+ * made to choose their own at next sign-in); new hires set theirs during
+ * onboarding. This page just explains that.
  */
 export function ForgotPasswordForm() {
   return (
     <div className="space-y-4 text-sm">
       <p className="text-muted-foreground">
-        Password resets are handled by your administrator. Contact your admin to have
-        your password reset, then sign in with the new password.
+        Password resets are handled by your administrator. Ask your admin to reset your
+        password; they will give you a temporary one. Sign in with it and you will be asked
+        to choose your own right away.
       </p>
       <Button asChild className="w-full">
         <Link href="/login">Back to sign in</Link>

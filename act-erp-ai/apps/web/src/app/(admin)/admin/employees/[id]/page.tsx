@@ -12,6 +12,11 @@ import {
   PenLine,
 } from "lucide-react";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/auth";
+import { readOnlyUntil } from "@/lib/employee-validation";
+import { LeaveBalanceSummary } from "@/components/leave-balance-summary";
+import { loadLeaveBalances } from "@/lib/leave-balance-db";
+import { AdjustBalanceDialog } from "../../leave/adjust-balance-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +46,8 @@ import { UploadDocumentDialog } from "@/components/upload-document-dialog";
 import { DeleteDocumentButton } from "@/components/delete-document-button";
 import { BenefitsCard } from "./benefits-card";
 import { HirePacketImportButton } from "./hire-packet-import-button";
+import { AccessCard } from "./access-card";
+import { PendingHireActions } from "../pending-hire-actions";
 
 export default async function EmployeeDetailPage({
   params,
@@ -48,10 +55,12 @@ export default async function EmployeeDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const admin = await requireAdmin();
   const employee = await db.employee
     .findUnique({
       where: { id },
       include: {
+        user: { select: { id: true, role: true, mustChangePassword: true } },
         department: true,
         supervisor: true,
         primaryJobCode: true,
@@ -88,6 +97,8 @@ export default async function EmployeeDetailPage({
     .catch(() => null);
 
   if (!employee) notFound();
+
+  const leaveBalances = await loadLeaveBalances(employee.id).catch(() => null);
 
   const [departments, supervisors, jobCodes, activePlans] = await Promise.all([
     db.department.findMany({
@@ -170,11 +181,48 @@ export default async function EmployeeDetailPage({
           <HirePacketImportButton employeeId={employee.id} />
           <ChangePasswordModal employeeId={employee.id} employeeName={employee.name} />
           <ResetKioskPinButton employeeId={employee.id} />
-          <StatusToggle employeeId={employee.id} status={employee.employmentStatus} />
+          <StatusToggle
+            employeeId={employee.id}
+            status={employee.employmentStatus}
+            isAdmin={employee.user.role === "ADMIN"}
+            terminationDate={employee.terminationDate?.toISOString() ?? null}
+            terminationReason={employee.terminationReason}
+          />
         </div>
       </div>
 
+      {employee.employmentStatus === "PENDING_REVIEW" && (
+        <Card className="mb-4 border-amber-500/50 bg-amber-500/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">New hire awaiting your approval</p>
+              <p className="text-xs text-muted-foreground">
+                They finished onboarding. Check the details, department, pay and documents below,
+                then approve. Until then their account is read-only.
+              </p>
+            </div>
+            <PendingHireActions
+              employeeId={employee.id}
+              name={employee.name}
+              redirectTo="/admin/employees"
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {employee.employmentStatus === "TERMINATED" && employee.terminationDate && (
+        <Card className="mb-4 border-destructive/40 bg-destructive/5">
+          <CardContent className="p-4 text-xs text-muted-foreground">
+            Terminated {employee.terminationDate.toLocaleDateString()}
+            {employee.terminationReason ? ` (${employee.terminationReason})` : ""}. Read-only
+            sign-in until {readOnlyUntil(employee.terminationDate).toLocaleDateString()}, then
+            they can no longer sign in. Records and documents are kept.
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+        <div className="space-y-4">
         <Card>
           <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
             <ProfilePicEditor
@@ -190,12 +238,13 @@ export default async function EmployeeDetailPage({
               variant={
                 employee.employmentStatus === "ACTIVE"
                   ? "success"
-                  : employee.employmentStatus === "ON_LEAVE"
+                  : employee.employmentStatus === "ON_LEAVE" ||
+                      employee.employmentStatus === "PENDING_REVIEW"
                     ? "warning"
                     : "destructive"
               }
             >
-              {employee.employmentStatus.replace("_", " ")}
+              {employee.employmentStatus.replace(/_/g, " ")}
             </Badge>
             {deptCfg && DeptIcon && (
               <span
@@ -219,6 +268,17 @@ export default async function EmployeeDetailPage({
             </div>
           </CardContent>
         </Card>
+        <AccessCard
+          employeeId={employee.id}
+          name={employee.name}
+          role={employee.user.role}
+          isSelf={employee.user.id === admin.id}
+          canPromote={
+            employee.employmentStatus === "ACTIVE" || employee.employmentStatus === "ON_LEAVE"
+          }
+          mustChangePassword={employee.user.mustChangePassword}
+        />
+        </div>
 
         <Tabs defaultValue="basic" className="space-y-4">
           <TabsList className="flex-wrap">
@@ -382,11 +442,17 @@ export default async function EmployeeDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
-                  Leave summary · {employee.leavesRemaining}/{employee.totalLeaves}{" "}
+                  Leave summary · {leaveBalances?.totals.available ?? "—"}/{leaveBalances?.totals.allowed ?? "—"}{" "}
                   remaining
                 </CardTitle>
+                <AdjustBalanceDialog
+                  employeeId={employee.id}
+                  employeeName={employee.name}
+                  year={leaveBalances?.year ?? new Date().getFullYear()}
+                />
               </CardHeader>
               <CardContent>
+                <LeaveBalanceSummary balances={leaveBalances} />
                 {employee.leaveRequests.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No leave requests yet.</p>
                 ) : (
@@ -398,7 +464,7 @@ export default async function EmployeeDetailPage({
                       >
                         <div>
                           <p className="font-medium">
-                            {l.leaveType.replace(/_/g, " ")} · {l.totalDays}d
+                            {l.leaveType.replace(/_/g, " ")} · {Number(l.totalDays)}d
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {l.startDate.toLocaleDateString()} →{" "}

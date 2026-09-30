@@ -13,6 +13,7 @@ import {
   applyHirePacketImport,
   cancelHirePacketImport,
   getHirePacketImportStatus,
+  retryHirePacketImport,
 } from "@/server/actions/hire-packet";
 import {
   HIRE_PACKET_FIELD_GROUPS,
@@ -98,13 +99,18 @@ export function HireImportReviewForm({
     const id = setInterval(() => {
       void refresh();
     }, POLL_MS);
-    void refresh();
-    return () => clearInterval(id);
+    // Deferred so setState never runs synchronously inside the effect body.
+    const first = setTimeout(() => void refresh(), 0);
+    return () => {
+      clearInterval(id);
+      clearTimeout(first);
+    };
   }, [isProcessing, refresh]);
 
   useEffect(() => {
     if (initialStatus === "READY" && !proposals) {
-      void refresh();
+      const t = setTimeout(() => void refresh(), 0);
+      return () => clearTimeout(t);
     }
   }, [initialStatus, proposals, refresh]);
 
@@ -139,6 +145,15 @@ export function HireImportReviewForm({
     });
   }
 
+  function onRetry() {
+    startTransition(async () => {
+      const res = await retryHirePacketImport(jobId);
+      if (!toastAction(res)) return;
+      setErrorMessage(null);
+      setStatus("PENDING"); // restarts polling
+    });
+  }
+
   function onCancel() {
     startTransition(async () => {
       const res = await cancelHirePacketImport(jobId);
@@ -168,9 +183,15 @@ export function HireImportReviewForm({
           <AlertCircle className="h-8 w-8 text-destructive" />
           <p className="text-sm font-medium">Import failed</p>
           <p className="max-w-md text-xs text-muted-foreground">{errorMessage ?? "Unknown error."}</p>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/admin/employees/${employeeId}`}>Back to employee</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={pending} onClick={onRetry}>
+              {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Retry import
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/employees/${employeeId}`}>Back to employee</Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -208,9 +229,9 @@ export function HireImportReviewForm({
             <CardTitle className="text-base">Imported files ({fileResults.length})</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {fileResults.map((f) => (
+            {fileResults.map((f, i) => (
               <div
-                key={f.documentId}
+                key={`${f.documentId ?? f.fileName}-${i}`}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
               >
                 <div className="flex min-w-0 items-center gap-2">
@@ -223,14 +244,21 @@ export function HireImportReviewForm({
                     {f.textSource}
                   </Badge>
                 </div>
-                <a
-                  href={`/api/documents/${f.documentId}/file`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-primary hover:underline"
-                >
-                  Open
-                </a>
+                {f.documentId ? (
+                  <a
+                    href={`/api/documents/${f.documentId}/file`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Open
+                  </a>
+                ) : (
+                  <span className="text-xs text-destructive">Not imported</span>
+                )}
+                {f.warnings.length > 0 && (
+                  <p className="w-full text-[11px] text-muted-foreground">{f.warnings.join(" ")}</p>
+                )}
               </div>
             ))}
           </CardContent>

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/admin-sidebar";
@@ -13,6 +14,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireAdmin();
+  // Admin-set password must be replaced before anything else.
+  if (user.mustChangePassword) redirect("/change-password");
   const initialUnread = user.employeeId
     ? await db.notificationRecipient
         .count({ where: { employeeId: user.employeeId, read: false } })

@@ -1,5 +1,10 @@
 import AdmZip from "adm-zip";
-import { MAX_HIRE_ZIP_BYTES, MAX_HIRE_ZIP_FILES } from "@/lib/hire-packet/types";
+import {
+  MAX_HIRE_ENTRY_BYTES,
+  MAX_HIRE_TOTAL_UNCOMPRESSED_BYTES,
+  MAX_HIRE_ZIP_BYTES,
+  MAX_HIRE_ZIP_FILES,
+} from "@/lib/hire-packet/types";
 
 const ALLOWED_EXT = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
 
@@ -14,15 +19,34 @@ export function unzipHirePacket(buffer: Buffer): ZipEntry[] {
     throw new Error(`Zip exceeds ${MAX_HIRE_ZIP_BYTES / (1024 * 1024)} MB limit.`);
   }
   const zip = new AdmZip(buffer);
-  const entries = zip
+  const candidates = zip
     .getEntries()
     .filter((e) => !e.isDirectory && !e.entryName.includes("__MACOSX") && !e.entryName.startsWith("."))
+    .filter((e) => ALLOWED_EXT.has(extOf(e.entryName.split("/").pop() ?? e.entryName)));
+
+  if (candidates.length > MAX_HIRE_ZIP_FILES) {
+    throw new Error(`Zip contains more than ${MAX_HIRE_ZIP_FILES} files.`);
+  }
+  // Check declared sizes BEFORE inflating anything (zip-bomb guard).
+  let declaredTotal = 0;
+  for (const e of candidates) {
+    if (e.header.size > MAX_HIRE_ENTRY_BYTES) {
+      throw new Error(
+        `"${e.entryName.split("/").pop()}" is larger than ${MAX_HIRE_ENTRY_BYTES / (1024 * 1024)} MB. Remove or compress it and re-upload.`,
+      );
+    }
+    declaredTotal += e.header.size;
+  }
+  if (declaredTotal > MAX_HIRE_TOTAL_UNCOMPRESSED_BYTES) {
+    throw new Error("Zip contents are too large once extracted.");
+  }
+
+  const entries = candidates
     .map((e) => ({
       fileName: e.entryName.split("/").pop() ?? e.entryName,
       bytes: e.getData(),
       contentType: contentTypeFor(e.entryName),
-    }))
-    .filter((e) => ALLOWED_EXT.has(extOf(e.fileName)));
+    }));
 
   if (entries.length === 0) {
     throw new Error("Zip contains no supported files (PDF, JPG, PNG).");

@@ -10,6 +10,8 @@ import { rateLimited } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { env } from "@/lib/env";
+import { accessLevelFor } from "@/lib/access";
+import { audit } from "@/lib/audit";
 
 export type LoginResult = { ok: true } | { ok: false; error: string };
 
@@ -44,13 +46,32 @@ export async function requestLoginChallenge(
       id: true,
       passwordHash: true,
       personalEmail: true,
-      employee: { select: { personalEmail: true } },
+      role: true,
+      employee: {
+        select: {
+          personalEmail: true,
+          employmentStatus: true,
+          terminationDate: true,
+          updatedAt: true,
+        },
+      },
     },
   });
   if (!user?.passwordHash) return { ok: false, error: GENERIC_ERROR };
 
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return { ok: false, error: GENERIC_ERROR };
+
+  // Password was right: tell a former employee why they can't get in rather
+  // than a misleading "invalid password". (Terminated accounts stay
+  // read-only for TERMINATION_GRACE_DAYS, then sign-in is refused.)
+  if (accessLevelFor({ role: user.role, employee: user.employee }) === "NONE") {
+    return {
+      ok: false,
+      error:
+        "This account no longer has access. If you think that's a mistake, contact your administrator.",
+    };
+  }
 
   if (env.LOGIN_2FA_ENABLED === "false") {
     try {
@@ -127,7 +148,13 @@ export async function signOut() {
 
 /**
  * Authenticated self-service password change. Verifies the current password,
- * sets the new hash, and revokes all sessions (so the user re-logs in).
+ * sets the new hash, clears mustChangePassword and revokes all sessions (so
+ * the user re-logs in).
+ *
+ * Deliberately NOT blocked for READ_ONLY accounts (terminated within the
+ * grace window / pending review): securing your own credentials is not a
+ * change to company data, and a hire whose password was admin-set must be
+ * able to replace it.
  */
 export async function changeMyPassword(
   current: string,
@@ -139,6 +166,15 @@ export async function changeMyPassword(
   if (next.length < 8) {
     return fail("New password must be at least 8 characters. Choose a longer password.");
   }
+  if (next.length > 72) {
+    return fail("New password is too long (max 72 characters).");
+  }
+  if (next === current) {
+    return fail("Choose a new password that is different from your current one.");
+  }
+  if (rateLimited(`pwchange:${user.id}`, 8, 15 * 60_000)) {
+    return fail("Too many attempts. Try again in a few minutes.");
+  }
 
   const row = await db.user.findUnique({
     where: { id: user.id },
@@ -149,7 +185,12 @@ export async function changeMyPassword(
   }
   await db.user.update({
     where: { id: user.id },
-    data: { passwordHash: await hashPassword(next), tokenVersion: { increment: 1 } },
+    data: {
+      passwordHash: await hashPassword(next),
+      mustChangePassword: false,
+      tokenVersion: { increment: 1 },
+    },
   });
+  await audit({ action: "auth.password_change", resource: `User:${user.id}` });
   return ok();
 }

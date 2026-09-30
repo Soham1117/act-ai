@@ -13,6 +13,8 @@ import {
   PenLine,
 } from "lucide-react";
 import { db } from "@/lib/db";
+import { LeaveBalanceSummary } from "@/components/leave-balance-summary";
+import { loadLeaveBalances } from "@/lib/leave-balance-db";
 import { requireUser } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +69,8 @@ export default async function MyDetailsPage() {
     .catch(() => null);
 
   if (!employee) notFound();
+
+  const leaveBalances = await loadLeaveBalances(employee.id).catch(() => null);
 
   const avatar = employee.profilePic ?? getAvatarUrl(employee.email);
   const deptCfg = employee.department
@@ -343,11 +347,12 @@ export default async function MyDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Leave summary · {employee.leavesRemaining}/{employee.totalLeaves}{" "}
+                Leave summary · {leaveBalances?.totals.available ?? "—"}/{leaveBalances?.totals.allowed ?? "—"}{" "}
                 remaining
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <LeaveBalanceSummary balances={leaveBalances} />
               {employee.leaveRequests.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No leave requests yet.</p>
               ) : (
@@ -359,7 +364,7 @@ export default async function MyDetailsPage() {
                     >
                       <div>
                         <p className="font-medium">
-                          {l.leaveType.replace(/_/g, " ")} · {l.totalDays}d
+                          {l.leaveType.replace(/_/g, " ")} · {Number(l.totalDays)}d
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {l.startDate.toLocaleDateString()} →{" "}
