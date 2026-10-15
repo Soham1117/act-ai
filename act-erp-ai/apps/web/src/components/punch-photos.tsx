@@ -26,6 +26,14 @@ type Props = {
   inOnly?: boolean;
 };
 
+/** Matches the S3 lifecycle rule on the kiosk-photos/ prefix (expire after 30 days). */
+const PHOTO_RETENTION_DAYS = 30;
+
+function isExpired(iso: string | null | undefined) {
+  if (!iso) return false;
+  return Date.now() - new Date(iso).getTime() > PHOTO_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+}
+
 function photoUrl(type: Props["type"], id: string, side: Side) {
   return `/api/punch-photo?type=${type}&id=${encodeURIComponent(id)}&side=${side}`;
 }
@@ -41,9 +49,14 @@ export function PunchPhotos({
   inOnly = false,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [failed, setFailed] = useState<Record<Side, boolean>>({ in: false, out: false });
   const fromKiosk = source === "KIOSK";
   const sides: Side[] = inOnly ? ["in"] : ["in", "out"];
-  const has = (s: Side) => (s === "in" ? hasIn : hasOut);
+  const timeOf = (s: Side) => (s === "in" ? clockIn : clockOut);
+  // Stored but deleted from S3 by the 30-day rule (or the load failed).
+  const gone = (s: Side) => isExpired(timeOf(s)) || failed[s];
+  const has = (s: Side) => (s === "in" ? hasIn : hasOut) && !gone(s);
+  const markFailed = (s: Side) => setFailed((f) => ({ ...f, [s]: true }));
 
   if (!hasIn && !hasOut && !fromKiosk) return null;
 
@@ -51,7 +64,11 @@ export function PunchPhotos({
     <>
       <div className="flex items-center gap-1">
         {sides.map((s) =>
-          has(s) ? (
+          (s === "in" ? hasIn : hasOut) && gone(s) ? (
+            <Badge key={s} variant="outline" className="text-[10px] font-normal text-muted-foreground">
+              Photo expired{inOnly ? "" : s === "in" ? " (in)" : " (out)"}
+            </Badge>
+          ) : has(s) ? (
             <button
               key={s}
               type="button"
@@ -64,6 +81,7 @@ export function PunchPhotos({
                 src={photoUrl(type, entryId, s)}
                 alt={s === "in" ? "Clock in" : "Clock out"}
                 loading="lazy"
+                onError={() => markFailed(s)}
                 className="h-full w-full object-cover"
               />
             </button>
@@ -98,11 +116,12 @@ export function PunchPhotos({
                       src={photoUrl(type, entryId, s)}
                       alt={s === "in" ? "Clock in" : "Clock out"}
                       loading="lazy"
+                      onError={() => markFailed(s)}
                       className="aspect-[4/3] w-full rounded-md border bg-muted object-cover"
                     />
                   ) : (
                     <div className="grid aspect-[4/3] w-full place-items-center rounded-md border bg-muted text-xs text-muted-foreground">
-                      No photo
+                      {(s === "in" ? hasIn : hasOut) ? "Photo expired (kept 30 days)" : "No photo"}
                     </div>
                   )}
                 </div>
