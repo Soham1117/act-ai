@@ -75,7 +75,7 @@ export default async function KioskTerminalPage({
             </div>
             <p className="mt-1 font-medium">{user.email}</p>
           </div>
-          <ActivateForm slug={slug} />
+          <ActivateForm slug={slug} kioskLabel={kiosk.label ?? undefined} />
           <Button asChild variant="ghost" className="w-full text-xs" size="sm">
             <Link href="/kiosk">Cancel</Link>
           </Button>

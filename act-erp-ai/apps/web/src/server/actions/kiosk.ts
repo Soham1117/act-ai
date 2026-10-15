@@ -14,9 +14,11 @@ import { rateLimited } from "@/lib/rate-limit";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 import { requestUsesHttps } from "@/lib/cookie-secure";
 import {
+  configuredNetworkList,
   getKioskNetworkAccess,
   kioskNetworkDeniedMessage,
 } from "@/lib/kiosk-network";
+import { notifyAdmins } from "@/lib/notify";
 import { DEFAULT_KIOSK_PIN, isDefaultPin, validateNewPin } from "@/lib/kiosk-pin";
 import { parseKioskIdInput } from "@/lib/kiosk-id";
 import {
@@ -25,7 +27,7 @@ import {
   minutesUntilUnlock,
   recordFailure,
 } from "@/lib/kiosk-rate-limit";
-import { clientIpFromHeaders } from "@/lib/ip-network";
+import { clientIpFromHeaders, normalizeNetwork } from "@/lib/ip-network";
 import { isStaleShift } from "@/lib/time-rules";
 import { _clockIn, _clockOut, _startBreak, _endBreak } from "@/server/time-core";
 
@@ -90,59 +92,293 @@ export async function createKiosk(
   }
 }
 
+type Admin = Awaited<ReturnType<typeof requireAdmin>>;
+
+/** Failure that also tells the UI which IP the server saw, so it can offer "Trust this network". */
+export type KioskActivateResult =
+  | ActionResult<{ redirectTo: string }>
+  | { ok: false; error: string; networkDenied: true; ip: string | null };
+
+type ActivatableKiosk =
+  | { session: NonNullable<Awaited<ReturnType<typeof db.kioskSession.findUnique>>> }
+  | { error: string };
+
+async function findActivatableKiosk(slug: string): Promise<ActivatableKiosk> {
+  const session = await db.kioskSession.findUnique({ where: { slug } });
+  if (!session) {
+    return { error: "That kiosk was not found. Check the slug or create the kiosk first." };
+  }
+  if (session.revokedAt) {
+    return {
+      error:
+        "That kiosk has been revoked. Create a new kiosk or ask an admin to restore access.",
+    };
+  }
+  return { session };
+}
+
+/** Binds this device to the kiosk (sets the device cookie). Network checks happen before this. */
+async function bindKioskToDevice(
+  admin: Admin,
+  session: { id: string },
+  slug: string,
+): Promise<ActionResult<{ redirectTo: string }>> {
+  const raw = randomBytes(32).toString("base64url");
+  await db.kioskSession.update({
+    where: { id: session.id },
+    data: {
+      cookieHash: hash(raw),
+      provisionedBy: admin.id,
+      expiresAt: new Date(Date.now() + KIOSK_TTL_DAYS * 24 * 60 * 60 * 1000),
+      revokedAt: null,
+    },
+  });
+
+  const jar = await cookies();
+  jar.set(COOKIE, raw, {
+    httpOnly: true,
+    secure: await requestUsesHttps(),
+    sameSite: "lax",
+    path: "/",
+    maxAge: KIOSK_TTL_DAYS * 24 * 60 * 60,
+  });
+
+  await audit({
+    action: "kiosk.activate",
+    resource: `KioskSession:${session.id}`,
+    diff: { slug },
+  });
+  revalidatePath("/admin/kiosks");
+  return ok({ redirectTo: `/kiosk/${slug}` });
+}
+
 /**
  * Activate the kiosk identified by `slug` on the current device. Sets a
  * scoped cookie containing a hashed secret. Must be called by an admin.
+ * When the network is not approved the failure carries `networkDenied` and the
+ * IP the server saw, so the UI can offer `trustCurrentNetworkAndActivate`.
  */
-export async function activateKiosk(
-  slug: string,
-): Promise<ActionResult<{ redirectTo: string }>> {
+export async function activateKiosk(slug: string): Promise<KioskActivateResult> {
   const admin = await requireAdmin();
   try {
     const network = await getKioskNetworkAccess();
     if (!network.allowed) {
-      return fail(kioskNetworkDeniedMessage(network.ip));
+      return {
+        ok: false,
+        error: kioskNetworkDeniedMessage(network.ip),
+        networkDenied: true,
+        ip: network.ip,
+      };
     }
-    const session = await db.kioskSession.findUnique({ where: { slug } });
-    if (!session) {
-      return fail("That kiosk was not found. Check the slug or create the kiosk first.");
+    const found = await findActivatableKiosk(slug);
+    if ("error" in found) return fail(found.error);
+
+    const result = await bindKioskToDevice(admin, found.session, slug);
+    if (result.ok && network.trustedId) {
+      await db.kioskTrustedNetwork
+        .update({ where: { id: network.trustedId }, data: { lastUsedAt: new Date() } })
+        .catch(() => undefined);
     }
-    if (session.revokedAt) {
-      return fail(
-        "That kiosk has been revoked. Create a new kiosk or ask an admin to restore access.",
-      );
-    }
-
-    const raw = randomBytes(32).toString("base64url");
-    await db.kioskSession.update({
-      where: { id: session.id },
-      data: {
-        cookieHash: hash(raw),
-        provisionedBy: admin.id,
-        expiresAt: new Date(Date.now() + KIOSK_TTL_DAYS * 24 * 60 * 60 * 1000),
-        revokedAt: null,
-      },
-    });
-
-    const jar = await cookies();
-    jar.set(COOKIE, raw, {
-      httpOnly: true,
-      secure: await requestUsesHttps(),
-      sameSite: "lax",
-      path: "/",
-      maxAge: KIOSK_TTL_DAYS * 24 * 60 * 60,
-    });
-
-    await audit({
-      action: "kiosk.activate",
-      resource: `KioskSession:${session.id}`,
-      diff: { slug },
-    });
-    revalidatePath("/admin/kiosks");
-    return ok({ redirectTo: `/kiosk/${slug}` });
+    return result;
   } catch (err) {
     return failFromUnknown(err);
   }
+}
+
+const labelSchema = z.string().trim().max(80).optional();
+
+/** Reads the caller IP on the server and stores it as a trusted /32. */
+async function trustRequestNetwork(
+  admin: Admin,
+  label: string | undefined,
+): Promise<
+  | { error: string }
+  | { ip: string; cidr: string; row: Awaited<ReturnType<typeof db.kioskTrustedNetwork.upsert>> }
+> {
+  const ip = clientIpFromHeaders(await headers());
+  const cidr = ip ? normalizeNetwork(ip) : null;
+  if (!ip || !cidr) {
+    return { error: "The server could not read a valid IPv4 address for this connection." };
+  }
+  const row = await db.kioskTrustedNetwork.upsert({
+    where: { cidr },
+    create: {
+      cidr,
+      label: label || null,
+      addedById: admin.id,
+      addedByEmail: admin.email,
+      lastUsedAt: new Date(),
+    },
+    update: { lastUsedAt: new Date(), ...(label ? { label } : {}) },
+  });
+  return { ip, cidr, row };
+}
+
+/**
+ * Admin, at the kiosk device: trust the network this request came from, then
+ * activate the kiosk. The IP is read from request headers, never from the client.
+ */
+export async function trustCurrentNetworkAndActivate(
+  slug: string,
+  label?: string,
+): Promise<ActionResult<{ redirectTo: string }>> {
+  const admin = await requireAdmin();
+  try {
+    const cleanLabel = labelSchema.parse(label);
+    const found = await findActivatableKiosk(slug);
+    if ("error" in found) return fail(found.error);
+
+    const trusted = await trustRequestNetwork(admin, cleanLabel);
+    if ("error" in trusted) return fail(trusted.error);
+
+    const kioskName = found.session.label ?? slug;
+    const who = admin.email ?? admin.name;
+    await audit({
+      action: "kiosk.network.trust",
+      resource: `KioskTrustedNetwork:${trusted.row.id}`,
+      diff: { ip: trusted.ip, cidr: trusted.cidr, slug, adminEmail: admin.email, activating: true },
+    });
+    await notifyAdmins({
+      type: "SYSTEM",
+      title: "Kiosk network trusted",
+      message: `${who} trusted network ${trusted.ip} while activating kiosk ${kioskName}.`,
+      link: "/admin/kiosks",
+      priority: "HIGH",
+    });
+
+    const result = await bindKioskToDevice(admin, found.session, slug);
+    revalidatePath("/admin/kiosks");
+    return result;
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+/** Admin: trust the network the current request came from (no activation). */
+export async function trustCurrentNetwork(label?: string): Promise<ActionResult<{ cidr: string }>> {
+  const admin = await requireAdmin();
+  try {
+    const trusted = await trustRequestNetwork(admin, labelSchema.parse(label));
+    if ("error" in trusted) return fail(trusted.error);
+    await audit({
+      action: "kiosk.network.trust",
+      resource: `KioskTrustedNetwork:${trusted.row.id}`,
+      diff: { ip: trusted.ip, cidr: trusted.cidr, adminEmail: admin.email, activating: false },
+    });
+    await notifyAdmins({
+      type: "SYSTEM",
+      title: "Kiosk network trusted",
+      message: `${admin.email ?? admin.name} trusted network ${trusted.ip} for kiosk activation.`,
+      link: "/admin/kiosks",
+      priority: "HIGH",
+    });
+    revalidatePath("/admin/kiosks");
+    return ok({ cidr: trusted.cidr });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+const addNetworkSchema = z.object({
+  cidr: z.string().trim().min(1, "Enter an IP address or CIDR."),
+  label: labelSchema,
+});
+
+/** Admin: manually trust an IPv4 address or CIDR (/16 to /32). */
+export async function addTrustedNetwork(
+  input: z.infer<typeof addNetworkSchema>,
+): Promise<ActionResult<{ cidr: string }>> {
+  const admin = await requireAdmin();
+  try {
+    const data = addNetworkSchema.parse(input);
+    const cidr = normalizeNetwork(data.cidr);
+    if (!cidr) {
+      return fail(
+        "Enter a valid IPv4 address or CIDR from /16 to /32, for example 98.97.83.9 or 192.168.10.0/24.",
+      );
+    }
+    const row = await db.kioskTrustedNetwork.upsert({
+      where: { cidr },
+      create: {
+        cidr,
+        label: data.label || null,
+        addedById: admin.id,
+        addedByEmail: admin.email,
+      },
+      update: data.label ? { label: data.label } : {},
+    });
+    await audit({
+      action: "kiosk.network.add",
+      resource: `KioskTrustedNetwork:${row.id}`,
+      diff: { cidr, label: data.label ?? null, adminEmail: admin.email },
+    });
+    await notifyAdmins({
+      type: "SYSTEM",
+      title: "Kiosk network added",
+      message: `${admin.email ?? admin.name} added trusted kiosk network ${cidr}.`,
+      link: "/admin/kiosks",
+      priority: "HIGH",
+    });
+    revalidatePath("/admin/kiosks");
+    return ok({ cidr });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+export async function removeTrustedNetwork(id: string): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  try {
+    const row = await db.kioskTrustedNetwork.delete({ where: { id } });
+    await audit({
+      action: "kiosk.network.remove",
+      resource: `KioskTrustedNetwork:${id}`,
+      diff: { cidr: row.cidr, label: row.label, adminEmail: admin.email },
+    });
+    revalidatePath("/admin/kiosks");
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+export type KioskTrustedNetworkRow = {
+  id: string;
+  cidr: string;
+  label: string | null;
+  addedByEmail: string | null;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+};
+
+/** Admin: env + DB allowlist and whether the current connection passes. */
+export async function listKioskNetworks(): Promise<{
+  env: string[];
+  trusted: KioskTrustedNetworkRow[];
+  currentIp: string | null;
+  currentAllowed: boolean;
+}> {
+  await requireAdmin();
+  const trusted = await db.kioskTrustedNetwork
+    .findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        cidr: true,
+        label: true,
+        addedByEmail: true,
+        createdAt: true,
+        lastUsedAt: true,
+      },
+    })
+    .catch(() => []);
+  const network = await getKioskNetworkAccess();
+  return {
+    env: configuredNetworkList(),
+    trusted,
+    currentIp: network.ip,
+    currentAllowed: network.allowed,
+  };
 }
 
 /**

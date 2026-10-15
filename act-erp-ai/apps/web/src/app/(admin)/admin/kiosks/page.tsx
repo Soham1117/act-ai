@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
 import { CreateKioskDialog } from "./create-kiosk-dialog";
 import { KioskRowActions } from "./kiosk-row-actions";
+import { TrustedNetworksCard } from "./trusted-networks-card";
+import { listKioskNetworks } from "@/server/actions/kiosk";
 
 export const metadata = { title: "Kiosks" };
 
@@ -31,6 +33,13 @@ export default async function KiosksPage() {
   const usageBySlug = Object.fromEntries(
     counts.map((c) => [c.kioskSlug, c._count]),
   ) as Record<string, number>;
+
+  const networks = await safe(listKioskNetworks(), {
+    env: [] as string[],
+    trusted: [],
+    currentIp: null as string | null,
+    currentAllowed: false,
+  });
 
   return (
     <>
@@ -129,6 +138,21 @@ export default async function KiosksPage() {
           </ul>
         </CardContent>
       </Card>
+      <div className="mt-6">
+        <TrustedNetworksCard
+          env={networks.env}
+          trusted={networks.trusted.map((t) => ({
+            id: t.id,
+            cidr: t.cidr,
+            label: t.label,
+            addedByEmail: t.addedByEmail,
+            createdAt: t.createdAt.toISOString(),
+            lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
+          }))}
+          currentIp={networks.currentIp}
+          currentAllowed={networks.currentAllowed}
+        />
+      </div>
     </>
   );
 }

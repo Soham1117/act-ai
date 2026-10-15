@@ -30,6 +30,29 @@ export function ipMatchesNetwork(ip: string, network: string) {
   return (candidateValue & mask) === (baseValue & mask);
 }
 
+/** Broadest network an admin may trust from the app (a /16 = 65,536 addresses). */
+const MIN_TRUSTED_PREFIX = 16;
+
+/**
+ * Normalise admin input to canonical IPv4 CIDR text, or null when invalid.
+ * Bare IPv4 becomes "/32". CIDRs must be /16 to /32; the host bits are
+ * cleared so "10.1.2.3/24" is stored as "10.1.2.0/24". IPv6 is rejected.
+ */
+export function normalizeNetwork(input: string): string | null {
+  if (typeof input !== "string") return null;
+  const text = normalizeIp(input);
+  const match = /^(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?$/.exec(text);
+  if (!match) return null;
+  const value = ipv4Value(match[1]!);
+  if (value === null) return null;
+  const prefix = match[2] === undefined ? 32 : Number(match[2]);
+  if (prefix < MIN_TRUSTED_PREFIX || prefix > 32) return null;
+  const mask = (0xffffffff << (32 - prefix)) >>> 0;
+  const network = (value & mask) >>> 0;
+  const base = [network >>> 24, (network >>> 16) & 255, (network >>> 8) & 255, network & 255].join(".");
+  return `${base}/${prefix}`;
+}
+
 export function isIpAllowed(ip: string | null, configuredNetworks: string | undefined) {
   if (!ip || !configuredNetworks?.trim()) return false;
   return configuredNetworks

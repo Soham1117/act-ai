@@ -949,6 +949,19 @@ model KioskSession {
   @@index([slug])
 }
 
+/// Networks an admin has approved for kiosk activation (in addition to the
+/// KIOSK_ALLOWED_NETWORKS env list). Only checked at activation time.
+model KioskTrustedNetwork {
+  id           String    @id @default(cuid())
+  /// Normalised IPv4 CIDR, e.g. "98.97.83.9/32".
+  cidr         String    @unique
+  label        String?
+  addedById    String    @db.Uuid
+  addedByEmail String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+}
+
 model OnboardingInvite {
   id                    String       @id @default(cuid())
   token                 String       @unique
