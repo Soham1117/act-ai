@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { toastAction } from "@/lib/toast-action";
 import type { ActionOk } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
+import { ContractCrewPanel, KioskModeSwitch } from "./contract-crew-panel";
 
 type LookupMatch = ActionOk<{
   id: string;
@@ -77,6 +78,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
   const [rosterLoading, setRosterLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
+  const [mode, setMode] = useState<"employees" | "contract">("employees");
   const [showIdEntry, setShowIdEntry] = useState(false);
   const [input, setInput] = useState("");
   const [match, setMatch] = useState<LookupMatch | null>(null);
@@ -283,7 +285,18 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
       <div className="overflow-auto p-4 sm:p-6 lg:p-8">
         <div className={cn("mx-auto w-full", match ? "max-w-md" : "max-w-5xl")}>
           <AnimatePresence mode="wait">
-            {!match ? (
+            {!match && mode === "contract" ? (
+              <motion.div
+                key="contract"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="space-y-4"
+              >
+                <KioskModeSwitch mode={mode} onChange={setMode} />
+                <ContractCrewPanel slug={slug} />
+              </motion.div>
+            ) : !match ? (
               <motion.div
                 key="roster"
                 initial={{ opacity: 0, y: 8 }}
@@ -291,6 +304,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                 exit={{ opacity: 0, y: -8 }}
                 className="space-y-4"
               >
+                <KioskModeSwitch mode={mode} onChange={setMode} />
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="relative min-w-0 flex-1">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

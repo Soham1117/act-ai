@@ -1444,3 +1444,98 @@ enum BenefitCostPeriod {
   MONTHLY
   ANNUAL
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Contract workers (agency staff)
+// Third-party agency floor staff hired for a short project. They clock in
+// on the kiosk (no PIN) but are deliberately NOT Employee rows, so they
+// never reach payroll, leave, benefits or headcount. Hours only, no rates.
+// ──────────────────────────────────────────────────────────────────────
+
+enum ContractWorkerStatus {
+  ACTIVE
+  ENDED
+}
+
+model StaffingAgency {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  contactName String?
+  phone       String?
+  email       String?
+  notes       String?          @db.Text
+  isActive    Boolean          @default(true)
+  workers     ContractWorker[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model ContractWorker {
+  id          String               @id @default(cuid())
+  /// Business ID, format CW-0001. Auto-generated.
+  workerId    String               @unique
+  name        String
+  phone       String?
+  agencyId    String
+  agency      StaffingAgency       @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  /// JobCode.code, same convention as TimeEntry.jobCode.
+  jobCode     String?
+  project     String?
+  startDate   DateTime             @db.Date
+  endDate     DateTime?            @db.Date
+  status      ContractWorkerStatus @default(ACTIVE)
+  notes       String?              @db.Text
+  /// Admin USER id (no relation on purpose).
+  createdById String?              @db.Uuid
+  timeEntries ContractTimeEntry[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([agencyId, status])
+  @@index([status, endDate])
+}
+
+model ContractTimeEntry {
+  id               String              @id @default(cuid())
+  contractWorkerId String
+  contractWorker   ContractWorker      @relation(fields: [contractWorkerId], references: [id], onDelete: Cascade)
+  date             DateTime            @db.Date
+  clockIn          DateTime
+  clockOut         DateTime?
+  totalBreakMin    Int                 @default(0)
+  totalWorkMin     Int                 @default(0)
+  status           TimeEntryStatus     @default(ACTIVE)
+  jobCode          String              @default("ACT001")
+  timesheetNotes   String?             @db.Text
+  kioskSlug        String?
+  kioskLabel       String?
+  // Admin approval
+  approvalStatus   ApprovalStatus      @default(PENDING)
+  /// Admin USER id (no relation, never an Employee).
+  approvedById     String?             @db.Uuid
+  approvedByName   String?
+  approvalDate     DateTime?
+  approvalNotes    String?             @db.Text
+  breaks           ContractTimeBreak[]
+  lastEditedById   String?             @db.Uuid
+  editReason       String?             @db.Text
+  /// Closed automatically because the shift ran past the max length.
+  autoClosed       Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([contractWorkerId, date])
+  @@index([status])
+  @@index([approvalStatus])
+  @@index([date])
+}
+
+model ContractTimeBreak {
+  id          String            @id @default(cuid())
+  timeEntryId String
+  timeEntry   ContractTimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  startTime   DateTime
+  endTime     DateTime?
+  durationMin Int               @default(0)
+  type        BreakType         @default(BREAK)
+}

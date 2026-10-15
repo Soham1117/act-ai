@@ -25,6 +25,7 @@ import {
   ClipboardList,
   Clock,
   FileText,
+  HardHat,
   HeartPulse,
   Home,
   LayoutGrid,
@@ -62,6 +63,7 @@ const NAV: Array<{
     group: "Operations",
     items: [
       { href: "/admin/time-tracking", label: "Time tracking", icon: Clock },
+      { href: "/admin/contract-workers", label: "Contract workers", icon: HardHat },
       { href: "/admin/schedules", label: "Schedules", icon: CalendarDays },
       { href: "/admin/leave", label: "Leave", icon: Plane },
       { href: "/admin/requests", label: "Requests", icon: ClipboardList },
