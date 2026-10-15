@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PunchPhotos } from "@/components/punch-photos";
 import { toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
 import { dateToBusinessLocal } from "@/lib/time-rules";
@@ -210,6 +211,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
               <th className="p-3 font-medium">Times</th>
               <th className="p-3 text-right font-medium">Breaks</th>
               <th className="p-3 text-right font-medium">Work</th>
+              <th className="p-3 font-medium">Photos</th>
               <th className="p-3 font-medium">Status</th>
               <th className="p-3 text-right font-medium">Actions</th>
             </tr>
@@ -253,6 +255,17 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                 </td>
                 <td className="p-3 text-right font-mono text-xs tabular-nums">{formatHours(r.totalBreakMin)}</td>
                 <td className="p-3 text-right font-mono tabular-nums">{r.isOpen ? "—" : formatHours(r.totalWorkMin)}</td>
+                <td className="p-3">
+                  <PunchPhotos
+                    type="contract"
+                    entryId={r.id}
+                    hasIn={r.hasClockInPhoto}
+                    hasOut={r.hasClockOutPhoto}
+                    source={r.fromKiosk ? "KIOSK" : null}
+                    clockIn={r.clockIn}
+                    clockOut={r.clockOut}
+                  />
+                </td>
                 <td className="p-3">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <ApprovalBadge status={r.approvalStatus} open={r.isOpen} />

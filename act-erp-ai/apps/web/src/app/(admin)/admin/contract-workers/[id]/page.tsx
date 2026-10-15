@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PunchPhotos } from "@/components/punch-photos";
 import { formatBusinessTime, formatDateOnly, formatHours, formatPhone } from "@/lib/format";
 import { getContractWorker, listContractWorkers } from "@/server/queries/contract-workers";
 import { ApprovalBadge } from "../shared";
@@ -87,6 +88,7 @@ export default async function ContractWorkerDetailPage({
                       <th className="p-3 font-medium">Times</th>
                       <th className="p-3 text-right font-medium">Breaks</th>
                       <th className="p-3 text-right font-medium">Work</th>
+                      <th className="p-3 font-medium">Photos</th>
                       <th className="p-3 font-medium">Status</th>
                     </tr>
                   </thead>
@@ -105,6 +107,17 @@ export default async function ContractWorkerDetailPage({
                           </td>
                           <td className="p-3 text-right font-mono tabular-nums">
                             {open ? "—" : formatHours(e.totalWorkMin)}
+                          </td>
+                          <td className="p-3">
+                            <PunchPhotos
+                              type="contract"
+                              entryId={e.id}
+                              hasIn={!!e.clockInPhotoKey}
+                              hasOut={!!e.clockOutPhotoKey}
+                              source={e.kioskSlug !== null ? "KIOSK" : null}
+                              clockIn={e.clockIn.toISOString()}
+                              clockOut={e.clockOut?.toISOString() ?? null}
+                            />
                           </td>
                           <td className="p-3">
                             <div className="flex flex-wrap gap-1.5">

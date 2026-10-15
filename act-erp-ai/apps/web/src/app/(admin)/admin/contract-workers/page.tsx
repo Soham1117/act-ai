@@ -21,6 +21,7 @@ import { AgenciesTable, AgencyFormDialog } from "./agencies-tab";
 import { DownloadHoursCsvButton, HoursTable } from "./hours-table";
 import { WorkerFormDialog, ClockOutButton } from "./worker-dialogs";
 import { WorkersTable } from "./workers-table";
+import { PunchPhotos } from "@/components/punch-photos";
 import { selectClass, type AgencyRow, type HoursRow, type WorkerRow } from "./shared";
 
 export const metadata = { title: "Contract workers" };
@@ -123,6 +124,9 @@ export default async function ContractWorkersPage({ searchParams }: { searchPara
     approvalNotes: e.approvalNotes,
     editReason: e.editReason,
     autoClosed: e.autoClosed,
+    fromKiosk: e.kioskSlug !== null,
+    hasClockInPhoto: !!e.clockInPhotoKey,
+    hasClockOutPhoto: !!e.clockOutPhotoKey,
   }));
   const approvedMin = hoursRows
     .filter((r) => r.approvalStatus === "APPROVED")
@@ -204,6 +208,15 @@ export default async function ContractWorkersPage({ searchParams }: { searchPara
                 <ul className="divide-y">
                   {onSite.map((e) => (
                     <li key={e.id} className="flex flex-wrap items-center gap-3 p-3">
+                      <PunchPhotos
+                        type="contract"
+                        entryId={e.id}
+                        hasIn={!!e.clockInPhotoKey}
+                        hasOut={false}
+                        source={e.kioskSlug !== null ? "KIOSK" : null}
+                        clockIn={e.clockIn.toISOString()}
+                        inOnly
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">
                           <Link href={`/admin/contract-workers/${e.contractWorker.id}`} className="hover:underline">

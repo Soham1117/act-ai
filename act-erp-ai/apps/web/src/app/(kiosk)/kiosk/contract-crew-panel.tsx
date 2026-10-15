@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { Coffee, Loader2, Pause, Play, Search, Square, X } from "lucide-react";
+import { Loader2, Play, Search, Square, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,9 @@ import {
 import { BUSINESS_TIME_ZONE } from "@/lib/format";
 import { toastAction } from "@/lib/toast-action";
 import { cn } from "@/lib/utils";
+import type { PunchCameraHandle } from "./punch-camera";
 
-type ContractAction = "CLOCK_IN" | "CLOCK_OUT" | "START_BREAK" | "END_BREAK";
+type ContractAction = "CLOCK_IN" | "CLOCK_OUT";
 
 /** Roster refresh while the tab is open and visible (server limit: 20/min). */
 const ROSTER_REFRESH_MS = 60_000;
@@ -68,7 +69,13 @@ export function KioskModeSwitch({
   );
 }
 
-export function ContractCrewPanel({ slug }: { slug: string }) {
+export function ContractCrewPanel({
+  slug,
+  cameraRef,
+}: {
+  slug: string;
+  cameraRef?: React.RefObject<PunchCameraHandle | null>;
+}) {
   const [workers, setWorkers] = useState<KioskContractWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -132,7 +139,9 @@ export function ContractCrewPanel({ slug }: { slug: string }) {
 
   function act(worker: KioskContractWorker, action: ContractAction) {
     startTransition(async () => {
-      const res = await kioskContractAction({ slug, workerId: worker.id, action });
+      // Best-effort photo; null never blocks the punch.
+      const photo = (await cameraRef?.current?.capture()) ?? undefined;
+      const res = await kioskContractAction({ slug, workerId: worker.id, action, photo });
       if (!toastAction(res)) return;
       const time = new Date().toLocaleTimeString([], {
         timeZone: BUSINESS_TIME_ZONE,
@@ -143,8 +152,6 @@ export function ContractCrewPanel({ slug }: { slug: string }) {
       const labels: Record<ContractAction, string> = {
         CLOCK_IN: "Clocked in",
         CLOCK_OUT: "Clocked out",
-        START_BREAK: "Break started",
-        END_BREAK: "Break ended",
       };
       toast.success(`${labels[action]} at ${time} · ${worker.name}`);
       if (res.autoClosed) {
@@ -208,49 +215,21 @@ export function ContractCrewPanel({ slug }: { slug: string }) {
                   Clock in
                 </Button>
               )}
-              {selected.status === "ACTIVE" && (
-                <>
-                  <Button
-                    size="lg"
-                    variant="warning"
-                    className="h-16 text-base"
-                    disabled={pending}
-                    onClick={() => act(selected, "START_BREAK")}
-                  >
-                    <Pause className="mr-2 h-5 w-5" /> Start break
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    className="h-16 text-base"
-                    disabled={pending}
-                    onClick={() => act(selected, "CLOCK_OUT")}
-                  >
-                    <Square className="mr-2 h-5 w-5" /> Clock out
-                  </Button>
-                </>
-              )}
-              {selected.status === "ON_BREAK" && (
-                <>
-                  <Button
-                    size="lg"
-                    variant="success"
-                    className="h-16 text-base"
-                    disabled={pending}
-                    onClick={() => act(selected, "END_BREAK")}
-                  >
-                    <Coffee className="mr-2 h-5 w-5" /> End break
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    className="h-16 text-base"
-                    disabled={pending}
-                    onClick={() => act(selected, "CLOCK_OUT")}
-                  >
-                    <Square className="mr-2 h-5 w-5" /> Clock out
-                  </Button>
-                </>
+              {(selected.status === "ACTIVE" || selected.status === "ON_BREAK") && (
+                <Button
+                  size="lg"
+                  variant="destructive"
+                  className="col-span-2 h-16 text-base"
+                  disabled={pending}
+                  onClick={() => act(selected, "CLOCK_OUT")}
+                >
+                  {pending ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <Square className="mr-2 h-5 w-5" />
+                  )}
+                  Clock out
+                </Button>
               )}
               <Button
                 variant="outline"

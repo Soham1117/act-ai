@@ -40,6 +40,7 @@ import {
   adminUpdateTimeEntry,
 } from "@/server/actions/time-admin";
 import { bulkReviewTimeEntries, reviewTimeEntry } from "@/server/actions/time-clock";
+import { PunchPhotos } from "@/components/punch-photos";
 import type { EmployeeOption, EntryRowData, JobCodeOption } from "./time-types";
 
 const selectClass =
@@ -776,6 +777,15 @@ export function PendingQueue({
                 <p className="mt-0.5 text-[11px] text-muted-foreground">{e.editReason}</p>
               )}
             </div>
+            <PunchPhotos
+              type="employee"
+              entryId={e.id}
+              hasIn={e.hasClockInPhoto}
+              hasOut={e.hasClockOutPhoto}
+              source={e.source}
+              clockIn={e.clockIn}
+              clockOut={e.clockOut}
+            />
             {e.source === "MANUAL" && <Badge variant="outline" className="text-[10px]">Manual</Badge>}
             <EntryActions entry={e} jobCodes={jobCodes} compact />
             <RowReview entry={e} />

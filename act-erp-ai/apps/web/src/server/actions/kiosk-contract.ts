@@ -9,12 +9,11 @@ import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-resul
 import { businessDateOnly } from "@/lib/format";
 import { isContractWorkerEligible } from "@/lib/contract-workers";
 import { isStaleShift } from "@/lib/time-rules";
+import { storePunchPhoto } from "@/server/punch-photo-store";
 import { getActiveKioskSession } from "@/server/actions/kiosk";
 import {
   _contractClockIn,
   _contractClockOut,
-  _contractEndBreak,
-  _contractStartBreak,
   type ContractPunchResult,
 } from "@/server/contract-time-core";
 
@@ -113,7 +112,10 @@ const actionSchema = z.object({
   slug: z.string().min(1),
   /** ContractWorker.id */
   workerId: z.string().min(1),
-  action: z.enum(["CLOCK_IN", "CLOCK_OUT", "START_BREAK", "END_BREAK"]),
+  /** Contract workers have no breaks. */
+  action: z.enum(["CLOCK_IN", "CLOCK_OUT"]),
+  /** Optional JPEG data URL. Invalid photos are ignored. */
+  photo: z.string().optional().catch(undefined),
 });
 
 export type KioskContractActionInput = z.infer<typeof actionSchema>;
@@ -149,14 +151,16 @@ export async function kioskContractAction(
       case "CLOCK_OUT":
         result = await _contractClockOut(worker.id, meta);
         break;
-      case "START_BREAK":
-        result = await _contractStartBreak(worker.id);
-        break;
-      case "END_BREAK":
-        result = await _contractEndBreak(worker.id);
-        break;
     }
     if (!result.ok) return result;
+
+    // Best-effort photo: the punch is already saved, so a failure here is ignored.
+    const photoKey = await storePunchPhoto({
+      type: "contract",
+      entryId: result.id,
+      side: data.action === "CLOCK_IN" ? "in" : "out",
+      photo: data.photo,
+    });
 
     await audit({
       action: `kiosk.contract.${data.action.toLowerCase()}`,
@@ -170,6 +174,7 @@ export async function kioskContractAction(
         kioskLabel: session.label,
         timeEntryId: result.id,
         autoClosedShift: result.autoClosed ?? false,
+        photo: !!photoKey,
       },
     });
 

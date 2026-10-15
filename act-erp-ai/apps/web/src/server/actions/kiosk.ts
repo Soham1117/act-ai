@@ -29,6 +29,7 @@ import {
 } from "@/lib/kiosk-rate-limit";
 import { clientIpFromHeaders, normalizeNetwork } from "@/lib/ip-network";
 import { isStaleShift } from "@/lib/time-rules";
+import { storePunchPhoto } from "@/server/punch-photo-store";
 import { _clockIn, _clockOut, _startBreak, _endBreak } from "@/server/time-core";
 
 const COOKIE = "act_kiosk";
@@ -607,6 +608,8 @@ const actionSchema = z.object({
   employeeId: z.string(),
   pin: pinSchema,
   action: z.enum(["CLOCK_IN", "CLOCK_OUT", "START_BREAK", "END_BREAK"]),
+  /** Optional JPEG data URL, used for CLOCK_IN / CLOCK_OUT only. Invalid photos are ignored. */
+  photo: z.string().optional().catch(undefined),
 });
 
 /**
@@ -699,6 +702,17 @@ export async function kioskAction(
 
     if (!entryResult.ok) return entryResult;
 
+    // Best-effort photo: the punch is already saved, so a failure here is ignored.
+    let photoKey: string | null = null;
+    if (data.action === "CLOCK_IN" || data.action === "CLOCK_OUT") {
+      photoKey = await storePunchPhoto({
+        type: "employee",
+        entryId: entryResult.id,
+        side: data.action === "CLOCK_IN" ? "in" : "out",
+        photo: data.photo,
+      });
+    }
+
     await audit({
       action: `kiosk.${data.action.toLowerCase()}`,
       resource: `Employee:${employee.id}`,
@@ -710,6 +724,7 @@ export async function kioskAction(
         kioskLabel: session.label,
         timeEntryId: entryResult.id,
         autoClosedShift: entryResult.autoClosed ?? false,
+        photo: !!photoKey,
       },
     });
 

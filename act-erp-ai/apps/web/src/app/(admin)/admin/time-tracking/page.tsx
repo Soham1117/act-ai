@@ -31,6 +31,7 @@ import {
   parseDateOnly,
   startOfBusinessWeek,
 } from "@/lib/time-rules";
+import { PunchPhotos } from "@/components/punch-photos";
 import { EntryActions, ManualEntryButton, PendingQueue } from "./time-tools";
 import type { EntryRowData } from "./time-types";
 
@@ -77,6 +78,8 @@ function toRow(e: EntryWithRels): EntryRowData {
     autoClosed: e.autoClosed,
     source: e.source,
     kioskLabel: e.kioskLabel,
+    hasClockInPhoto: !!e.clockInPhotoKey,
+    hasClockOutPhoto: !!e.clockOutPhotoKey,
     totalWorkMin: e.totalWorkMin,
     totalBreakMin: e.totalBreakMin,
     breaks: e.breaks.map((b) => ({
@@ -524,6 +527,15 @@ function EntryList({
           {e.autoClosed && (
             <Badge variant="destructive" className="text-[10px]">Auto-closed</Badge>
           )}
+          <PunchPhotos
+            type="employee"
+            entryId={e.id}
+            hasIn={e.hasClockInPhoto}
+            hasOut={e.hasClockOutPhoto}
+            source={e.source}
+            clockIn={e.clockIn}
+            clockOut={e.clockOut}
+          />
           <SourceBadge source={e.source} kioskLabel={e.kioskLabel} />
           {live ? (
             <Badge variant={e.status === "ON_BREAK" ? "warning" : "success"} className="text-[10px]">

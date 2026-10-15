@@ -20,7 +20,8 @@ export type Bucket =
   | "documents"
   | "payroll"
   | "reimbursement-receipts"
-  | "knowledge";
+  | "knowledge"
+  | "kiosk-photos";
 
 function keyFor(bucket: Bucket, path: string): string {
   return `${bucket}/${path}`;

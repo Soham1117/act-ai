@@ -27,8 +27,10 @@ const nextConfig: NextConfig = {
     //    affect script/style loading. File downloads add their own sandbox CSP
     //    (lib/upload-validation.ts downloadHeaders).
     //  - Nothing in the app is iframed (verified by grep), so SAMEORIGIN is safe.
-    //  - Camera/mic/geolocation are unused; clipboard-write IS used (copy-link
-    //    buttons) so it is not restricted.
+    //  - Mic/geolocation are unused; clipboard-write IS used (copy-link buttons)
+    //    so it is not restricted. Camera is blocked everywhere EXCEPT the kiosk
+    //    (punch photos): the second rule below matches later, and when two rules
+    //    set the same key the last one wins (Next docs, "Header Overriding").
     //  - HSTS is set by Caddy (infra/Caddyfile), which terminates TLS.
     return [
       {
@@ -43,6 +45,16 @@ const nextConfig: NextConfig = {
             value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
           },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+        ],
+      },
+      {
+        // Same policy as above, but the kiosk may use its own camera.
+        source: "/kiosk/:path*",
+        headers: [
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+          },
         ],
       },
     ];

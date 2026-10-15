@@ -344,6 +344,9 @@ model TimeEntry {
   /// this entry. Stored denormalised so reports survive kiosk deletion.
   kioskSlug       String?
   kioskLabel      String?
+  /// Best-effort kiosk photos (storage keys, served via /api/punch-photo).
+  clockInPhotoKey  String?
+  clockOutPhotoKey String?
   // Manager approval
   approvalStatus  ApprovalStatus  @default(PENDING)
   approvedById    String?
@@ -1522,6 +1525,9 @@ model ContractTimeEntry {
   timesheetNotes   String?             @db.Text
   kioskSlug        String?
   kioskLabel       String?
+  /// Best-effort kiosk photos (storage keys, served via /api/punch-photo).
+  clockInPhotoKey  String?
+  clockOutPhotoKey String?
   // Admin approval
   approvalStatus   ApprovalStatus      @default(PENDING)
   /// Admin USER id (no relation, never an Employee).

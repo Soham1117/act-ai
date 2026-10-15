@@ -35,6 +35,7 @@ import { toastAction } from "@/lib/toast-action";
 import type { ActionOk } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
 import { ContractCrewPanel, KioskModeSwitch } from "./contract-crew-panel";
+import { PunchCamera, type PunchCameraHandle } from "./punch-camera";
 
 type LookupMatch = ActionOk<{
   id: string;
@@ -93,6 +94,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
   const pinRef = useRef<HTMLInputElement>(null);
   const newPinRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<PunchCameraHandle>(null);
 
   const loadRoster = useCallback(async () => {
     const res = await kioskListEmployees(slug);
@@ -178,7 +180,12 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
   }
 
   async function runAction(m: LookupMatch, action: KioskActionName, pinValue: string) {
-    const res = await kioskAction({ slug, employeeId: m.employeeId, pin: pinValue, action });
+    // Best-effort photo for clock in/out only; null never blocks the punch.
+    const photo =
+      action === "CLOCK_IN" || action === "CLOCK_OUT"
+        ? ((await cameraRef.current?.capture()) ?? undefined)
+        : undefined;
+    const res = await kioskAction({ slug, employeeId: m.employeeId, pin: pinValue, action, photo });
     if (!toastAction(res)) {
       setPin("");
       return false;
@@ -294,7 +301,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                 className="space-y-4"
               >
                 <KioskModeSwitch mode={mode} onChange={setMode} />
-                <ContractCrewPanel slug={slug} />
+                <ContractCrewPanel slug={slug} cameraRef={cameraRef} />
               </motion.div>
             ) : !match ? (
               <motion.div
@@ -684,9 +691,11 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
         </div>
       </div>
 
+      <PunchCamera ref={cameraRef} className="fixed bottom-14 right-4 z-10" />
+
       <footer className="flex items-center justify-between border-t bg-background px-6 py-3 sm:px-8">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          /kiosk/{slug}
+          /kiosk/{slug} · A photo is taken when you clock in or out.
         </p>
         <form action={endKioskSession.bind(null, slug)}>
           <Button

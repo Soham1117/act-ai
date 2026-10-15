@@ -54,6 +54,9 @@ export type HoursRow = {
   approvalNotes: string | null;
   editReason: string | null;
   autoClosed: boolean;
+  fromKiosk: boolean;
+  hasClockInPhoto: boolean;
+  hasClockOutPhoto: boolean;
 };
 
 export function LiveBadge({ status }: { status: LiveStatus }) {

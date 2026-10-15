@@ -18,6 +18,8 @@ export type EntryRowData = {
   autoClosed: boolean;
   source: "WEB" | "KIOSK" | "AUTO" | "MANUAL";
   kioskLabel: string | null;
+  hasClockInPhoto: boolean;
+  hasClockOutPhoto: boolean;
   totalWorkMin: number;
   totalBreakMin: number;
   breaks: { id: string; start: string; end: string | null }[];
