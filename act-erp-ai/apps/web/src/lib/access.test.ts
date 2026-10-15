@@ -47,10 +47,17 @@ describe("accessLevelFor", () => {
     );
   });
 
-  it("admins are always FULL, even if their employee is terminated", () => {
+  it("linked admins follow the termination grace period", () => {
     expect(
-      accessLevelFor({ role: "ADMIN", employee: emp("TERMINATED", daysAgo(400)) }, now),
-    ).toBe("FULL");
+      accessLevelFor({ role: "ADMIN", employee: emp("TERMINATED", daysAgo(60)) }, now),
+    ).toBe("READ_ONLY");
+    expect(
+      accessLevelFor({ role: "ADMIN", employee: emp("TERMINATED", daysAgo(61)) }, now),
+    ).toBe("NONE");
+  });
+
+  it("an intentionally unlinked bootstrap admin remains FULL", () => {
+    expect(accessLevelFor({ role: "ADMIN", employee: null }, now)).toBe("FULL");
   });
 
   it("user with no employee record is FULL", () => {

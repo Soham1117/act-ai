@@ -131,26 +131,14 @@ export async function bulkReviewTimeEntries(
     }
     const ids = [...new Set(data.ids)];
 
-    const eligible = await db.timeEntry.findMany({
-      where: {
-        id: { in: ids },
-        approvalStatus: "PENDING",
-        status: "COMPLETED",
-        clockOut: { not: null },
-      },
-      select: { id: true, employeeId: true, date: true, totalWorkMin: true },
-    });
-    if (eligible.length === 0) {
-      return fail("None of the selected entries are pending review any more. Refresh the page.");
-    }
-
     const now = new Date();
-    const count = await db.$transaction(async (tx) => {
-      const res = await tx.timeEntry.updateMany({
+    const changed = await db.$transaction(async (tx) =>
+      tx.timeEntry.updateManyAndReturn({
         where: {
-          id: { in: eligible.map((e) => e.id) },
+          id: { in: ids },
           approvalStatus: "PENDING",
           status: "COMPLETED",
+          clockOut: { not: null },
         },
         data: {
           approvalStatus: data.decision,
@@ -159,32 +147,45 @@ export async function bulkReviewTimeEntries(
           approvalDate: now,
           approvalNotes: notes,
         },
-      });
-      return res.count;
-    });
+        select: { id: true, employeeId: true, approvalStatus: true },
+      }),
+    );
+    if (changed.length === 0) {
+      return fail("None of the selected entries are pending review any more. Refresh the page.");
+    }
+    const committedDecision = changed[0]!.approvalStatus as "APPROVED" | "REJECTED";
 
     await audit({
-      action: `time.bulk_${data.decision === "APPROVED" ? "approve" : "reject"}`,
+      action: `time.bulk_${committedDecision === "APPROVED" ? "approve" : "reject"}`,
       resource: "TimeEntry:bulk",
-      diff: { ids: eligible.map((e) => e.id), requested: ids.length, updated: count, notes },
+      diff: {
+        ids: changed.map((entry) => entry.id),
+        requested: ids.length,
+        updated: changed.length,
+        skipped: ids.length - changed.length,
+        decision: committedDecision,
+        notes,
+      },
     });
 
     const byEmployee = new Map<string, number>();
-    for (const e of eligible) byEmployee.set(e.employeeId, (byEmployee.get(e.employeeId) ?? 0) + 1);
+    for (const entry of changed) {
+      byEmployee.set(entry.employeeId, (byEmployee.get(entry.employeeId) ?? 0) + 1);
+    }
     for (const [employeeId, n] of byEmployee) {
       await notifyEmployees([employeeId], {
         type: "TIME",
-        title: data.decision === "APPROVED" ? "Timesheets approved" : "Timesheets rejected",
+        title: committedDecision === "APPROVED" ? "Timesheets approved" : "Timesheets rejected",
         message:
           `${n} of your time ${n === 1 ? "entry was" : "entries were"} ${
-            data.decision === "APPROVED" ? "approved" : "rejected"
-          }.` + (notes ? ` ${data.decision === "REJECTED" ? "Reason" : "Note"}: ${notes}` : ""),
+            committedDecision === "APPROVED" ? "approved" : "rejected"
+          }.` + (notes ? ` ${committedDecision === "REJECTED" ? "Reason" : "Note"}: ${notes}` : ""),
         link: "/dashboard/time-tracking",
-        priority: data.decision === "REJECTED" ? "HIGH" : "MEDIUM",
+        priority: committedDecision === "REJECTED" ? "HIGH" : "MEDIUM",
       });
     }
     revalidateTimePages();
-    return ok({ updated: count, skipped: ids.length - count });
+    return ok({ updated: changed.length, skipped: ids.length - changed.length });
   } catch (err) {
     return failFromUnknown(err);
   }

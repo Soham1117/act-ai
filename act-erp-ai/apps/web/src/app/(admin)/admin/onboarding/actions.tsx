@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { toastAction } from "@/lib/toast-action";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
+import { copyText } from "@/lib/clipboard";
 import {
   createOnboardingInvite,
   revokeOnboardingInvite,
@@ -67,10 +68,11 @@ export function OnboardingActions({
     });
   }
 
-  function copy() {
+  async function copy() {
     if (!generatedUrl) return;
-    navigator.clipboard.writeText(generatedUrl);
-    toast.success("Link copied");
+    const result = await copyText(generatedUrl);
+    if (result.ok) toast.success("Link copied");
+    else toast.error(result.error);
   }
 
   function close() {
@@ -219,16 +221,35 @@ export function OnboardingActions({
 
 export function RowActions({ inviteId, token }: { inviteId: string; token: string }) {
   const [pending, startTransition] = useTransition();
+  const [manualUrl, setManualUrl] = useState<string | null>(null);
+
+  async function copy() {
+    const url = `${window.location.origin}/onboard/${token}`;
+    const result = await copyText(url);
+    if (result.ok) {
+      setManualUrl(null);
+      toast.success("Link copied");
+    } else {
+      setManualUrl(url);
+      toast.error(result.error);
+    }
+  }
+
   return (
-    <div className="flex gap-1.5">
+    <div className="flex max-w-sm flex-wrap justify-end gap-1.5">
+      {manualUrl && (
+        <Input
+          value={manualUrl}
+          readOnly
+          aria-label="Invite link to copy manually"
+          className="h-8 w-full font-mono text-xs"
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      )}
       <Button
         variant="outline"
         size="sm"
-        onClick={() => {
-          const url = `${window.location.origin}/onboard/${token}`;
-          navigator.clipboard.writeText(url);
-          toast.success("Link copied");
-        }}
+        onClick={copy}
       >
         <Copy className="mr-2 h-3 w-3" /> Copy link
       </Button>

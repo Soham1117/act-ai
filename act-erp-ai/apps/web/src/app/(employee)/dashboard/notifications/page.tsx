@@ -8,6 +8,11 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { MarkAllReadButton } from "./mark-all-read-button";
 import { MarkReadButton } from "./mark-read-button";
+import {
+  NotificationPagination,
+  notificationPage,
+  notificationPageCount,
+} from "./notification-pagination";
 
 export const metadata = { title: "Notifications" };
 
@@ -24,31 +29,38 @@ function safeHref(link: string | null): { href: string; external: boolean } | nu
   return null;
 }
 
-export default async function NotificationsPage() {
+const PAGE_SIZE = 100;
+
+export default async function NotificationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const user = await requireUser();
   if (!user.employeeId) return <p className="text-sm text-muted-foreground">No employee record.</p>;
+  const requestedPage = notificationPage((await searchParams).page);
 
-  const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-    try { return await p; } catch { return fallback; }
-  };
-
-  const items = await safe(
-    db.notificationRecipient.findMany({
+  // These counts cover the complete inbox. Required query failures are
+  // deliberately allowed to reach the route error boundary.
+  const [totalCount, unreadCount] = await Promise.all([
+    db.notificationRecipient.count({ where: { employeeId: user.employeeId } }),
+    db.notificationRecipient.count({ where: { employeeId: user.employeeId, read: false } }),
+  ]);
+  const totalPages = notificationPageCount(totalCount, PAGE_SIZE);
+  const page = Math.min(requestedPage, totalPages);
+  const items = await db.notificationRecipient.findMany({
       where: { employeeId: user.employeeId },
       include: { notification: true },
       orderBy: { notification: { createdAt: "desc" } },
-      take: 100,
-    }),
-    [],
-  );
-
-  const unreadCount = items.filter((i) => !i.read).length;
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    });
 
   return (
     <>
       <PageHeader
         title="Notifications"
-        description={`${unreadCount} unread of ${items.length}`}
+        description={`${unreadCount} unread of ${totalCount}`}
         actions={unreadCount > 0 && <MarkAllReadButton />}
       />
       <Card>
@@ -118,6 +130,7 @@ export default async function NotificationsPage() {
           </ul>
         </CardContent>
       </Card>
+      <NotificationPagination page={page} totalPages={totalPages} />
     </>
   );
 }

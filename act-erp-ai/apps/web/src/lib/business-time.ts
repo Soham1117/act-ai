@@ -116,6 +116,12 @@ export function businessDayKey(date: Date = new Date()): Date {
   return new Date(Date.UTC(p.year, p.month - 1, p.day));
 }
 
+/** "YYYY-MM-DD" for the business day containing `date`. */
+export function businessDateString(date: Date = new Date()): string {
+  const p = businessParts(date);
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}
+
 /**
  * Convert a schedule's date-only value + "HH:MM" business-local time to the
  * actual instant.

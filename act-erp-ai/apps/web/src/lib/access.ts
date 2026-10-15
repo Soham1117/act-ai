@@ -8,8 +8,10 @@
  *             their termination date, and to new hires awaiting admin review.
  *  NONE       cannot sign in (terminated longer than the grace window).
  *
- * Admins are always FULL. Employee records and documents are never deleted by
- * this — only the ability to sign in expires.
+ * Employment status applies to every account linked to an employee, including
+ * admins. Only deliberately unlinked bootstrap/system accounts bypass employee
+ * status so they remain available for recovery. Employee records and documents
+ * are never deleted by this — only the ability to sign in expires.
  */
 export const TERMINATION_GRACE_DAYS = 60;
 
@@ -25,9 +27,8 @@ type AccessInput = {
 };
 
 export function accessLevelFor(input: AccessInput, now: Date = new Date()): AccessLevel {
-  if (input.role === "ADMIN") return "FULL";
   const e = input.employee;
-  if (!e) return "FULL"; // user with no employee record (system account)
+  if (!e) return "FULL"; // deliberately unlinked bootstrap/system account
   if (e.employmentStatus === "PENDING_REVIEW") return "READ_ONLY";
   if (e.employmentStatus !== "TERMINATED") return "FULL";
   const since = e.terminationDate ?? e.updatedAt ?? now;

@@ -3,7 +3,7 @@
 import { randomInt } from "crypto";
 import { AuthError } from "next-auth";
 import { signIn, signOut as naSignOut } from "@/lib/auth/auth";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUserForPasswordChange } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { sendLoginCode } from "@/lib/email";
 import { rateLimited } from "@/lib/rate-limit";
@@ -160,7 +160,9 @@ export async function changeMyPassword(
   current: string,
   next: string,
 ): Promise<ActionResult> {
-  const user = await getSessionUser();
+  // Password replacement must remain reachable while every ordinary protected
+  // action is blocked by the standard session boundary.
+  const user = await getSessionUserForPasswordChange();
   if (!user)
     return fail("You are not signed in. Sign in again, then change your password.");
   if (next.length < 8) {

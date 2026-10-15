@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { getSessionUserForPasswordChange } from "@/lib/auth";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ChangePasswordForm } from "@/app/(employee)/dashboard/settings/change-password-form";
@@ -10,7 +10,9 @@ export const metadata = { title: "Choose a new password" };
 export const dynamic = "force-dynamic";
 
 export default async function ForcedPasswordChangePage() {
-  const user = await requireUser();
+  // This page is the sole UI escape hatch from the forced-password gate.
+  const user = await getSessionUserForPasswordChange();
+  if (!user) redirect("/login");
   if (!user.mustChangePassword) {
     redirect(user.role === "ADMIN" ? "/admin" : "/dashboard");
   }

@@ -23,6 +23,113 @@ export type PayrollSlipRow = {
   lastClockOut: Date | null;
 };
 
+export type PayrollReadinessException =
+  | "ZERO_HOURS"
+  | "OPEN"
+  | "PENDING"
+  | "REJECTED"
+  | "AUTO_CLOSED";
+
+export type PayrollReadinessEmployee = {
+  employeeRowId: string;
+  employeeId: string;
+  name: string;
+  department: string | null;
+  approvedMinutes: number;
+  exceptions: PayrollReadinessException[];
+};
+
+export type PayrollReadiness = {
+  employees: PayrollReadinessEmployee[];
+  blocking: boolean;
+  summary: Record<PayrollReadinessException, number>;
+};
+
+type ReadinessEmployeeInput = {
+  id: string;
+  employeeId: string;
+  name: string;
+  department: { name: string } | null;
+};
+
+type ReadinessEntryInput = {
+  employeeId: string;
+  clockOut: Date | null;
+  status: string;
+  approvalStatus: string;
+  autoClosed: boolean;
+  totalWorkMin: number;
+};
+
+/** Pure readiness projection used by the page, export gate, and focused tests. */
+export function buildPayrollReadiness(
+  employees: ReadinessEmployeeInput[],
+  entries: ReadinessEntryInput[],
+): PayrollReadiness {
+  const rows = employees.map((employee) => {
+    const own = entries.filter((entry) => entry.employeeId === employee.id);
+    const approvedMinutes = own
+      .filter((entry) => entry.approvalStatus === "APPROVED" && entry.clockOut)
+      .reduce((sum, entry) => sum + entry.totalWorkMin, 0);
+    const exceptions: PayrollReadinessException[] = [];
+    if (approvedMinutes <= 0) exceptions.push("ZERO_HOURS");
+    if (own.some((entry) => !entry.clockOut || entry.status === "ACTIVE" || entry.status === "ON_BREAK")) {
+      exceptions.push("OPEN");
+    }
+    if (own.some((entry) => entry.approvalStatus === "PENDING")) exceptions.push("PENDING");
+    if (own.some((entry) => entry.approvalStatus === "REJECTED")) exceptions.push("REJECTED");
+    if (own.some((entry) => entry.autoClosed)) exceptions.push("AUTO_CLOSED");
+    return {
+      employeeRowId: employee.id,
+      employeeId: employee.employeeId,
+      name: employee.name,
+      department: employee.department?.name ?? null,
+      approvedMinutes,
+      exceptions,
+    };
+  });
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  const summary: PayrollReadiness["summary"] = {
+    ZERO_HOURS: 0,
+    OPEN: 0,
+    PENDING: 0,
+    REJECTED: 0,
+    AUTO_CLOSED: 0,
+  };
+  for (const row of rows) for (const exception of row.exceptions) summary[exception]++;
+  return { employees: rows, blocking: rows.some((row) => row.exceptions.length > 0), summary };
+}
+
+export async function getPayrollReadinessForPeriod(
+  payPeriodStart: Date,
+  payPeriodEnd: Date,
+  client: Pick<typeof db, "employee" | "timeEntry"> = db,
+): Promise<PayrollReadiness> {
+  const [employees, entries] = await Promise.all([
+    client.employee.findMany({
+      where: { employmentStatus: "ACTIVE" },
+      select: {
+        id: true,
+        employeeId: true,
+        name: true,
+        department: { select: { name: true } },
+      },
+    }),
+    client.timeEntry.findMany({
+      where: { date: { gte: payPeriodStart, lte: payPeriodEnd } },
+      select: {
+        employeeId: true,
+        clockOut: true,
+        status: true,
+        approvalStatus: true,
+        autoClosed: true,
+        totalWorkMin: true,
+      },
+    }),
+  ]);
+  return buildPayrollReadiness(employees, entries);
+}
+
 const dayStr = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
@@ -40,13 +147,14 @@ const dayStr = (d: Date) => d.toISOString().slice(0, 10);
 export async function getPayrollSlipsForPeriod(
   payPeriodStart: Date,
   payPeriodEnd: Date,
+  client: Pick<typeof db, "timeEntry"> = db,
 ): Promise<PayrollSlipRow[]> {
   const startKey = dayStr(payPeriodStart);
   const endKey = dayStr(payPeriodEnd);
   const fetchFrom = new Date(`${isoWeekStart(startKey)}T00:00:00.000Z`);
   const fetchTo = new Date(`${isoWeekEnd(endKey)}T00:00:00.000Z`);
 
-  const entries = await db.timeEntry.findMany({
+  const entries = await client.timeEntry.findMany({
     where: {
       approvalStatus: "APPROVED",
       clockOut: { not: null },

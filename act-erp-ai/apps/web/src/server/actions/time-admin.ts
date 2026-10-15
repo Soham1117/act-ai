@@ -9,6 +9,7 @@ import { notifyEmployees } from "@/lib/notify";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 import { businessDateOnly, formatBusinessTime, formatDateOnly } from "@/lib/format";
 import {
+  BUSINESS_TZ,
   MAX_SHIFT_MINUTES,
   businessLocalToDate,
   computeEntryTotals,
@@ -60,6 +61,29 @@ function snapshot(e: EntryWithBreaks) {
   };
 }
 
+function payableTimeChanged(
+  entry: EntryWithBreaks,
+  next: {
+    clockIn: Date;
+    clockOut: Date | null;
+    jobCode: string;
+    breaks: { startTime: Date; endTime: Date | null }[];
+  },
+): boolean {
+  if (entry.clockIn.getTime() !== next.clockIn.getTime()) return true;
+  if ((entry.clockOut?.getTime() ?? null) !== (next.clockOut?.getTime() ?? null)) return true;
+  if (entry.jobCode !== next.jobCode) return true;
+
+  const breakKey = (b: { startTime: Date; endTime: Date | null }) =>
+    `${b.startTime.getTime()}:${b.endTime?.getTime() ?? "open"}`;
+  const beforeBreaks = entry.breaks.map(breakKey).sort();
+  const afterBreaks = next.breaks.map(breakKey).sort();
+  return (
+    beforeBreaks.length !== afterBreaks.length ||
+    beforeBreaks.some((value, index) => value !== afterBreaks[index])
+  );
+}
+
 async function findOverlap(
   tx: Tx,
   employeeId: string,
@@ -92,8 +116,15 @@ async function assertJobCode(code: string, unchanged?: string): Promise<string |
 }
 
 function parseLocal(value: string, label: string): { date: Date } | { error: string } {
-  const d = businessLocalToDate(value);
-  if (!d) return { error: `${label} isn't a valid date and time.` };
+  // During the repeated fall-back hour, admin-entered times consistently mean
+  // the later (standard-time) occurrence. This explicit policy prevents host-
+  // dependent normalization while preserving the existing datetime-local UI.
+  const d = businessLocalToDate(value, BUSINESS_TZ, "later");
+  if (!d) {
+    return {
+      error: `${label} isn't a valid America/Chicago date and time. During spring-forward, 2:00–2:59 AM does not exist; choose the actual time before or after the clock change.`,
+    };
+  }
   return { date: d };
 }
 
@@ -146,7 +177,7 @@ const editSchema = z.object({
 
 export async function adminUpdateTimeEntry(
   input: z.infer<typeof editSchema>,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; reapprovalRequired: boolean; message: string }>> {
   const admin = await requireAdmin();
   try {
     const data = editSchema.parse(input);
@@ -236,6 +267,14 @@ export async function adminUpdateTimeEntry(
       const totals = clockOut
         ? computeEntryTotals({ clockIn: ci.date, clockOut, breaks: nextBreaks })
         : null;
+      const reapprovalRequired =
+        entry.approvalStatus === "APPROVED" &&
+        payableTimeChanged(entry, {
+          clockIn: ci.date,
+          clockOut,
+          jobCode: data.jobCode,
+          breaks: nextBreaks,
+        });
 
       const updated = await tx.timeEntry.update({
         where: { id: entry.id },
@@ -251,10 +290,19 @@ export async function adminUpdateTimeEntry(
           autoClosed: false,
           lastEditedById: admin.id,
           editReason: data.reason,
+          ...(reapprovalRequired
+            ? {
+                status: "COMPLETED" as const,
+                approvalStatus: "PENDING" as const,
+                approvedById: null,
+                approvalDate: null,
+                approvalNotes: null,
+              }
+            : {}),
         },
         include: { breaks: true },
       });
-      return { entry, updated, before, after: snapshot(updated) };
+      return { entry, updated, before, after: snapshot(updated), reapprovalRequired };
     });
     if ("error" in result) return fail(result.error!);
 
@@ -266,7 +314,8 @@ export async function adminUpdateTimeEntry(
         reason: data.reason,
         before: result.before,
         after: result.after,
-        stayedApproved: result.entry.approvalStatus === "APPROVED",
+        reapprovalRequired: result.reapprovalRequired,
+        approvalReset: result.reapprovalRequired,
       },
     });
     await notifyCorrection(
@@ -276,7 +325,13 @@ export async function adminUpdateTimeEntry(
       data.reason,
     );
     revalidateTimePages();
-    return ok({ id: result.entry.id });
+    return ok({
+      id: result.entry.id,
+      reapprovalRequired: result.reapprovalRequired,
+      message: result.reapprovalRequired
+        ? "Time entry updated. Payable time changed, so the entry is pending reapproval."
+        : "Time entry updated.",
+    });
   } catch (err) {
     return failFromUnknown(err);
   }
@@ -613,4 +668,3 @@ export async function adminReopenTimeEntry(
     return failFromUnknown(err);
   }
 }
-

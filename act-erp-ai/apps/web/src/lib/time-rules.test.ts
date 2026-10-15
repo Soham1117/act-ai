@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   MAX_SHIFT_MINUTES,
   businessLocalToDate,
@@ -8,6 +9,7 @@ import {
   intervalsOverlap,
   isStaleShift,
   parseDateOnly,
+  parseBusinessLocal,
   startOfBusinessWeek,
   validateEntryTimes,
 } from "./time-rules";
@@ -142,6 +144,24 @@ describe("business timezone helpers", () => {
     const v = "2026-07-15T23:45";
     expect(dateToBusinessLocal(businessLocalToDate(v)!)).toBe(v);
   });
+  it("rejects nonexistent Central spring-forward wall times", () => {
+    expect(parseBusinessLocal("2026-03-08T02:30")).toEqual({
+      status: "nonexistent",
+      date: null,
+    });
+    expect(businessLocalToDate("2026-03-08T02:30")).toBeNull();
+  });
+  it("requires an explicit choice for the repeated fall-back hour", () => {
+    const rejected = parseBusinessLocal("2026-11-01T01:30");
+    expect(rejected.status).toBe("ambiguous");
+    expect(rejected.date).toBeNull();
+
+    const earlier = businessLocalToDate("2026-11-01T01:30", "America/Chicago", "earlier");
+    const later = businessLocalToDate("2026-11-01T01:30", "America/Chicago", "later");
+    expect(earlier!.toISOString()).toBe("2026-11-01T06:30:00.000Z");
+    expect(later!.toISOString()).toBe("2026-11-01T07:30:00.000Z");
+    expect(later!.getTime() - earlier!.getTime()).toBe(60 * 60_000);
+  });
   it("rejects invalid input", () => {
     expect(businessLocalToDate("nope")).toBeNull();
     expect(businessLocalToDate("2026-02-31T10:00")).toBeNull();
@@ -150,5 +170,33 @@ describe("business timezone helpers", () => {
     expect(startOfBusinessWeek(parseDateOnly("2026-03-08")!).toISOString().slice(0, 10)).toBe("2026-03-02");
     expect(startOfBusinessWeek(parseDateOnly("2026-03-02")!).toISOString().slice(0, 10)).toBe("2026-03-02");
     expect(parseDateOnly("2026-02-30")).toBeNull();
+  });
+});
+
+describe("approved admin time corrections", () => {
+  it("resets approval metadata only when approved payable time changes", () => {
+    const source = readFileSync(
+      new URL("../server/actions/time-admin.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('entry.approvalStatus === "APPROVED"');
+    expect(source).toContain("payableTimeChanged(entry");
+    expect(source).toContain('approvalStatus: "PENDING" as const');
+    expect(source).toContain('status: "COMPLETED" as const');
+    expect(source).toContain("approvedById: null");
+    expect(source).toContain("approvalDate: null");
+    expect(source).toContain("approvalNotes: null");
+    expect(source).toContain("pending reapproval");
+    expect(source).not.toContain("stayedApproved");
+  });
+
+  it("shows the server's reapproval message in the admin save feedback", () => {
+    const source = readFileSync(
+      new URL("../app/(admin)/admin/time-tracking/time-tools.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("done(`${res.message} The employee was notified.`)");
   });
 });

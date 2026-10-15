@@ -184,25 +184,75 @@ function tzOffsetMinutes(date: Date, tz: string): number {
 
 const LOCAL_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
+export type BusinessLocalDisambiguation = "reject" | "earlier" | "later";
+export type BusinessLocalParseResult =
+  | { status: "invalid" | "nonexistent"; date: null }
+  | { status: "ambiguous"; date: Date | null; earlier: Date; later: Date }
+  | { status: "ok"; date: Date };
+
+/**
+ * Parse a business-zone wall time without allowing Date/Intl to silently
+ * normalize DST gaps or folds. Repeated fall-back times require an explicit
+ * earlier/later policy; the default rejects ambiguity.
+ */
+export function parseBusinessLocal(
+  value: string,
+  tz: string = BUSINESS_TZ,
+  disambiguation: BusinessLocalDisambiguation = "reject",
+): BusinessLocalParseResult {
+  const m = LOCAL_RE.exec(value);
+  if (!m) return { status: "invalid", date: null };
+  const [y, mo, d, h, mi] = m.slice(1).map(Number) as [number, number, number, number, number];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) {
+    return { status: "invalid", date: null };
+  }
+  const asUtc = Date.UTC(y, mo - 1, d, h, mi);
+  const calendarCheck = new Date(asUtc);
+  if (
+    calendarCheck.getUTCFullYear() !== y ||
+    calendarCheck.getUTCMonth() !== mo - 1 ||
+    calendarCheck.getUTCDate() !== d
+  ) {
+    return { status: "invalid", date: null };
+  }
+
+  // Gather every offset in force around this wall date, then retain only
+  // instants that format back to the exact requested local minute. A DST gap
+  // has zero candidates; a fall-back fold has two.
+  const offsets = new Set<number>();
+  for (let delta = -36 * 60; delta <= 36 * 60; delta += 30) {
+    offsets.add(tzOffsetMinutes(new Date(asUtc + delta * MIN_MS), tz));
+  }
+  const candidates = [...offsets]
+    .map((offset) => new Date(asUtc - offset * MIN_MS))
+    .filter((candidate) => {
+      const p = tzParts(candidate, tz);
+      return p.year === y && p.month === mo && p.day === d && p.hour === h && p.minute === mi;
+    })
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  const unique = candidates.filter(
+    (candidate, index) => index === 0 || candidate.getTime() !== candidates[index - 1]!.getTime(),
+  );
+  if (unique.length === 0) return { status: "nonexistent", date: null };
+  if (unique.length === 1) return { status: "ok", date: unique[0]! };
+
+  const earlier = unique[0]!;
+  const later = unique[unique.length - 1]!;
+  const date = disambiguation === "earlier" ? earlier : disambiguation === "later" ? later : null;
+  return { status: "ambiguous", date, earlier, later };
+}
+
 /**
  * Convert a `YYYY-MM-DDTHH:mm` wall-clock string (as produced by
  * <input type="datetime-local">) in the business timezone to an instant.
  */
-export function businessLocalToDate(value: string, tz: string = BUSINESS_TZ): Date | null {
-  const m = LOCAL_RE.exec(value);
-  if (!m) return null;
-  const [y, mo, d, h, mi] = m.slice(1).map(Number) as [number, number, number, number, number];
-  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
-  const asUtc = Date.UTC(y, mo - 1, d, h, mi);
-  const off1 = tzOffsetMinutes(new Date(asUtc), tz);
-  let t = asUtc - off1 * MIN_MS;
-  const off2 = tzOffsetMinutes(new Date(t), tz);
-  if (off2 !== off1) t = asUtc - off2 * MIN_MS;
-  const result = new Date(t);
-  // Reject impossible calendar dates like Feb 31 (Date.UTC would roll over).
-  const check = new Date(asUtc);
-  if (check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) return null;
-  return result;
+export function businessLocalToDate(
+  value: string,
+  tz: string = BUSINESS_TZ,
+  disambiguation: BusinessLocalDisambiguation = "reject",
+): Date | null {
+  return parseBusinessLocal(value, tz, disambiguation).date;
 }
 
 /** Inverse of {@link businessLocalToDate}. */

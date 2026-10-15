@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addBusinessDays,
+  businessDateString,
   businessHour,
   instantFromBusinessTime,
   scheduledRange,
@@ -12,6 +13,15 @@ import {
 const iso = (d: Date) => d.toISOString();
 
 describe("business-time", () => {
+  it("formats the Central calendar date when UTC is already on the next day", () => {
+    expect(businessDateString(new Date("2026-10-01T01:00:00Z"))).toBe("2026-09-30");
+  });
+  it("advances at Central midnight in daylight and standard time", () => {
+    expect(businessDateString(new Date("2026-10-01T04:59:59Z"))).toBe("2026-09-30");
+    expect(businessDateString(new Date("2026-10-01T05:00:00Z"))).toBe("2026-10-01");
+    expect(businessDateString(new Date("2026-01-15T05:59:59Z"))).toBe("2026-01-14");
+    expect(businessDateString(new Date("2026-01-15T06:00:00Z"))).toBe("2026-01-15");
+  });
   it("startOfBusinessDay uses Central midnight (CDT = UTC-5)", () => {
     expect(iso(startOfBusinessDay(new Date("2026-07-15T03:00:00Z")))).toBe("2026-07-14T05:00:00.000Z");
   });

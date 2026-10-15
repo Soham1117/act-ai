@@ -25,6 +25,7 @@ import {
 import { submitReimbursement } from "@/server/actions/reimbursements";
 import { toastAction } from "@/lib/toast-action";
 import { MAX_RECEIPTS, MAX_REIMBURSEMENT_AMOUNT } from "@/lib/reimbursement";
+import { businessDateString } from "@/lib/business-time";
 
 const RECEIPT_MAX_BYTES = 8 * 1024 * 1024;
 const RECEIPT_EXTS = ["pdf", "png", "jpg", "jpeg"];
@@ -40,11 +41,18 @@ export function ReimbursementDialog() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("TRAVEL");
   const [amount, setAmount] = useState("");
-  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expenseDate, setExpenseDate] = useState(() => businessDateString());
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessDateString();
+
+  function onOpenChange(nextOpen: boolean) {
+    if (nextOpen && !title && !amount && !description && files.length === 0) {
+      setExpenseDate(businessDateString());
+    }
+    setOpen(nextOpen);
+  }
 
   function addFiles(list: FileList | null) {
     if (!list) return;
@@ -108,7 +116,7 @@ export function ReimbursementDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button><Plus className="mr-2 h-4 w-4" /> New claim</Button>
       </DialogTrigger>

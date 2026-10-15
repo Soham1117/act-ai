@@ -27,8 +27,15 @@ export type SessionUser = {
  * role change takes effect immediately. The `tv` (tokenVersion) claim is checked
  * against the DB to support instant session revocation — a mismatch means the
  * token was issued before a logout-everywhere / disable and is rejected.
+ *
+ * Resolve a valid session without applying the forced-password gate.
+ *
+ * This is intentionally exported for exactly one credential-recovery flow:
+ * the forced change-password page/action. Ordinary pages, actions, and route
+ * handlers must use getSessionUser/requireUser so a temporary password cannot
+ * authorize business-data access.
  */
-export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+export const getSessionUserForPasswordChange = cache(async (): Promise<SessionUser | null> => {
   const session = await auth();
   const uid = session?.user?.id;
   if (!uid) return null;
@@ -69,6 +76,17 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     accessLevel,
     mustChangePassword: profile.mustChangePassword,
   };
+});
+
+/**
+ * Standard protected-request boundary. A temporary-password session is valid
+ * only long enough to replace that password or sign out, so direct route
+ * handlers using this helper receive an explicit navigation response too.
+ */
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+  const user = await getSessionUserForPasswordChange();
+  if (user?.mustChangePassword) redirect("/change-password");
+  return user;
 });
 
 /** Throws-redirect wrapper for protected pages. Both roles allowed. */

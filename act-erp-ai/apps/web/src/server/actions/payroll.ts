@@ -274,24 +274,38 @@ export async function createPayrollPeriod(
     if (!check.ok) return fail(check.error);
     const start = new Date(`${data.payPeriodStart}T00:00:00.000Z`);
     const end = new Date(`${data.payPeriodEnd}T00:00:00.000Z`);
-    const period = await db.payrollCalendar.create({
-      data: {
-        title: data.title,
-        payPeriodStart: start,
-        payPeriodEnd: end,
-        payDate: new Date(`${data.payDate}T00:00:00.000Z`),
-        status: resolveStatus(data.status, start, end),
-        notes: data.notes || null,
-        createdById: admin.id,
-      },
+    const period = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('payroll-calendar-period-writes'))`;
+      const overlap = await tx.payrollCalendar.findFirst({
+        where: { payPeriodStart: { lte: end }, payPeriodEnd: { gte: start } },
+        select: { title: true, payPeriodStart: true, payPeriodEnd: true },
+      });
+      if (overlap) {
+        return {
+          error: `This period overlaps "${overlap.title}" (${overlap.payPeriodStart.toISOString().slice(0, 10)} to ${overlap.payPeriodEnd.toISOString().slice(0, 10)}). Choose dates after that period ends, or edit the existing period.`,
+        } as const;
+      }
+      const created = await tx.payrollCalendar.create({
+        data: {
+          title: data.title,
+          payPeriodStart: start,
+          payPeriodEnd: end,
+          payDate: new Date(`${data.payDate}T00:00:00.000Z`),
+          status: resolveStatus(data.status, start, end),
+          notes: data.notes || null,
+          createdById: admin.id,
+        },
+      });
+      return { created } as const;
     });
+    if ("error" in period && period.error) return fail(period.error);
     await audit({
       action: "payroll.period.create",
-      resource: `PayrollCalendar:${period.id}`,
+      resource: `PayrollCalendar:${period.created.id}`,
       diff: { title: data.title, start: data.payPeriodStart, end: data.payPeriodEnd },
     });
     revalidatePath("/admin/payroll");
-    return ok({ id: period.id });
+    return ok({ id: period.created.id });
   } catch (err) {
     return failFromUnknown(err);
   }
@@ -306,21 +320,39 @@ export async function updatePayrollPeriod(
     const data = calendarSchema.parse(input);
     const check = validatePeriodDates(data.payPeriodStart, data.payPeriodEnd, data.payDate);
     if (!check.ok) return fail(check.error);
-    const existing = await db.payrollCalendar.findUnique({ where: { id }, select: { id: true } });
-    if (!existing) return fail("That pay period no longer exists. Refresh the page and try again.");
     const start = new Date(`${data.payPeriodStart}T00:00:00.000Z`);
     const end = new Date(`${data.payPeriodEnd}T00:00:00.000Z`);
-    await db.payrollCalendar.update({
-      where: { id },
-      data: {
-        title: data.title,
-        payPeriodStart: start,
-        payPeriodEnd: end,
-        payDate: new Date(`${data.payDate}T00:00:00.000Z`),
-        status: resolveStatus(data.status, start, end),
-        notes: data.notes || null,
-      },
+    const result = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('payroll-calendar-period-writes'))`;
+      const existing = await tx.payrollCalendar.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { error: "That pay period no longer exists. Refresh the page and try again." } as const;
+      const overlap = await tx.payrollCalendar.findFirst({
+        where: {
+          id: { not: id },
+          payPeriodStart: { lte: end },
+          payPeriodEnd: { gte: start },
+        },
+        select: { title: true, payPeriodStart: true, payPeriodEnd: true },
+      });
+      if (overlap) {
+        return {
+          error: `This period overlaps "${overlap.title}" (${overlap.payPeriodStart.toISOString().slice(0, 10)} to ${overlap.payPeriodEnd.toISOString().slice(0, 10)}). Choose non-overlapping dates, or edit the other period first.`,
+        } as const;
+      }
+      await tx.payrollCalendar.update({
+        where: { id },
+        data: {
+          title: data.title,
+          payPeriodStart: start,
+          payPeriodEnd: end,
+          payDate: new Date(`${data.payDate}T00:00:00.000Z`),
+          status: resolveStatus(data.status, start, end),
+          notes: data.notes || null,
+        },
+      });
+      return { updated: true } as const;
     });
+    if ("error" in result && result.error) return fail(result.error);
     await audit({
       action: "payroll.period.update",
       resource: `PayrollCalendar:${id}`,

@@ -454,7 +454,6 @@ export async function setEmploymentStatus(
         name: true,
         employmentStatus: true,
         terminationDate: true,
-        user: { select: { role: true } },
       },
     });
     if (!emp) return fail("That employee was not found. Refresh the page and try again.");
@@ -472,11 +471,6 @@ export async function setEmploymentStatus(
 
     if (status === "TERMINATED") {
       if (emp.userId === admin.id) return fail("You can't terminate your own account.");
-      if (emp.user.role === "ADMIN") {
-        return fail(
-          "This person is an admin. Remove their admin role first (Employee page > Access), then terminate.",
-        );
-      }
       const c = checkTerminationDate(opts.terminationDate || todayDateString());
       if (!c.ok) return fail(c.error);
       terminationDate = c.date;
@@ -487,7 +481,19 @@ export async function setEmploymentStatus(
       data.terminationReason = null;
     }
 
-    const updated = await db.employee.update({ where: { id: employeeId }, data });
+    const updated =
+      status === "TERMINATED"
+        ? await db.$transaction(async (tx) => {
+            const employee = await tx.employee.update({ where: { id: employeeId }, data });
+            // The status change and session revocation are one atomic unit: a
+            // pre-termination JWT must not remain usable if this commit succeeds.
+            await tx.user.update({
+              where: { id: emp.userId },
+              data: { tokenVersion: { increment: 1 } },
+            });
+            return employee;
+          })
+        : await db.employee.update({ where: { id: employeeId }, data });
 
     await audit({
       action: "employee.status_change",
@@ -630,19 +636,45 @@ export async function setUserRole(
       if (emp.employmentStatus !== "ACTIVE" && emp.employmentStatus !== "ON_LEAVE") {
         return fail("Only active employees can be made admins.");
       }
-    } else {
-      const admins = await db.user.count({ where: { role: "ADMIN" } });
-      if (admins <= 1) return fail("You can't remove the last admin.");
     }
 
-    await db.user.update({
-      where: { id: emp.userId },
-      data: { role, tokenVersion: { increment: 1 } },
+    const changed = await db.$transaction(async (tx) => {
+      // Serialize every role transition around the global admin invariant.
+      // A transaction-scoped advisory lock is released automatically on
+      // commit/rollback, so concurrent demotions must recount one at a time.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('act-admin-role-invariant'))`;
+
+      const current = await tx.user.findUnique({
+        where: { id: emp.userId },
+        select: { role: true },
+      });
+      if (!current) return { ok: false as const, error: "That user's account no longer exists." };
+      if (current.role === role) return { ok: true as const, from: current.role, changed: false };
+
+      if (role === "EMPLOYEE") {
+        const admins = await tx.user.count({ where: { role: "ADMIN" } });
+        if (admins <= 1) {
+          return {
+            ok: false as const,
+            error: "You can't remove the last admin. Promote another active employee first.",
+          };
+        }
+      }
+
+      await tx.user.update({
+        where: { id: emp.userId },
+        // Role change and session revocation commit as one write.
+        data: { role, tokenVersion: { increment: 1 } },
+      });
+      return { ok: true as const, from: current.role, changed: true };
     });
+    if (!changed.ok) return fail(changed.error);
+    if (!changed.changed) return ok();
+
     await audit({
       action: "employee.role_change",
       resource: `Employee:${employeeId}`,
-      diff: { name: emp.name, from: emp.user.role, to: role },
+      diff: { name: emp.name, from: changed.from, to: role },
     });
     await notifyEmployees([employeeId], {
       type: "SYSTEM",

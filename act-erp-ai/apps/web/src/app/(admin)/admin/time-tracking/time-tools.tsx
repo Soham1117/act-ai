@@ -192,7 +192,7 @@ function EditEntryDialog({
         reason: reason.trim(),
       });
       if (!toastAction(res)) return;
-      done("Time entry updated. The employee was notified.");
+      done(`${res.message} The employee was notified.`);
     });
   }
 

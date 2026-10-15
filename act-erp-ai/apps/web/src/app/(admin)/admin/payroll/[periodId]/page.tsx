@@ -14,7 +14,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader, StatCard } from "@/components/page-header";
-import { getPayrollSlipsForPeriod } from "@/server/queries/payroll-slip";
+import {
+  getPayrollReadinessForPeriod,
+  getPayrollSlipsForPeriod,
+  type PayrollReadinessException,
+} from "@/server/queries/payroll-slip";
 import { effectivePeriodStatus } from "@/lib/payroll-period";
 import { formatDateOnly } from "@/lib/format";
 import { DownloadCsvButton } from "./download-csv-button";
@@ -33,7 +37,10 @@ export default async function PayrollPeriodPage({
     .catch(() => null);
   if (!period) notFound();
 
-  const slips = await getPayrollSlipsForPeriod(period.payPeriodStart, period.payPeriodEnd);
+  const [slips, readiness] = await Promise.all([
+    getPayrollSlipsForPeriod(period.payPeriodStart, period.payPeriodEnd),
+    getPayrollReadinessForPeriod(period.payPeriodStart, period.payPeriodEnd),
+  ]);
   const displayStatus = effectivePeriodStatus(period.status, period.payPeriodStart, period.payPeriodEnd);
   const totalEmployees = slips.length;
   const totalHours = slips.reduce((s, r) => s + r.totalHours, 0);
@@ -52,7 +59,11 @@ export default async function PayrollPeriodPage({
         description={`${formatDateOnly(period.payPeriodStart)} → ${formatDateOnly(period.payPeriodEnd)} · pay date ${formatDateOnly(period.payDate)}`}
         actions={
           <div className="flex gap-2 print:hidden">
-            <DownloadCsvButton periodId={period.id} title={period.title} />
+            <DownloadCsvButton
+              periodId={period.id}
+              title={period.title}
+              blockingExceptions={readiness.blocking}
+            />
             <PrintButton />
           </div>
         }
@@ -66,6 +77,55 @@ export default async function PayrollPeriodPage({
           <span className="text-xs text-muted-foreground">{period.notes}</span>
         )}
       </div>
+
+      <Card className="mt-6 print:hidden">
+        <CardHeader>
+          <CardTitle className="text-base">
+            Payroll readiness · {readiness.employees.length} active employees
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead className="text-right">Approved hours</TableHead>
+                <TableHead>Readiness</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {readiness.employees.map((employee) => (
+                <TableRow key={employee.employeeRowId}>
+                  <TableCell>
+                    <div className="font-medium">{employee.name}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{employee.employeeId}</div>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {employee.department ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {(employee.approvedMinutes / 60).toFixed(2)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {employee.exceptions.length === 0 ? (
+                        <Badge variant="success">Ready</Badge>
+                      ) : (
+                        employee.exceptions.map((exception) => (
+                          <Badge key={exception} variant="destructive">
+                            {readinessLabel(exception)}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-3 sm:grid-cols-3 print:hidden">
         <StatCard label="Employees" value={totalEmployees} />
@@ -167,4 +227,15 @@ export default async function PayrollPeriodPage({
 
 function PrintButton() {
   return <PrintClient />;
+}
+
+function readinessLabel(exception: PayrollReadinessException) {
+  const labels: Record<PayrollReadinessException, string> = {
+    ZERO_HOURS: "Zero approved hours",
+    OPEN: "Open shift",
+    PENDING: "Pending review",
+    REJECTED: "Rejected time",
+    AUTO_CLOSED: "Auto-closed",
+  };
+  return labels[exception];
 }

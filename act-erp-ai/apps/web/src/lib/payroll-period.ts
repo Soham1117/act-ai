@@ -33,6 +33,16 @@ export function effectivePeriodStatus(
 
 export type PeriodDatesCheck = { ok: true } | { ok: false; error: string };
 
+/** Inclusive payroll ranges overlap when each starts on or before the other's end. */
+export function payrollPeriodsOverlap(
+  start: Date,
+  end: Date,
+  otherStart: Date,
+  otherEnd: Date,
+): boolean {
+  return start.getTime() <= otherEnd.getTime() && otherStart.getTime() <= end.getTime();
+}
+
 /** end >= start and payDate >= end. Inputs are YYYY-MM-DD strings. */
 export function validatePeriodDates(start: string, end: string, payDate: string): PeriodDatesCheck {
   const re = /^\d{4}-\d{2}-\d{2}$/;
