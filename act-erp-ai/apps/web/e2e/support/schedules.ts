@@ -45,7 +45,7 @@ export const WES_SHIFTS = {
   late: { date: "2026-03-09", start: "17:45", end: "23:30", code: "E2E100", dayText: "Mon, Mar 9, 2026", time: "5:45 PM – 11:30 PM" },
   // Day before spring forward (Mar 8, 2026), overnight across the clock change.
   beforeSpring: { date: "2026-03-07", start: "22:00", end: "01:30", code: "E2E100", dayText: "Sat, Mar 7, 2026", time: "10:00 PM – 1:30 AM (next day)" },
-  springDay: { date: "2026-03-08", start: "08:00", end: "16:00", code: "E2E100", dayText: "Sun, Mar 8, 2026", time: "8:00 AM – 4:00 PM" },
+  springDay: { date: "2026-03-08", start: "08:15", end: "16:00", code: "E2E100", dayText: "Sun, Mar 8, 2026", time: "8:15 AM – 4:00 PM" },
   // A wall-clock time that does not exist (clocks jump 2:00 -> 3:00).
   springGap: { date: "2026-03-08", start: "02:30", end: "04:30", code: "E2E100", dayText: "Sun, Mar 8, 2026", time: "2:30 AM – 4:30 AM" },
   // Fall back: Sunday Nov 1, 2026 (clocks go 2:00 -> 1:00).
