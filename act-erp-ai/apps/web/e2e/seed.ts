@@ -271,6 +271,39 @@ async function main() {
     }
   }
 
+  // Payroll "ready to export" needs every ACTIVE employee to have approved hours in
+  // the E2E Pay Period (payroll-csv.spec.ts). Seed parts add people freely; this
+  // gives anyone still without hours one approved shift so no part has to care.
+  const period = await db.payrollCalendar.findFirstOrThrow({ where: { title: PAYROLL_PERIOD_TITLE } });
+  const needHours = await db.employee.findMany({
+    where: {
+      employmentStatus: "ACTIVE",
+      timeEntries: {
+        none: {
+          approvalStatus: "APPROVED",
+          date: { gte: period.payPeriodStart, lte: period.payPeriodEnd },
+        },
+      },
+    },
+    select: { id: true },
+  });
+  for (const emp of needHours) {
+    await db.timeEntry.create({
+      data: {
+        employeeId: emp.id,
+        date: daysAgo(55),
+        clockIn: at(daysAgo(55), 14),
+        clockOut: at(daysAgo(55), 22),
+        totalWorkMin: 480,
+        status: "APPROVED",
+        jobCode: JOB_CODE.code,
+        source: "MANUAL",
+        approvalStatus: "APPROVED",
+        approvalDate: new Date(),
+      },
+    });
+  }
+
   console.log(`E2E seed done in "${dbName}".`);
 }
 

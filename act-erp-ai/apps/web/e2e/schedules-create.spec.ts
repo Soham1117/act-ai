@@ -17,6 +17,7 @@ import {
   employeeDbId,
   endInput,
   insertShift,
+  OLIVE,
   localYmd,
   openShiftDialog,
   pickDate,
@@ -560,7 +561,7 @@ test.describe("server-side checks that the UI cannot prevent", () => {
 
   test("bulk: more than 1500 shifts at once is refused", async ({ page }) => {
     const dialog = await openShiftDialog(page);
-    for (const who of [SAM, TARA, UMA, { name: "Wes Window" }, { name: "Olive Other" }]) await pickEmployee(dialog, who.name);
+    for (const who of [SAM, TARA, UMA, { name: "Wes Window" }, OLIVE]) await pickEmployee(dialog, who.name);
     await dialog.getByRole("button", { name: /^date range$/i }).click();
     await pickDate(page, dateButtons(dialog).nth(1), localYmd(364));
     for (let i = 0; i < 7; i++) {

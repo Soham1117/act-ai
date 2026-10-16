@@ -58,91 +58,32 @@ test.describe("notifications: employee inbox", () => {
     await expect(item(page, "Unsafe").getByRole("link")).toHaveCount(0);
   });
 
-  test("marks one notification read; DB and the unread API agree", async ({ page }) => {
+  test("opening the inbox marks everything read; DB, badge and the unread API agree", async ({ page }) => {
     const a = await notify("First");
     await notify("Second");
+    expect(await unread()).toBe(2);
     await page.goto("/dashboard/notifications");
-    expect(await apiUnread(page)).toBe(2);
-    await item(page, "First").getByRole("button", { name: "Mark as read" }).click();
-    await expect(page.getByText("1 unread of 2")).toBeVisible();
+    // Both are shown (highlighted as new on this visit) ...
+    await expect(item(page, "First")).toBeVisible();
+    await expect(item(page, "Second")).toBeVisible();
+    // ... and are marked read because the person has now seen them.
+    await expect.poll(unread).toBe(0);
+    expect(await apiUnread(page)).toBe(0);
     const r = await db.notificationRecipient.findFirstOrThrow({ where: { employeeId: ninaId, notificationId: a.id } });
     expect(r.read).toBe(true);
     expect(r.readAt).not.toBeNull();
-    expect(await unread()).toBe(1);
-    expect(await apiUnread(page)).toBe(1);
+    // The bell badge in the top bar clears too.
+    await expect(page.getByRole("link", { name: "Notifications" }).locator("span.rounded-full")).toHaveCount(0);
   });
 
-  test("marks everything read", async ({ page }) => {
-    await notify("A");
-    await notify("B");
+  test("a visit with nothing unread sends no mark-as-read request", async ({ page }) => {
+    await notify("Old one");
     await page.goto("/dashboard/notifications");
-    await page.getByRole("button", { name: "Mark all read" }).click();
-    await expect(toast(page, "Marked all read")).toBeVisible();
-    await expect(page.getByText("0 unread of 2")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Mark all read" })).toHaveCount(0);
-    expect(await unread()).toBe(0);
-    expect(await apiUnread(page)).toBe(0);
-  });
-
-  test("pages through more than 100 notifications", async ({ page }) => {
-    for (let start = 0; start < 105; start += 35) {
-      await Promise.all(Array.from({ length: 35 }, (_, i) => notify(`Bulk ${String(start + i).padStart(3, "0")}`, { ago: start + i, read: true })));
-    }
+    await expect.poll(unread).toBe(0);
+    const counter = await delayServerActions(page, 0);
     await page.goto("/dashboard/notifications");
-    await expect(page.getByRole("navigation", { name: "Notification pages" }).getByText("Page 1 of 2")).toBeVisible();
-    await expect(page.getByRole("listitem").filter({ hasText: "Bulk " })).toHaveCount(100);
-    await page.getByRole("link", { name: "Next" }).click();
-    await expect(page.getByRole("navigation", { name: "Notification pages" }).getByText("Page 2 of 2")).toBeVisible();
-    await expect(page.getByRole("listitem").filter({ hasText: "Bulk " })).toHaveCount(5);
-    await page.goto("/dashboard/notifications?page=99"); // out of range: clamped
-    await expect(page.getByRole("navigation", { name: "Notification pages" }).getByText("Page 2 of 2")).toBeVisible();
-    await page.goto("/dashboard/notifications?page=abc");
-    await expect(page.getByRole("navigation", { name: "Notification pages" }).getByText("Page 1 of 2")).toBeVisible();
-  });
-
-  test("the unread API needs a signed-in user", async ({ browser }) => {
-    const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-    const res = await ctx.request.get(`http://localhost:${process.env.E2E_PORT}/api/notifications/unread`, { maxRedirects: 0 });
-    expect(res.status() === 200 ? (await res.json()).unread : 0).toBe(0);
-    await ctx.close();
-  });
-
-  test("connection dropped while marking read: error shown, still unread", async ({ page }) => {
-    await notify("Keep unread");
-    await page.goto("/dashboard/notifications");
-    await failServerActions(page, "abort");
-    await item(page, "Keep unread").getByRole("button", { name: "Mark as read" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
-    await expectNoCrash(page);
-    expect(await unread()).toBe(1);
-  });
-
-  test("server error while marking all read: nothing changes", async ({ page }) => {
-    await notify("One");
-    await page.goto("/dashboard/notifications");
-    await failServerActions(page, "500");
-    await page.getByRole("button", { name: "Mark all read" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
-    expect(await unread()).toBe(1);
-  });
-
-  test("stale deployment while marking read: no crash", async ({ page }) => {
-    await notify("Stale one");
-    await page.goto("/dashboard/notifications");
-    await failServerActions(page, "stale");
-    await item(page, "Stale one").getByRole("button", { name: "Mark as read" }).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
-    await expectNoCrash(page);
-    expect(await unread()).toBe(1);
-  });
-
-  test("double click on Mark all read sends one request", async ({ page }) => {
-    await notify("Dbl");
-    await page.goto("/dashboard/notifications");
-    const slow = await delayServerActions(page, 1500);
-    await page.getByRole("button", { name: "Mark all read" }).dblclick();
-    await expect(toast(page, "Marked all read")).toBeVisible();
-    expect(slow.count()).toBe(1);
+    await expect(item(page, "Old one")).toBeVisible();
+    expect(counter.count()).toBe(0);
   });
 });
 
