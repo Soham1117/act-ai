@@ -306,6 +306,9 @@ test.describe("documents: admin", () => {
     answerNextDialog(page);
     await page.getByRole("listitem").filter({ hasText: "Employee Handbook" }).filter({ hasText: SS.dana.name }).getByRole("button", { name: "Delete" }).click();
     await expect(toast(page, "Document deleted")).toBeVisible();
+    // Wait for the list to refresh, so only Nina's row is left before the next delete (no strict-mode race).
+    await expect(page.getByRole("listitem").filter({ hasText: "Employee Handbook" }).filter({ hasText: SS.dana.name })).toHaveCount(0);
+    await expect(page.getByRole("listitem").filter({ hasText: "Employee Handbook" })).toHaveCount(1);
     expect((await fakeS3Keys()).some((k) => k.endsWith(key))).toBe(true); // Nina's copy still needs it
     answerNextDialog(page);
     await page.getByRole("listitem").filter({ hasText: "Employee Handbook" }).getByRole("button", { name: "Delete" }).click();

@@ -105,7 +105,7 @@ test.describe("settings: kiosk PIN", () => {
   test("failures: dropped connection, 500, stale deployment, double click", async ({ page }) => {
     const before = await pinHash();
     let c = await setPin(page, SS.sam.password, "7391");
-    await failServerActions(page, "abort", { times: 1 });
+    await failServerActions(page, "abort", { match: "7391" });
     await c.getByRole("button", { name: "Set PIN" }).click();
     await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
     await expectNoCrash(page);
@@ -113,7 +113,7 @@ test.describe("settings: kiosk PIN", () => {
 
     await page.unroute("**/*");
     c = await setPin(page, SS.sam.password, "7391");
-    await failServerActions(page, "stale", { times: 1 });
+    await failServerActions(page, "stale", { match: "7391" });
     await c.getByRole("button", { name: "Set PIN" }).click();
     await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
     expect(await pinHash()).toBe(before);
@@ -278,16 +278,19 @@ test.describe("settings: password", () => {
     await db.user.update({ where: { id: pam.id }, data: { passwordHash: await bcrypt.hash(SS.pam.password, 4), mustChangePassword: false } });
   });
 
-  test("failures: dropped connection and double click on Update password", async ({ browser }) => {
+  test("failure: dropped connection while updating the password", async ({ browser }) => {
     const state = await loginState(browser, SS.pam, "pam");
     const ctx = await browser.newContext({ storageState: state });
     const page = await ctx.newPage();
     await page.goto("/dashboard/settings");
     const c = card(page, "Password");
     const pam = await db.user.findFirstOrThrow({ where: { email: SS.pam.email } });
-    await failServerActions(page, "abort", { times: 1 });
+    // Match on the new password so an unrelated background server action cannot use up the injected failure.
+    await failServerActions(page, "abort", { match: "Another-Pass-1!" });
     await change(c, SS.pam.password, "Another-Pass-1!");
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    // The form now catches the dropped connection and toasts the error text (the browser's own "Failed to fetch").
+    await expect(toast(page, /something went wrong|failed to fetch/i)).toBeVisible();
+    await expectNoCrash(page);
     expect((await db.user.findUniqueOrThrow({ where: { id: pam.id } })).passwordHash).toBe(pam.passwordHash);
     await ctx.close();
   });
