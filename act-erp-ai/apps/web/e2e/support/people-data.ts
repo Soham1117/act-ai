@@ -11,7 +11,7 @@ export const CUSTOM_PIN = "5827";
 
 type Person = { employeeId: string; name: string; email: string };
 const person = (n: string, name: string): Person => ({
-  employeeId: `PPL-${n}`,
+  employeeId: `PPL-57${n.slice(2)}`, // never ends in 0001..0020: kiosk specs search IDs by last digits
   name,
   email: `${name.split(" ")[0]!.toLowerCase()}@pp.e2e.test`,
 });
