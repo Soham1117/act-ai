@@ -120,7 +120,7 @@ export function JobCodeDialog({ departments, existing, open: controlledOpen, onO
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Code</Label>
-              <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="ACT001" maxLength={20} required className="font-mono" />
+              <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. FAB100" maxLength={20} required className="font-mono" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Rate</Label>
