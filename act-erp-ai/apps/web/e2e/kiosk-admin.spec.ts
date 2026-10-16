@@ -177,6 +177,9 @@ test.describe("admin: kiosk list shows states", () => {
 });
 
 test.describe("admin: trusted networks", () => {
+  test.beforeEach(async () => {
+    await db.auditLog.deleteMany({ where: { action: { startsWith: "kiosk.network." } } });
+  });
   test.afterEach(async () => {
     await db.kioskTrustedNetwork.deleteMany({});
   });
@@ -201,7 +204,7 @@ test.describe("admin: trusted networks", () => {
     const rows = await db.kioskTrustedNetwork.findMany({ orderBy: { cidr: "asc" } });
     expect(rows.map((r) => r.cidr).sort()).toEqual(["172.20.5.0/24", "198.51.100.7/32"]);
     expect(rows.find((r) => r.cidr === "198.51.100.7/32")!.label).toBe("Dock 2");
-    expect(await auditCount("kiosk.network.add")).toBeGreaterThanOrEqual(3);
+    await expect.poll(() => auditCount("kiosk.network.add")).toBe(3);
     await page.reload();
     await expect(page.getByText("198.51.100.7/32")).toBeVisible();
     await expect(page.getByText("10.99.0.0/16")).toBeVisible(); // server config
@@ -271,7 +274,7 @@ test.describe("admin: trusted networks", () => {
     await out.getByRole("button", { name: /trust my current network/i }).click();
     await expect(toast(out, new RegExp(`trusted ${IP_OUTSIDE.replace(/\./g, "\\.")}/32`, "i"))).toBeVisible();
     expect((await db.kioskTrustedNetwork.findMany()).map((r) => r.cidr)).toEqual([`${IP_OUTSIDE}/32`]);
-    expect(await auditCount("kiosk.network.trust")).toBe(1);
+    await expect.poll(() => auditCount("kiosk.network.trust")).toBe(1);
     await out.reload();
     await expect(out.getByText("allowed", { exact: true })).toBeVisible();
     await out.context().close();
