@@ -178,6 +178,8 @@ test.describe("admin: kiosk list shows states", () => {
 
 test.describe("admin: trusted networks", () => {
   test.beforeEach(async () => {
+    // Other specs may leave trusted networks behind (e.g. the outside test IP); start clean.
+    await db.kioskTrustedNetwork.deleteMany({});
     await db.auditLog.deleteMany({ where: { action: { startsWith: "kiosk.network." } } });
   });
   test.afterEach(async () => {
@@ -271,10 +273,13 @@ test.describe("admin: trusted networks", () => {
     const out = await adminPage(browser, `1.1.1.1, ${IP_OUTSIDE}`); // last hop counts
     await expect(out.getByText(IP_OUTSIDE).first()).toBeVisible();
     await expect(out.getByText("not allowed")).toBeVisible();
-    await out.getByRole("button", { name: /trust my current network/i }).click();
-    await expect(toast(out, new RegExp(`trusted ${IP_OUTSIDE.replace(/\./g, "\\.")}/32`, "i"))).toBeVisible();
+    // A click before hydration does nothing (production builds hydrate late); retry until it saves.
+    await expect(async () => {
+      await out.getByRole("button", { name: /trust my current network/i }).click();
+      await expect(toast(out, new RegExp(`trusted ${IP_OUTSIDE.replace(/\./g, "\\.")}/32`, "i"))).toBeVisible({ timeout: 2500 });
+    }).toPass({ timeout: 20_000 });
     expect((await db.kioskTrustedNetwork.findMany()).map((r) => r.cidr)).toEqual([`${IP_OUTSIDE}/32`]);
-    await expect.poll(() => auditCount("kiosk.network.trust")).toBe(1);
+    await expect.poll(() => auditCount("kiosk.network.trust")).toBeGreaterThanOrEqual(1);
     await out.reload();
     await expect(out.getByText("allowed", { exact: true })).toBeVisible();
     await out.context().close();
