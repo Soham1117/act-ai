@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   "/api/auth",
   "/privacy", // notice must be readable without an account
   "/api/health", // compose healthcheck / uptime monitor (leaks nothing)
+  "/api/version", // kiosk version watcher: returns the build id only
   // Customer-portal identity adapter (jwks/begin/finish/status). No browser
   // session: POST operations are HMAC-authenticated in the route handler
   // (service-auth.ts); jwks is public key material only. Matched as an exact

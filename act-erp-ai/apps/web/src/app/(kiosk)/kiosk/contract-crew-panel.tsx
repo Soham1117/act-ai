@@ -15,6 +15,7 @@ import {
 } from "@/server/actions/kiosk-contract";
 import { BUSINESS_TIME_ZONE } from "@/lib/format";
 import { toastAction } from "@/lib/toast-action";
+import { setKioskBusy } from "@/lib/kiosk-version";
 import { cn } from "@/lib/utils";
 import { PunchCameraPreview, type PunchCamera } from "./punch-camera";
 
@@ -83,6 +84,12 @@ export function ContractCrewPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activity, setActivity] = useState(0);
   const [pending, startTransition] = useTransition();
+
+  const busy = selectedId !== null || pending;
+  useEffect(() => {
+    setKioskBusy("crew", busy);
+    return () => setKioskBusy("crew", false);
+  }, [busy]);
 
   const selected = useMemo(
     () => workers.find((w) => w.id === selectedId) ?? null,
