@@ -171,6 +171,8 @@ export function ScheduleCalendar({
       createViewList(),
     ],
     defaultView: "month-grid",
+    // Schedule-X renders in UTC unless told otherwise (an 8:00 shift showed as 1:00 PM).
+    timezone: TZ,
     monthGridOptions: { nEventsPerDay: 4 },
     events: sxEvents,
     isDark: resolvedTheme === "dark",

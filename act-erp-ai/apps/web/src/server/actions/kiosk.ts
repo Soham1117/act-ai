@@ -21,6 +21,7 @@ import {
 import { notifyAdmins } from "@/lib/notify";
 import { DEFAULT_KIOSK_PIN, isDefaultPin, validateNewPin } from "@/lib/kiosk-pin";
 import { parseKioskIdInput } from "@/lib/kiosk-id";
+import { kioskNeedsPin } from "@/lib/kiosk-require-pin";
 import {
   clearFailures,
   isLocked,
@@ -457,6 +458,8 @@ type KioskLookupOk = {
   activeEntryId: string | null;
   /** An earlier shift was left open >16h; clocking in closes it and flags it for review. */
   staleShift: boolean;
+  /** Server's current PIN setting for this kiosk; the client trusts this over its page props. */
+  requirePin: boolean;
 };
 
 export type KioskRosterEmployee = {
@@ -595,6 +598,7 @@ export async function kioskLookup(
       status: (active?.status ?? "OUT") as "ACTIVE" | "ON_BREAK" | "OUT",
       activeEntryId: active?.id ?? null,
       staleShift: !!rawOpen && !active,
+      requirePin: kioskNeedsPin(session),
     });
   } catch (err) {
     return failFromUnknown(err);
@@ -606,7 +610,8 @@ const pinSchema = z.string().regex(/^\d{4,6}$/, "PIN must be 4-6 digits");
 const actionSchema = z.object({
   slug: z.string(),
   employeeId: z.string(),
-  pin: pinSchema,
+  /** Only read when the kiosk requires a PIN; ignored otherwise. */
+  pin: z.string().optional(),
   action: z.enum(["CLOCK_IN", "CLOCK_OUT", "START_BREAK", "END_BREAK"]),
   /** Optional JPEG data URL, used for CLOCK_IN / CLOCK_OUT only. Invalid photos are ignored. */
   photo: z.string().optional().catch(undefined),
@@ -668,18 +673,34 @@ export async function kioskAction(
     if (!session) return fail(NOT_ACTIVATED_MESSAGE);
     const data = actionSchema.parse(input);
 
+    // The decision comes only from the kiosk session row read above, never from the client.
+    const pinRequired = kioskNeedsPin(session);
+    // With a PIN required the PIN must be valid, exactly as before (missing -> "Required").
+    // A page left open from before an admin turned the PIN on sends no PIN: say so plainly.
+    if (pinRequired && !data.pin) {
+      return fail("This kiosk now asks for a PIN. Reload the page and try again.");
+    }
+    const pin = pinRequired ? z.object({ pin: pinSchema }).parse({ pin: data.pin }).pin : null;
+    if (!pinRequired && rateLimited(`punch:${session.id}`, 60, 60_000)) {
+      return fail("Too many punches on this kiosk — wait a moment and try again.");
+    }
+
     const employee = await db.employee.findFirst({
       where: { employeeId: { equals: data.employeeId.trim(), mode: "insensitive" } },
     });
     if (!employee) {
       return fail("Unknown employee ID. Check the ID and try again.");
     }
-    const auth = await authenticateKioskPin(session.id, employee, data.pin, session.slug);
-    if (!auth.ok) return fail(auth.error);
+    if (pin !== null) {
+      const auth = await authenticateKioskPin(session.id, employee, pin, session.slug);
+      if (!auth.ok) return fail(auth.error);
 
-    // Still on the temporary PIN: the punch must not proceed until it is changed.
-    if (data.pin === DEFAULT_KIOSK_PIN || (await isDefaultPin(employee.kioskPinHash))) {
-      return fail("You must set a new PIN before you can clock in or out.");
+      // Still on the temporary PIN: the punch must not proceed until it is changed.
+      if (pin === DEFAULT_KIOSK_PIN || (await isDefaultPin(employee.kioskPinHash))) {
+        return fail("You must set a new PIN before you can clock in or out.");
+      }
+    } else if (employee.employmentStatus !== "ACTIVE") {
+      return fail(NOT_ACTIVE_MESSAGE);
     }
 
     const meta = { kioskSlug: session.slug ?? input.slug, kioskLabel: session.label };
@@ -725,6 +746,7 @@ export async function kioskAction(
         timeEntryId: entryResult.id,
         autoClosedShift: entryResult.autoClosed ?? false,
         photo: !!photoKey,
+        pinRequired,
       },
     });
 
@@ -758,6 +780,7 @@ export async function kioskChangePin(
   try {
     const session = await requireActiveKiosk(input.slug);
     if (!session) return fail(NOT_ACTIVATED_MESSAGE);
+    if (!kioskNeedsPin(session)) return fail("PINs are not used at this kiosk.");
     const data = changePinSchema.parse(input);
 
     const employee = await db.employee.findFirst({
@@ -805,6 +828,48 @@ export async function revokeKiosk(id: string): Promise<ActionResult> {
       diff: { slug: session.slug },
     });
     revalidatePath("/admin/kiosks");
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+/** Admin: turn the employee PIN requirement on or off for one kiosk. */
+export async function setKioskRequirePin(
+  id: string,
+  requirePin: boolean,
+): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  try {
+    const value = z.boolean().parse(requirePin);
+    const before = await db.kioskSession.findUnique({ where: { id } });
+    if (!before) return fail("That kiosk was not found.");
+    const session = await db.kioskSession.update({
+      where: { id },
+      data: { requirePin: value },
+    });
+    const who = admin.email ?? admin.name;
+    const kioskName = session.label ?? session.slug ?? id;
+    await audit({
+      action: "kiosk.require_pin",
+      resource: `KioskSession:${id}`,
+      diff: {
+        slug: session.slug,
+        label: session.label,
+        from: before.requirePin,
+        to: value,
+        adminEmail: admin.email,
+      },
+    });
+    await notifyAdmins({
+      type: "SYSTEM",
+      title: "Kiosk PIN setting changed",
+      message: `${who} turned PIN requirement ${value ? "on" : "off"} for kiosk ${kioskName}.`,
+      link: "/admin/kiosks",
+      priority: "HIGH",
+    });
+    revalidatePath("/admin/kiosks");
+    if (session.slug) revalidatePath(`/kiosk/${session.slug}`);
     return ok();
   } catch (err) {
     return failFromUnknown(err);

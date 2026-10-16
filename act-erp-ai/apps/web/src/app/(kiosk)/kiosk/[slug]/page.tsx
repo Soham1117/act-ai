@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Lock, MonitorCheck } from "lucide-react";
+import { kioskNeedsPin } from "@/lib/kiosk-require-pin";
 import { KioskScreen } from "../kiosk-screen";
 import { ActivateForm } from "./activate-form";
 
@@ -25,7 +26,11 @@ export default async function KioskTerminalPage({
   // 1) Active kiosk cookie matches this slug → show the terminal.
   const active = await getActiveKioskSession(slug);
   if (active) {
-    return <KioskScreen slug={slug} label={active.label ?? "ACT Kiosk"} />;
+    return <KioskScreen
+        slug={slug}
+        label={active.label ?? "ACT Kiosk"}
+        requirePin={kioskNeedsPin(active)}
+      />;
   }
 
   // 2) Kiosk not active on this device. If an admin is logged in, offer
