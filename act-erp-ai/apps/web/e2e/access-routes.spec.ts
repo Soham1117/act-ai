@@ -98,13 +98,24 @@ async function classify(res: APIResponse, requestedPath: string, kind: RouteRow[
 
 async function call(row: RouteRow, who: Who) {
   const path = resolve(row.path);
-  const res = await clients[who].fetch(path, {
-    method: row.method ?? "GET",
-    maxRedirects: 0,
-    failOnStatusCode: false,
-    ...(row.method === "POST" ? { data: "{}", headers: { "content-type": "application/json" } } : {}),
-  });
-  return { path, res, outcome: await classify(res, path, row.kind) };
+  const send = () =>
+    clients[who].fetch(path, {
+      method: row.method ?? "GET",
+      maxRedirects: 0,
+      failOnStatusCode: false,
+      ...(row.method === "POST" ? { data: "{}", headers: { "content-type": "application/json" } } : {}),
+    });
+  let res = await send();
+  let outcome = await classify(res, path, row.kind);
+  // The Next dev server sometimes answers a dynamic route (/x/[id]) with 404 on its very
+  // first request, while it is still compiling the route. Ask again before judging; a
+  // real 404 stays a 404 and still fails the comparison below.
+  for (let i = 0; i < 3 && outcome === 404 && row.expect[who] !== 404; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    res = await send();
+    outcome = await classify(res, path, row.kind);
+  }
+  return { path, res, outcome };
 }
 
 for (const [title, rows] of [

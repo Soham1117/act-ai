@@ -142,6 +142,33 @@ export async function submitLoginForm(
   await page.getByRole("button", { name: /sign in/i }).click();
 }
 
+/** Ids for the {tokens} used in route paths (see support/access-routes.ts). */
+export async function loadRouteTokens(): Promise<Record<string, string>> {
+  const { db } = await import("./db");
+  const { EMPLOYEE, JOB_CODE, KIOSK_NEW_SLUG, PAYROLL_PERIOD_TITLE } = await import("./test-data");
+  const [erin, cw, job, period] = await Promise.all([
+    db.employee.findFirstOrThrow({ where: { employeeId: EMPLOYEE.employeeId } }),
+    db.contractWorker.findUniqueOrThrow({ where: { workerId: "CW-ACC1" } }),
+    db.jobCode.findUniqueOrThrow({ where: { code: JOB_CODE.code } }),
+    db.payrollCalendar.findFirstOrThrow({ where: { title: PAYROLL_PERIOD_TITLE } }),
+  ]);
+  return {
+    ...ACC_IDS,
+    erin: erin.id,
+    cw: cw.id,
+    job: job.id,
+    period: period.id,
+    dept: ACC_IDS.dept,
+    hire: ACC_IDS.hireImport,
+    invite: ACC_IDS.inviteToken,
+    inviteExpired: ACC_IDS.inviteExpiredToken,
+    newKiosk: KIOSK_NEW_SLUG,
+  };
+}
+
+export const resolveTokens = (path: string, tokens: Record<string, string>) =>
+  path.replace(/\{(\w+)\}/g, (_, k: string) => tokens[k] ?? `MISSING-${k}`);
+
 /** Wait for a heading or main region so "page rendered" is a real assertion. */
 export async function expectPageContent(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading").or(page.locator("main")).first()).toBeVisible();

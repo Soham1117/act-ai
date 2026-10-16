@@ -156,12 +156,13 @@ export const PAGES: RouteRow[] = [
   // ── Kiosk ──
   // Index is admin-only; a terminal page is public to the Proxy but sends a
   // device with no kiosk cookie to the login page (admin: activation card).
-  adminPage("/kiosk", {}, { smoke: "admin" }),
+  // (a dead session on the kiosk pages is sent to /login?next=<kiosk path>)
+  adminPage("/kiosk", { ended: "login" }, { smoke: "admin" }),
   {
     kind: "page",
     path: "/kiosk/{newKiosk}",
     smoke: undefined,
-    expect: { anon: "login", employee: "unauthorized", grace: "unauthorized", ended: "login-plain", admin: "ok" },
+    expect: { anon: "login", employee: "unauthorized", grace: "unauthorized", ended: "login", admin: "ok" },
   },
   {
     kind: "page",
@@ -188,7 +189,8 @@ export const APIS: RouteRow[] = [
   api("/api/v1/identity/jwks", { anon: 503, employee: 503, grace: 503, ended: 503, admin: 503 }),
   api(
     "/api/v1/identity/begin",
-    { anon: 401, employee: 401, grace: 401, ended: 401, admin: 401 },
+    // Unsigned POST: 503 "IDENTITY_UNAVAILABLE" because no service secret is configured in E2E.
+    { anon: 503, employee: 503, grace: 503, ended: 503, admin: 503 },
     { method: "POST" },
   ),
 
