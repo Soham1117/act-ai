@@ -109,7 +109,8 @@ export async function makeEntry(
 
 /** Remove every time entry of one seeded employee (call in afterEach/afterAll). */
 export async function clearEntries(employeeId: string, where: object = {}) {
-  await db.timeEntry.deleteMany({ where: { employee: { employeeId }, ...where } });
+  // Only touches seeded-era history (before 2026) so each employee's base-period hours survive.
+  await db.timeEntry.deleteMany({ where: { employee: { employeeId }, date: { lt: new Date("2026-01-01T00:00:00Z") }, ...where } });
 }
 
 /** Wire the browser pane for a seeded user (once per spec file). Re-uses a saved session when fresh. */
@@ -125,7 +126,8 @@ export async function sessionFor(
   const fresh =
     existsSync(file) && existsSync(ADMIN_STATE) && statSync(file).mtimeMs > statSync(ADMIN_STATE).mtimeMs;
   if (fresh) return browser.newContext({ baseURL: BASE_URL, storageState: file });
-  const ctx = await browser.newContext({ baseURL: BASE_URL });
+  // Explicitly empty: a file-level storageState in test.use() would otherwise leak in.
+  const ctx = await browser.newContext({ baseURL: BASE_URL, storageState: { cookies: [], origins: [] } });
   const page = await ctx.newPage();
   await page.goto("/login");
   await page.getByLabel(/email or username/i).fill(email);
