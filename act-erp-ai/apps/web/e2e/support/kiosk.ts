@@ -6,8 +6,8 @@
 import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { expect, type Browser, type Page } from "@playwright/test";
-import { db } from "./db";
-import { BASE_URL, IP_INSIDE, env } from "./test-data";
+import { businessYmd, db } from "./db";
+import { ADMIN_STATE, BASE_URL, IP_INSIDE, env } from "./test-data";
 
 /** Kiosk "names". Slug is `k6-<name>`; the seed part creates one row per name. */
 export const KIOSK_NAMES = [
@@ -17,10 +17,10 @@ export const KIOSK_NAMES = [
   // forced PIN change
   "temp-weak", "temp-mismatch", "temp-ok", "temp-wrong", "temp-stale", "temp-fail",
   // lockout
-  "lock-emp", "lock-ip", "lock-reset",
+  "lock-emp", "lock-emp2", "lock-ip", "lock-reset",
   // camera
   "cam-roster", "cam-on", "cam-idle", "cam-hidden", "cam-punch", "cam-denied", "cam-noapi",
-  "cam-photo", "cam-hang", "cam-break",
+  "cam-photo", "cam-hang", "cam-hang2", "cam-break",
   // session
   "sess-revoked", "sess-expired", "sess-wrongcookie", "sess-other-a", "sess-other-b", "sess-slide",
   "sess-end", "sess-roster", "sess-lookup", "sess-refresh-fail", "sess-idle",
@@ -233,4 +233,14 @@ export async function cardWithPin(page: Page, e: Emp, pin: string) {
   await openCard(page, e);
   await expect(pinInput(page)).toBeVisible();
   await typePin(page, pin);
+}
+
+/** An admin looking at the time-tracking page, filtered to one person (last 3 days). */
+export async function adminTimeTracking(browser: Browser, e: Emp) {
+  const context = await browser.newContext({ storageState: ADMIN_STATE });
+  const page = await context.newPage();
+  await page.goto(
+    `/admin/time-tracking?from=${businessYmd(3)}&to=${businessYmd(0)}&q=${encodeURIComponent(e.name)}`,
+  );
+  return { context, page };
 }
