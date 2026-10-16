@@ -16,7 +16,7 @@ import {
 import { BUSINESS_TIME_ZONE } from "@/lib/format";
 import { toastAction } from "@/lib/toast-action";
 import { cn } from "@/lib/utils";
-import type { PunchCameraHandle } from "./punch-camera";
+import { PunchCameraPreview, type PunchCamera } from "./punch-camera";
 
 type ContractAction = "CLOCK_IN" | "CLOCK_OUT";
 
@@ -71,11 +71,12 @@ export function KioskModeSwitch({
 
 export function ContractCrewPanel({
   slug,
-  cameraRef,
+  camera,
 }: {
   slug: string;
-  cameraRef?: React.RefObject<PunchCameraHandle | null>;
+  camera: PunchCamera;
 }) {
+  const { start: startCamera, stop: stopCamera } = camera;
   const [workers, setWorkers] = useState<KioskContractWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -111,12 +112,20 @@ export function ContractCrewPanel({
     };
   }, [load]);
 
+  const clearSelection = useCallback(() => {
+    stopCamera();
+    setSelectedId(null);
+  }, [stopCamera]);
+
+  // Camera runs only while the confirm card is open; also stop on tab switch/unmount.
+  useEffect(() => stopCamera, [stopCamera]);
+
   // Idle auto-cancel, same rule as the employee flow.
   useEffect(() => {
     if (!selected || pending) return;
-    const id = setTimeout(() => setSelectedId(null), IDLE_CANCEL_MS);
+    const id = setTimeout(clearSelection, IDLE_CANCEL_MS);
     return () => clearTimeout(id);
-  }, [selected, pending, activity]);
+  }, [selected, pending, activity, clearSelection]);
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -140,7 +149,7 @@ export function ContractCrewPanel({
   function act(worker: KioskContractWorker, action: ContractAction) {
     startTransition(async () => {
       // Best-effort photo; null never blocks the punch.
-      const photo = (await cameraRef?.current?.capture()) ?? undefined;
+      const photo = (await camera.capture()) ?? undefined;
       const res = await kioskContractAction({ slug, workerId: worker.id, action, photo });
       if (!toastAction(res)) return;
       const time = new Date().toLocaleTimeString([], {
@@ -160,7 +169,7 @@ export function ContractCrewPanel({
           { duration: 10_000 },
         );
       }
-      setSelectedId(null);
+      clearSelection();
       await load();
     });
   }
@@ -180,6 +189,7 @@ export function ContractCrewPanel({
           onPointerDownCapture={() => setActivity((n) => n + 1)}
         >
           <CardContent className="space-y-5 p-6">
+            <PunchCameraPreview status={camera.status} setVideo={camera.setVideo} />
             <div className="flex items-center gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -236,7 +246,7 @@ export function ContractCrewPanel({
                 size="lg"
                 className="col-span-2 h-12 text-sm"
                 disabled={pending}
-                onClick={() => setSelectedId(null)}
+                onClick={clearSelection}
               >
                 <X className="mr-1.5 h-4 w-4" /> Cancel
               </Button>
@@ -289,7 +299,10 @@ export function ContractCrewPanel({
                       <button
                         type="button"
                         disabled={pending}
-                        onClick={() => setSelectedId(w.id)}
+                        onClick={() => {
+                          setSelectedId(w.id);
+                          startCamera();
+                        }}
                         className={cn(
                           "flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-muted/40 active:bg-muted/60 disabled:opacity-60",
                         )}

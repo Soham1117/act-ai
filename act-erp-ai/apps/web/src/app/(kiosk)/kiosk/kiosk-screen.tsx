@@ -35,7 +35,7 @@ import { toastAction } from "@/lib/toast-action";
 import type { ActionOk } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
 import { ContractCrewPanel, KioskModeSwitch } from "./contract-crew-panel";
-import { PunchCamera, type PunchCameraHandle } from "./punch-camera";
+import { PunchCameraPreview, usePunchCamera } from "./punch-camera";
 
 type LookupMatch = ActionOk<{
   id: string;
@@ -94,7 +94,8 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
   const pinRef = useRef<HTMLInputElement>(null);
   const newPinRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const cameraRef = useRef<PunchCameraHandle>(null);
+  const camera = usePunchCamera();
+  const { start: startCamera, stop: stopCamera } = camera;
 
   const loadRoster = useCallback(async () => {
     const res = await kioskListEmployees(slug);
@@ -130,8 +131,23 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
     setPendingAction(null);
     setNewPin("");
     setConfirmPin("");
+    stopCamera();
     setTimeout(() => searchRef.current?.focus(), 0);
-  }, []);
+  }, [stopCamera]);
+
+  // Camera light must never stay on while the tab is in the background.
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") stopCamera();
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, [stopCamera]);
+
+  function changeMode(next: "employees" | "contract") {
+    stopCamera();
+    setMode(next);
+  }
 
   // Idle auto-cancel: only runs while an employee is selected (never on the
   // roster), restarts on every keypress/tap (activity), and is paused while
@@ -170,6 +186,8 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
       setConfirmPin("");
       setShowIdEntry(false);
       setInput("");
+      // Warm the camera up while the person types their PIN.
+      startCamera();
     });
   }
 
@@ -183,7 +201,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
     // Best-effort photo for clock in/out only; null never blocks the punch.
     const photo =
       action === "CLOCK_IN" || action === "CLOCK_OUT"
-        ? ((await cameraRef.current?.capture()) ?? undefined)
+        ? ((await camera.capture()) ?? undefined)
         : undefined;
     const res = await kioskAction({ slug, employeeId: m.employeeId, pin: pinValue, action, photo });
     if (!toastAction(res)) {
@@ -300,8 +318,8 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                 exit={{ opacity: 0, y: -8 }}
                 className="space-y-4"
               >
-                <KioskModeSwitch mode={mode} onChange={setMode} />
-                <ContractCrewPanel slug={slug} cameraRef={cameraRef} />
+                <KioskModeSwitch mode={mode} onChange={changeMode} />
+                <ContractCrewPanel slug={slug} camera={camera} />
               </motion.div>
             ) : !match ? (
               <motion.div
@@ -311,7 +329,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                 exit={{ opacity: 0, y: -8 }}
                 className="space-y-4"
               >
-                <KioskModeSwitch mode={mode} onChange={setMode} />
+                <KioskModeSwitch mode={mode} onChange={changeMode} />
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="relative min-w-0 flex-1">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -516,6 +534,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                   onPointerDownCapture={() => setActivity((n) => n + 1)}
                 >
                   <CardContent className="space-y-5 p-6">
+                    <PunchCameraPreview status={camera.status} setVideo={camera.setVideo} />
                     <div className="flex items-center gap-4">
                       <span className="relative h-14 w-14 overflow-hidden rounded-full ring-2 ring-border">
                         <Image
@@ -690,8 +709,6 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
           </AnimatePresence>
         </div>
       </div>
-
-      <PunchCamera ref={cameraRef} className="fixed bottom-14 right-4 z-10" />
 
       <footer className="flex items-center justify-between border-t bg-background px-6 py-3 sm:px-8">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
