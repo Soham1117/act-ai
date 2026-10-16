@@ -150,6 +150,7 @@ async function main() {
     data: {
       slug: KIOSK_ACTIVE_SLUG,
       label: "E2E Kiosk",
+      requirePin: true, // PIN tests use this kiosk; the no-PIN flow has its own kiosk
       provisionedBy: admin.id,
       expiresAt,
       cookieHash: createHash("sha256").update(env("E2E_KIOSK_COOKIE")).digest("hex"),
