@@ -437,7 +437,13 @@ export function EntryActions({
           {compact ? "" : "Force clock-out"}
         </Button>
       )}
-      <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" onClick={() => setEditOpen(true)}>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8 gap-1 text-xs"
+        aria-label={`Edit time entry for ${entry.employeeName}`}
+        onClick={() => setEditOpen(true)}
+      >
         <PenLine className="h-3 w-3" />
         {compact ? "" : "Edit"}
       </Button>

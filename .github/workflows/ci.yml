@@ -1,0 +1,91 @@
+name: ci
+
+# Runs on every push and pull request to main. It checks the web app in
+# act-erp-ai/apps/web: types, lint, unit tests, then browser (Playwright)
+# tests against a throw-away Postgres. It never deploys anything.
+#
+# NOTE: this file lives in the repo root. The older act-erp-ai/.github/
+# folder is NOT read by GitHub (it is not at the root), and is left alone.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: act-erp-ai/apps/web
+
+    # Test database. Name contains "e2e": the seed script refuses any other.
+    # Mapped to 5433 to match DATABASE_URL in .env.e2e (same as local docker).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: act
+          POSTGRES_PASSWORD: act
+          POSTGRES_DB: act_e2e
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U act"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: act-erp-ai/apps/web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm prisma:generate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: Unit tests (vitest)
+        run: pnpm test
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Playwright config builds + starts the app, resets and seeds the test
+      # database (e2e/seed.ts), then runs every spec in e2e/.
+      - name: End-to-end tests (Playwright)
+        run: pnpm exec playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            act-erp-ai/apps/web/playwright-report/
+            act-erp-ai/apps/web/test-results/
+          retention-days: 14

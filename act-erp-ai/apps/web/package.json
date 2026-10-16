@@ -18,7 +18,10 @@
     "db:push": "prisma db push",
     "copy-pdf-worker": "node scripts/copy-pdf-worker.mjs",
     "export:mongo": "tsx --env-file=.env.local scripts/export-mongo.ts",
-    "postinstall": "prisma generate || true; node scripts/copy-pdf-worker.mjs || true"
+    "postinstall": "prisma generate || true; node scripts/copy-pdf-worker.mjs || true",
+    "e2e:db": "node --env-file=.env.e2e node_modules/prisma/build/index.js db push --skip-generate --accept-data-loss && tsx --env-file=.env.e2e e2e/seed.ts",
+    "e2e": "playwright test",
+    "e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1071.0",
@@ -85,6 +88,7 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^10.4.0",
+    "@playwright/test": "^1.62.1",
     "@types/adm-zip": "^0.5.8",
     "@types/bcryptjs": "^3.0.0",
     "@types/hast": "^3.0.5",
