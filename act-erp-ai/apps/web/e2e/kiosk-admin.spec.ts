@@ -266,13 +266,13 @@ test.describe("admin: trusted networks", () => {
   test("current IP: allowed inside, not allowed outside with a Trust button that saves it", async ({ browser }) => {
     const inside = await adminPage(browser, IP_INSIDE);
     await expect(inside.getByText(IP_INSIDE).first()).toBeVisible();
-    await expect(inside.getByText("allowed", { exact: true })).toBeVisible();
+    await expect(inside.locator("p").filter({ hasText: "Your current IP" }).getByText("allowed", { exact: true })).toBeVisible();
     await expect(inside.getByRole("button", { name: /trust my current network/i })).toHaveCount(0);
     await inside.context().close();
 
     const out = await adminPage(browser, `1.1.1.1, ${IP_OUTSIDE}`); // last hop counts
     await expect(out.getByText(IP_OUTSIDE).first()).toBeVisible();
-    await expect(out.getByText("not allowed")).toBeVisible();
+    await expect(out.locator("p").filter({ hasText: "Your current IP" }).getByText("not allowed")).toBeVisible();
     // A click before hydration does nothing (production builds hydrate late); retry until it saves.
     await expect(async () => {
       await out.getByRole("button", { name: /trust my current network/i }).click();
@@ -281,7 +281,7 @@ test.describe("admin: trusted networks", () => {
     expect((await db.kioskTrustedNetwork.findMany()).map((r) => r.cidr)).toEqual([`${IP_OUTSIDE}/32`]);
     await expect.poll(() => auditCount("kiosk.network.trust")).toBeGreaterThanOrEqual(1);
     await out.reload();
-    await expect(out.getByText("allowed", { exact: true })).toBeVisible();
+    await expect(out.locator("p").filter({ hasText: "Your current IP" }).getByText("allowed", { exact: true })).toBeVisible();
     await out.context().close();
   });
 
