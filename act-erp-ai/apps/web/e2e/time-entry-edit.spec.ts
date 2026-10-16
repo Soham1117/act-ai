@@ -5,12 +5,26 @@ import { ADMIN_STATE, EMPLOYEE } from "./support/test-data";
 
 test.use({ storageState: ADMIN_STATE });
 
+// Yesterday's date as the list prints it. Other specs add their own Erin entries and
+// stale/auto-closed shifts, so never rely on "first row" or on the default tab.
+const yesterdayText = new Date(`${businessYmd(1)}T00:00:00Z`).toLocaleDateString("en-US", {
+  timeZone: "UTC",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
+
 /** Opens the edit dialog for Erin's seeded entry from yesterday. */
 async function openEdit(page: Page) {
   await page.goto(
-    `/admin/time-tracking?from=${businessYmd(3)}&to=${businessYmd(0)}&q=${encodeURIComponent(EMPLOYEE.name)}`,
+    `/admin/time-tracking?tab=entries&from=${businessYmd(3)}&to=${businessYmd(0)}&q=${encodeURIComponent(EMPLOYEE.name)}`,
   );
-  await page.getByRole("button", { name: /edit time entry for/i }).first().click();
+  await page
+    .getByRole("listitem")
+    .filter({ hasText: yesterdayText })
+    .filter({ hasText: "Manual" })
+    .getByRole("button", { name: /edit time entry for/i })
+    .click();
   const dialog = page.getByRole("dialog", { name: /edit time entry/i });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -18,7 +32,12 @@ async function openEdit(page: Page) {
 
 const seededEntry = () =>
   db.timeEntry.findFirstOrThrow({
-    where: { employee: { employeeId: EMPLOYEE.employeeId }, source: "MANUAL", approvalStatus: "PENDING" },
+    where: {
+      employee: { employeeId: EMPLOYEE.employeeId },
+      source: "MANUAL",
+      approvalStatus: "PENDING",
+      date: new Date(`${businessYmd(1)}T00:00:00Z`),
+    },
   });
 
 test.describe("admin: manual time entry edit", () => {

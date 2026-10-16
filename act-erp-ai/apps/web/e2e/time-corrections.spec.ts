@@ -199,14 +199,24 @@ test.describe("admin: edit, delete and reopen entries", () => {
 
 test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
   const attention = "/admin/time-tracking?tab=attention";
+  // Other areas may leave their own stale or auto-closed rows, so counts come from the DB
+  // and every action targets this employee's row.
+  const staleCount = () =>
+    db.timeEntry.count({
+      where: { status: { in: ["ACTIVE", "ON_BREAK"] }, clockIn: { lt: new Date(Date.now() - 16 * 3_600_000) } },
+    });
+  const autoCount = () =>
+    db.timeEntry.count({ where: { autoClosed: true, approvalStatus: "PENDING", clockOut: { not: null } } });
+  const rowOf = (page: Page, name: string) => page.getByRole("listitem").filter({ hasText: name });
 
   test("a shift open over 16 hours is listed and Needs attention counts it", async ({ page }) => {
     await recent(PT.fiona.employeeId, 20, null);
     await page.goto(attention);
-    await expect(page.getByText(/shifts open over 16 hours \(1\)/i)).toBeVisible();
-    const item = page.getByRole("listitem").filter({ hasText: PT.fiona.name });
-    await expect(item).toContainText(/never clocked out \(20h ago\)/);
-    await expect(page.getByRole("tab", { name: /needs attention \(1\)/i })).toBeVisible();
+    const stale = await staleCount();
+    const auto = await autoCount();
+    await expect(page.getByText(new RegExp(`shifts open over 16 hours \\(${stale}\\)`, "i"))).toBeVisible();
+    await expect(rowOf(page, PT.fiona.name)).toContainText(/never clocked out \(20h ago\)/);
+    await expect(page.getByRole("tab", { name: new RegExp(`needs attention \\(${stale + auto}\\)`, "i") })).toBeVisible();
   });
 
   test("force clock-out closes at the 16 hour cap, closes open breaks, and queues the entry", async ({ page }) => {
@@ -214,7 +224,7 @@ test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
     await db.timeBreak.create({ data: { timeEntryId: e.id, startTime: ago(19), endTime: null, type: "BREAK" } });
     await db.timeEntry.update({ where: { id: e.id }, data: { status: "ON_BREAK" } });
     await page.goto(attention);
-    await page.getByRole("button", { name: /force clock-out/i }).click();
+    await rowOf(page, PT.fiona.name).getByRole("button", { name: /force clock-out/i }).click();
     const dialog = page.getByRole("dialog", { name: /force clock-out/i });
     await expect(dialog).toContainText(/no more than 16 hours/i);
     await dialog.getByRole("button", { name: /^clock out$/i }).click();
@@ -233,7 +243,7 @@ test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
   test("force clock-out: empty reason, time past the cap, and a stale click are all handled", async ({ page }) => {
     const e = await recent(PT.fiona.employeeId, 20, null);
     await page.goto(attention);
-    await page.getByRole("button", { name: /force clock-out/i }).click();
+    await rowOf(page, PT.fiona.name).getByRole("button", { name: /force clock-out/i }).click();
     const dialog = page.getByRole("dialog", { name: /force clock-out/i });
     const clockOut = dialog.locator('input[type="datetime-local"]');
     await dialog.getByRole("textbox").last().fill("");
@@ -257,7 +267,7 @@ test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
   test("force clock-out failure keeps the shift open", async ({ page }) => {
     const e = await recent(PT.fiona.employeeId, 20, null);
     await page.goto(attention);
-    await page.getByRole("button", { name: /force clock-out/i }).click();
+    await rowOf(page, PT.fiona.name).getByRole("button", { name: /force clock-out/i }).click();
     await failServerActions(page, "abort");
     await page.getByRole("dialog", { name: /force clock-out/i }).getByRole("button", { name: /^clock out$/i }).click();
     await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
@@ -268,7 +278,7 @@ test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
   test("double-clicking Clock out closes once", async ({ page }) => {
     const e = await recent(PT.fiona.employeeId, 20, null);
     await page.goto(attention);
-    await page.getByRole("button", { name: /force clock-out/i }).click();
+    await rowOf(page, PT.fiona.name).getByRole("button", { name: /force clock-out/i }).click();
     const calls = await delayServerActions(page, 1200);
     await page.getByRole("dialog", { name: /force clock-out/i }).getByRole("button", { name: /^clock out$/i }).dblclick();
     await expect(toast(page, /clocked out/i)).toBeVisible();
@@ -279,8 +289,8 @@ test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
   test("an auto-closed shift is flagged in Needs attention, the pending queue and the entries list", async ({ page }) => {
     await recent(PT.alma.employeeId, 30, 14, { approval: "PENDING", autoClosed: true, editReason: "Auto-closed: shift ran longer than 16 hours (counted time capped). Needs admin review." });
     await page.goto(attention);
-    await expect(page.getByText(/auto-closed at the cap, awaiting review \(1\)/i)).toBeVisible();
-    await expect(page.getByText(/auto-closed at the 16 hour cap\. verify the hours/i)).toBeVisible();
+    await expect(page.getByText(new RegExp(`auto-closed at the cap, awaiting review \\(${await autoCount()}\\)`, "i"))).toBeVisible();
+    await expect(rowOf(page, PT.alma.name).getByText(/auto-closed at the 16 hour cap\. verify the hours/i)).toBeVisible();
     await page.goto(entriesUrl(PT.alma.name, businessYmd(3), businessYmd(0)));
     await expect(page.getByText("Auto-closed", { exact: true })).toBeVisible();
   });
@@ -288,7 +298,7 @@ test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
   test("editing an auto-closed entry clears the auto-closed flag", async ({ page }) => {
     const e = await recent(PT.alma.employeeId, 30, 14, { approval: "PENDING", autoClosed: true });
     await page.goto(attention);
-    await page.getByRole("button", { name: /edit time entry for/i }).first().click();
+    await rowOf(page, PT.alma.name).getByRole("button", { name: /edit time entry for/i }).click();
     const dialog = page.getByRole("dialog", { name: /edit time entry/i });
     await reason(dialog, "Verified with supervisor");
     await dialog.getByRole("button", { name: /save changes/i }).click();
@@ -299,7 +309,6 @@ test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
   test("Clocked in tab lists an open shift under 16 hours as Working or On break", async ({ page }) => {
     await recent(PT.fiona.employeeId, 2, null);
     await page.goto("/admin/time-tracking?tab=now");
-    await expect(page.getByRole("listitem").filter({ hasText: PT.fiona.name })).toContainText("Working");
-    await expect(page.getByText(/shifts open over 16 hours/i)).toHaveCount(0);
+    await expect(rowOf(page, PT.fiona.name)).toContainText("Working");
   });
 });
