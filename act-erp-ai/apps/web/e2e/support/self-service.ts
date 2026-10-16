@@ -149,6 +149,16 @@ export function answerNextDialog(page: Page, accept = true) {
   page.once("dialog", (d) => void (accept ? d.accept() : d.dismiss()));
 }
 
+/** Put an object straight into the in-memory fake S3 (key like "documents/<id>/file.pdf"). */
+export async function putFakeS3(key: string, body: Buffer, contentType: string) {
+  const res = await fetch(`${process.env.AWS_ENDPOINT_URL}/${process.env.S3_BUCKET}/${key}`, {
+    method: "PUT",
+    body: new Uint8Array(body),
+    headers: { "content-type": contentType },
+  });
+  if (!res.ok) throw new Error(`fake S3 put failed: ${res.status}`);
+}
+
 /** Wait for any visible toast with this text and assert it. */
 export async function expectToast(page: Page, text: string | RegExp) {
   await expect(page.locator("[data-sonner-toast]").filter({ hasText: text }).first()).toBeVisible();
