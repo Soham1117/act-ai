@@ -19,6 +19,8 @@ async function openManual(page: Page) {
 
 async function fillManual(dialog: Awaited<ReturnType<typeof openManual>>, v: V) {
   if (v.employee !== "none") await dialog.locator("select").first().selectOption({ label: `${v.employee ?? PT.tina.name} · ${v.employee === INACTIVE_EMPLOYEE.name ? INACTIVE_EMPLOYEE.employeeId : PT.tina.employeeId}` });
+  // The dropdown defaults to the alphabetically first active code, which other areas' seeds can change.
+  await dialog.locator("select").nth(1).selectOption(JOB_CODE.code);
   const dt = dialog.locator('input[type="datetime-local"]');
   await dt.nth(0).fill(v.inAt ?? "2025-08-04T08:00");
   await dt.nth(1).fill(v.outAt ?? "2025-08-04T16:00");
