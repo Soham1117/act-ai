@@ -8,6 +8,7 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { MarkAllReadButton } from "./mark-all-read-button";
 import { MarkReadButton } from "./mark-read-button";
+import { MarkSeenOnView } from "./mark-seen";
 import {
   NotificationPagination,
   notificationPage,
@@ -58,6 +59,7 @@ export default async function NotificationsPage({
 
   return (
     <>
+      {unreadCount > 0 && <MarkSeenOnView />}
       <PageHeader
         title="Notifications"
         description={`${unreadCount} unread of ${totalCount}`}

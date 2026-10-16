@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
+import { MarkSeenOnView } from "@/app/(employee)/dashboard/notifications/mark-seen";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +16,21 @@ export default async function AdminNotificationsPage() {
     try { return await p; } catch { return fallback; }
   };
 
-  const [items, departments] = await Promise.all([
+  // The bell badge counts the admin's OWN unread notifications, so the bell
+  // must lead to them (this page used to show only broadcasts sent).
+  const me = await getSessionUser();
+  const [inbox, items, departments] = await Promise.all([
+    me?.employeeId
+      ? safe(
+          db.notificationRecipient.findMany({
+            where: { employeeId: me.employeeId },
+            include: { notification: true },
+            orderBy: { notification: { createdAt: "desc" } },
+            take: 50,
+          }),
+          [],
+        )
+      : Promise.resolve([]),
     safe(
       db.notification.findMany({
         orderBy: { createdAt: "desc" },
@@ -28,18 +45,56 @@ export default async function AdminNotificationsPage() {
     ),
   ]);
 
+  const unread = inbox.filter((i) => !i.read).length;
+
   return (
     <>
+      {unread > 0 && <MarkSeenOnView />}
       <PageHeader
         title="Notifications"
-        description="Broadcast announcements, policy updates, and payroll alerts."
+        description="Your notifications, plus broadcast announcements and payroll alerts you sent."
         actions={<BroadcastDialog departments={departments} />}
       />
 
-      <Tabs defaultValue="all" className="space-y-4">
+      <Tabs defaultValue={me?.employeeId ? "inbox" : "all"} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="all">All ({items.length})</TabsTrigger>
+          {me?.employeeId && <TabsTrigger value="inbox">My inbox ({inbox.length})</TabsTrigger>}
+          <TabsTrigger value="all">Sent ({items.length})</TabsTrigger>
         </TabsList>
+        {me?.employeeId && (
+          <TabsContent value="inbox">
+            <Card>
+              <CardContent className="p-0">
+                <ul className="divide-y">
+                  {inbox.length === 0 && (
+                    <li className="grid h-32 place-items-center text-xs text-muted-foreground">
+                      No notifications yet.
+                    </li>
+                  )}
+                  {inbox.map((i) => (
+                    <li key={i.id} className={`space-y-1 p-3 ${i.read ? "" : "bg-muted/30"}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">{i.notification.title}</p>
+                        <Badge variant="outline" className="text-[10px]">{i.notification.type}</Badge>
+                        <span className="ml-auto text-[10px] text-muted-foreground">
+                          {formatDistanceToNow(i.notification.createdAt, { addSuffix: true })}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                        {i.notification.message}
+                      </p>
+                      {i.notification.link?.startsWith("/") && !i.notification.link.startsWith("//") && (
+                        <Link href={i.notification.link} className="text-xs text-primary hover:underline">
+                          View details
+                        </Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
         <TabsContent value="all">
           <Card>
             <CardHeader><CardTitle className="text-base">Sent</CardTitle></CardHeader>

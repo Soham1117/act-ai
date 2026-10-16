@@ -23,7 +23,7 @@ export const UMA = { employeeId: "EMP-2026-5003", name: "Uma Unit", email: "uma.
 /** Employee who signs in and checks My schedule. Owns the fixed read-only shifts. */
 export const WES = { employeeId: "EMP-2026-5004", name: "Wes Window", email: "wes.window@e2e.test" };
 /** Another employee with fixed shifts Wes must never see. */
-export const OLIVE = { employeeId: "EMP-2026-5005", name: "Olive Other", email: "olive.other@e2e.test" };
+export const OLIVE = { employeeId: "EMP-2026-5005", name: "Olivia Sched", email: "olivia.sched@e2e.test" };
 /** Terminated: not in the picker, shifts cannot be edited. */
 export const TERRY = { employeeId: "EMP-2026-5006", name: "Terry Terminated", email: "terry.terminated@e2e.test" };
 /** Has a fixed far-future shift for the "edit a shift whose code is gone" flows. */

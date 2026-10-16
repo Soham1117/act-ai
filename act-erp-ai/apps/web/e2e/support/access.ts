@@ -15,7 +15,7 @@ export const ACC_USERS = {
   /** Terminated 10 days ago: read-only grace window. Owns a payslip + document. */
   grace: { email: "gina.grace@e2e.test", name: "Gina Grace", employeeId: "EMP-ACC-0001" },
   /** Active colleague who owns the "other person's" files. */
-  other: { email: "olive.other@e2e.test", name: "Olive Other", employeeId: "EMP-ACC-0002" },
+  other: { email: "olive.accother@e2e.test", name: "Olive Other", employeeId: "EMP-ACC-0002" },
   /** Logs in, then access ends (terminated 200 days ago) before the matrix runs. */
   ended: { email: "edna.ended@e2e.test", name: "Edna Ended", employeeId: "EMP-ACC-0003" },
   /** Session-expiry test: access is ended mid-session. */
@@ -39,7 +39,7 @@ export const ACC_USERS = {
   /** Admin with no employee record who must change a temporary password. */
   mustAdmin: { email: "mo.mustadmin@e2e.test", name: "Mo MustAdmin" },
   /** Failure-injection on change-password (self-service from Settings). */
-  settingsPw: { email: "sam.settings@e2e.test", name: "Sam Settings", employeeId: "EMP-ACC-0013" },
+  settingsPw: { email: "sam.accsettings@e2e.test", name: "Sam AccSettings", employeeId: "EMP-ACC-0013" },
 } as const;
 
 /** Fixed row ids (set explicitly in the seed so specs never guess). */
