@@ -67,6 +67,11 @@ export function addDays(ymd: string, n: number): string {
 }
 
 export const dateOnly = ymdToUtc;
+
+/** How the app prints a date-only value (e.g. "Oct 6, 2026"). */
+export function fmtDate(ymd: string): string {
+  return ymdToUtc(ymd).toLocaleDateString("en-US", { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" });
+}
 export const currentYear = () => Number(businessYmd(0).slice(0, 4));
 
 /** Counts Monday-Friday days in [start, end]. */
