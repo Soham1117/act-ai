@@ -180,6 +180,61 @@ Dev-only helper scripts (**never run in production**): `scripts/create-admin.ts`
 
 ---
 
+## Testing
+
+| Layer | Command | What it covers |
+|---|---|---|
+| Unit (vitest) | `pnpm test` | Pure lib code, plus a guard that fails on hard-coded job codes (like `ACT001`) in `src/app` |
+| End-to-end (Playwright) | `pnpm e2e` | Real browser, real database: login, schedules, kiosk, contract crew, hours approval, time-entry edit, payroll CSV. Each flow has a happy path and an error path |
+
+### Run the E2E tests locally
+
+You need Docker (for Postgres) and Node 22+.
+
+```bash
+# 1. Start Postgres (localhost:5433) and make the test database. Do this once.
+docker compose -f ../../infra/docker-compose.yml up -d postgres
+docker exec act-erp-ai-postgres-1 psql -U act -d postgres -c "CREATE DATABASE act_e2e"
+
+# 2. Install the test browser. Do this once.
+pnpm exec playwright install chromium
+
+# 3. Run the tests.
+pnpm e2e
+```
+
+`pnpm e2e` does everything else for you: it starts the app on port 3100,
+resets the `act_e2e` database (`prisma db push` + `e2e/seed.ts`), and runs
+`e2e/*.spec.ts`. Useful extras: `pnpm exec playwright test kiosk` (one file),
+`pnpm exec playwright test --ui` (watch mode), `pnpm e2e:report` (HTML report).
+
+**Test users and data** live in `e2e/seed.ts`; the names and IDs are in
+`e2e/support/test-data.ts`. Passwords, the kiosk PIN and the kiosk cookie are
+fake values in `.env.e2e` (committed on purpose, never real). The seed has an
+admin, an employee with a kiosk PIN, an ended employee, one job code, kiosks,
+one staffing agency with contract workers, and a payroll period.
+
+How the tests fake the outside world:
+
+- **Wrong network:** the kiosk network rule is `10.99.0.0/16` in `.env.e2e`.
+  Tests send an `X-Forwarded-For` header to be inside (`10.99.1.5`) or outside it.
+- **Server and network failures:** `failServerActions()` in
+  `e2e/support/helpers.ts` uses `page.route` to abort or break server-action
+  calls. Tests then check the UI shows a message and nothing was saved.
+- **Camera:** Chromium runs with fake-camera flags (see `playwright.config.ts`),
+  so punch photos are taken. Tests check the photo is sent to the server.
+  Photo upload to S3 itself is not tested (no storage in the test setup).
+- **Safety:** the seed and the tests refuse to run unless the database name
+  contains `e2e`, so they cannot wipe your dev database.
+
+### CI
+
+`.github/workflows/ci.yml` (in the repository root) runs on every push and pull
+request to `main`: install, `prisma generate`, typecheck, ESLint, vitest, then
+Playwright against a Postgres service container. On failure the HTML report is
+attached to the run as the `playwright-report` artifact. In CI the app is built
+and run in production mode. The workflow does not deploy anything.
+
 ## Feature flag: `AI_ENABLED`
 
 Off by default. When `false`:
