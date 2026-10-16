@@ -24,9 +24,14 @@ export const KIOSK_NAMES = [
   // session
   "sess-revoked", "sess-expired", "sess-wrongcookie", "sess-other-a", "sess-other-b", "sess-slide",
   "sess-end", "sess-roster", "sess-lookup", "sess-refresh-fail", "sess-idle",
+  // no-PIN kiosks (requirePin = false) and PIN-switch scenarios
+  "np-basic", "np-ids", "np-nocookie", "np-fail", "np-double", "np-forge", "np-rate", "np-stale",
+  "np-stale2", "np-chpin", "np-switch",
   // admin read-only fixtures
   "adm-expired", "adm-expiring", "adm-revoked", "adm-inactive", "adm-active",
 ] as const;
+/** Kiosks seeded with requirePin = false. Every other seeded kiosk requires the PIN. */
+export const NO_PIN_KIOSKS: string[] = ["np-basic", "np-ids", "np-nocookie", "np-fail", "np-double", "np-forge", "np-rate", "np-stale", "np-stale2"];
 export type KioskName = (typeof KIOSK_NAMES)[number];
 
 export const kioskSlug = (name: KioskName | string) => `k6-${name}`;

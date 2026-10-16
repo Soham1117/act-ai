@@ -4,6 +4,7 @@ import {
   EMP,
   IP_LOCK_EMPS,
   KIOSK_NAMES,
+  NO_PIN_KIOSKS,
   PASSWORD_FOR,
   emailFor,
   kioskCookie,
@@ -41,6 +42,7 @@ export default async function seedKiosk(ctx: SeedContext) {
       expiresAt: new Date(Date.now() + 90 * DAY),
       cookieHash: sha256(kioskCookie(name)) as string | null,
       revokedAt: null as Date | null,
+      requirePin: !NO_PIN_KIOSKS.includes(name),
     };
     const special: Record<string, Partial<typeof base>> = {
       "adm-expired": { expiresAt: new Date(Date.now() - 3 * DAY) },
