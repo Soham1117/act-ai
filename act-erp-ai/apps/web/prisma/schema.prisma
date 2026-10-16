@@ -945,6 +945,9 @@ model KioskSession {
   lastUsedAt    DateTime?
   ip            String?
   userAgent     String?
+  /// When false (default) workers pick their name and punch without a PIN;
+  /// a photo is still taken. Admins can turn the PIN back on per kiosk.
+  requirePin    Boolean   @default(false)
   createdAt     DateTime  @default(now())
 
   @@index([revokedAt])

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
 import { CreateKioskDialog } from "./create-kiosk-dialog";
+import { RequirePinSwitch } from "./require-pin-switch";
 import { KioskRowActions } from "./kiosk-row-actions";
 import { TrustedNetworksCard } from "./trusted-networks-card";
 import { listKioskNetworks } from "@/server/actions/kiosk";
@@ -117,6 +118,13 @@ export default async function KiosksPage() {
                             ? `Expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. It renews automatically whenever the kiosk is used; if it sits idle, re-activate it from the device.`
                             : `Session renews to 90 days each time the kiosk is used (${daysLeft} days left).`}
                       </p>
+                    )}
+                    {!revoked && (
+                      <RequirePinSwitch
+                        id={s.id}
+                        label={s.label ?? s.slug ?? "this kiosk"}
+                        requirePin={s.requirePin}
+                      />
                     )}
                   </div>
                   {s.slug && (

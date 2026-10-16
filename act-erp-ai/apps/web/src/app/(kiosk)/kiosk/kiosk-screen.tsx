@@ -49,6 +49,7 @@ type LookupMatch = ActionOk<{
   status: "ACTIVE" | "ON_BREAK" | "OUT";
   activeEntryId: string | null;
   staleShift: boolean;
+  requirePin: boolean;
 }>;
 
 type KioskActionName = "CLOCK_IN" | "CLOCK_OUT" | "START_BREAK" | "END_BREAK";
@@ -73,7 +74,15 @@ function statusVariant(
   return "outline";
 }
 
-export function KioskScreen({ slug, label }: { slug: string; label: string }) {
+export function KioskScreen({
+  slug,
+  label,
+  requirePin,
+}: {
+  slug: string;
+  label: string;
+  requirePin: boolean;
+}) {
   const [now, setNow] = useState(new Date());
   const [roster, setRoster] = useState<KioskRosterEmployee[]>([]);
   const [rosterLoading, setRosterLoading] = useState(true);
@@ -178,6 +187,11 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
     startTransition(async () => {
       const r = await kioskLookup(slug, employeeId);
       if (!toastAction(r)) return;
+      if (r.requirePin !== requirePin) {
+        // The kiosk PIN setting changed since this page loaded; trust the server.
+        toast.error("This kiosk was updated. Reload the page and try again.", { duration: 10_000 });
+        return;
+      }
       setMatch(r);
       setPin("");
       setStep("pin");
@@ -186,7 +200,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
       setConfirmPin("");
       setShowIdEntry(false);
       setInput("");
-      // Warm the camera up while the person types their PIN.
+      // Warm the camera up while the person reads the card (or types their PIN).
       startCamera();
     });
   }
@@ -197,13 +211,13 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
     selectByEmployeeId(trimmed);
   }
 
-  async function runAction(m: LookupMatch, action: KioskActionName, pinValue: string) {
+  async function runAction(m: LookupMatch, action: KioskActionName, pinValue?: string) {
     // Best-effort photo for clock in/out only; null never blocks the punch.
     const photo =
       action === "CLOCK_IN" || action === "CLOCK_OUT"
         ? ((await camera.capture()) ?? undefined)
         : undefined;
-    const res = await kioskAction({ slug, employeeId: m.employeeId, pin: pinValue, action, photo });
+    const res = await kioskAction({ slug, employeeId: m.employeeId, pin: requirePin ? pinValue : undefined, action, photo });
     if (!toastAction(res)) {
       setPin("");
       return false;
@@ -228,6 +242,12 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
 
   function act(action: KioskActionName) {
     if (!match) return;
+    if (!requirePin) {
+      startTransition(async () => {
+        await runAction(match, action);
+      });
+      return;
+    }
     if (!/^\d{4,6}$/.test(pin)) {
       toast.error("Enter your 4-6 digit PIN");
       return;
@@ -619,7 +639,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                           <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
                         </Button>
                       </form>
-                    ) : !match.hasPin ? (
+                    ) : !requirePin ? null : !match.hasPin ? (
                       <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-center text-xs text-destructive">
                         No kiosk PIN set for this account. Ask an admin to reset your PIN.
                       </p>
@@ -653,7 +673,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                           size="lg"
                           variant="success"
                           className="col-span-2 h-12 text-sm"
-                          disabled={pending || !match.hasPin || pin.length < 4}
+                          disabled={pending || (requirePin && (!match.hasPin || pin.length < 4))}
                           onClick={() => act("CLOCK_IN")}
                         >
                           <Play className="mr-2 h-4 w-4" /> Clock in
@@ -665,7 +685,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                             size="lg"
                             variant="warning"
                             className="h-12 text-sm"
-                            disabled={pending || !match.hasPin || pin.length < 4}
+                            disabled={pending || (requirePin && (!match.hasPin || pin.length < 4))}
                             onClick={() => act("START_BREAK")}
                           >
                             <Pause className="mr-2 h-4 w-4" /> Break
@@ -674,7 +694,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                             size="lg"
                             variant="destructive"
                             className="h-12 text-sm"
-                            disabled={pending || !match.hasPin || pin.length < 4}
+                            disabled={pending || (requirePin && (!match.hasPin || pin.length < 4))}
                             onClick={() => act("CLOCK_OUT")}
                           >
                             <Square className="mr-2 h-4 w-4" /> Clock out
@@ -686,7 +706,7 @@ export function KioskScreen({ slug, label }: { slug: string; label: string }) {
                           size="lg"
                           variant="success"
                           className="col-span-2 h-12 text-sm"
-                          disabled={pending || !match.hasPin || pin.length < 4}
+                          disabled={pending || (requirePin && (!match.hasPin || pin.length < 4))}
                           onClick={() => act("END_BREAK")}
                         >
                           <Coffee className="mr-2 h-4 w-4" /> End break
