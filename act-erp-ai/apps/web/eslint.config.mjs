@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "node_modules/**",
+    "public/pdf.worker.min.mjs", // copied in by postinstall (gitignored)
     "src/components/ui/**", // shadcn-generated; lint rules differ
     "src/hooks/use-mobile.tsx", // shadcn-generated
     "src/hooks/use-toast.ts", // shadcn-generated
