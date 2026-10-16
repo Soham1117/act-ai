@@ -11,6 +11,7 @@ async function adminPage(browser: Browser, ip?: string): Promise<Page> {
   });
   const page = await context.newPage();
   await page.goto("/admin/kiosks");
+  await page.waitForLoadState("networkidle"); // let the page hydrate before clicking
   return page;
 }
 
@@ -60,8 +61,10 @@ test.describe("admin: create, revoke and delete kiosks", () => {
   test("an unusable slug is cleaned up or refused; spaces-only label is refused", async ({ browser }) => {
     const page = await adminPage(browser);
     let dialog = await create(page, "Odd One", "!!!");
-    await dialog.getByRole("button", { name: /create kiosk/i }).click();
-    await expect(toast(page, /slug is required/i)).toBeVisible();
+    // Leaving the field cleans it to nothing, so Create stays off.
+    await dialog.getByPlaceholder("Fort Worth").blur().catch(() => undefined);
+    await dialog.getByPlaceholder("fort-worth").blur();
+    await expect(dialog.getByRole("button", { name: /create kiosk/i })).toBeDisabled();
     await dialog.getByPlaceholder("fort-worth").fill("K6a Bad Slug!");
     await dialog.getByRole("button", { name: /create kiosk/i }).click();
     await expect(toast(page, /kiosk created/i)).toBeVisible();
@@ -192,6 +195,9 @@ test.describe("admin: trusted networks", () => {
     await expect(toast(page, /trusted 172\.20\.5\.0\/24/i)).toBeVisible();
     await add(page, "198.51.100.7", "Dock 2");
     await expect(toast(page, /trusted 198\.51\.100\.7\/32/i).first()).toBeVisible();
+    await expect
+      .poll(async () => (await db.kioskTrustedNetwork.findFirst({ where: { cidr: "198.51.100.7/32" } }))?.label)
+      .toBe("Dock 2");
     const rows = await db.kioskTrustedNetwork.findMany({ orderBy: { cidr: "asc" } });
     expect(rows.map((r) => r.cidr).sort()).toEqual(["172.20.5.0/24", "198.51.100.7/32"]);
     expect(rows.find((r) => r.cidr === "198.51.100.7/32")!.label).toBe("Dock 2");

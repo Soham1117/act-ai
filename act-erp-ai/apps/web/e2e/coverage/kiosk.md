@@ -40,3 +40,11 @@ Specs: `kiosk-pin-flow`, `kiosk-pin-forced`, `kiosk-pin-lockout`, `kiosk-camera`
 | `/kiosk/[slug]` | cookie, no cookie, 404, other kiosk | covered | kiosk-session, kiosk-employee |
 | `/admin/kiosks` | states, create, revoke, delete, networks | covered | kiosk-admin |
 | `/api/punch-photo` | admin 200 image/jpeg, anonymous redirect, 400, 404 | covered | kiosk-camera |
+| `setKioskRequirePin` | OFF asks confirmation (cancel keeps), confirm saves + audit, ON saves at once, kiosk page follows after reload | covered | kiosk-nopin "admin: Require PIN switch" |
+| `setKioskRequirePin` | server failure, kiosk deleted meanwhile | covered | kiosk-nopin |
+| `setKioskRequirePin` | employee session and anonymous caller refused | covered | kiosk-nopin "employees and anonymous callers" |
+| `kioskAction` | no-PIN kiosk: no PIN field, punches work, photos stored, forged client PIN ignored, 60/min limit, inactive refused | covered | kiosk-nopin |
+| `kioskAction` | PIN turned on while a card is open: reload message | covered | kiosk-nopin |
+| `kioskLookup` | PIN setting changed since page load: reload message | covered | kiosk-nopin |
+| `kioskChangePin` | "PINs are not used at this kiosk." | covered | kiosk-nopin |
+
