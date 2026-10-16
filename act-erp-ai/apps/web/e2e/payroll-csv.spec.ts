@@ -2,9 +2,13 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { db } from "./support/db";
 import { expectNoCrash, failServerActions, toast } from "./support/helpers";
+import { ensurePayrollReady } from "./support/payroll-ready";
 import { ADMIN_STATE, EMPLOYEE, PAYROLL_BLOCKED_TITLE, PAYROLL_PERIOD_TITLE } from "./support/test-data";
 
 test.use({ storageState: ADMIN_STATE });
+
+// Other specs add and remove people and hours; start from an export-ready period.
+test.beforeEach(ensurePayrollReady);
 
 async function openPeriod(page: import("@playwright/test").Page, title = PAYROLL_PERIOD_TITLE) {
   await page.goto("/admin/payroll");
