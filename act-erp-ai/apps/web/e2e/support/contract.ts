@@ -144,12 +144,13 @@ type Captured = { url: string; headers: Record<string, string>; body: string };
  * Record server-action requests (without changing them) so a test can replay
  * them straight at the server, e.g. concurrently.
  */
-export async function captureActions(page: Page) {
+export async function captureActions(page: Page, opts: { block?: boolean } = {}) {
   const seen: Captured[] = [];
   await page.route("**/*", async (route) => {
     if (isServerAction(route)) {
       const r = route.request();
       seen.push({ url: r.url(), headers: r.headers(), body: r.postData() ?? "" });
+      if (opts.block) return route.abort("failed"); // capture only: the server never sees it
     }
     return route.continue();
   });
