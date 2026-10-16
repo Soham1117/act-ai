@@ -15,10 +15,10 @@
 | `createSchedulesBulk` | >1500 shifts, >366 dates, inactive/deleted employee, job code, leave warning | covered | schedules-create.spec.ts |
 | `createSchedulesBulk` | >200 employees | not-testable | fewer than 200 employees can be picked in the seed |
 | `createSchedulesBulk` | server failure, double click | covered | schedules-create.spec.ts |
-| `updateSchedule` | edit date/time/code/notes, delete, overlap, legacy codes, terminated employee, failures | planned | schedules-edit.spec.ts not written yet (cut off by spend limit) |
-| `deleteSchedule` | confirm dialog, already deleted, failure, double click | planned | same |
-| `getScheduleEvents` | month navigation, correct local times, department/employee filter | planned | schedules-calendar.spec.ts not written yet |
-| `getMyScheduleEvents` | Central times, DST, only own shifts, details popup | planned | my-schedule.spec.ts not written yet (seed has the shifts) |
+| `updateSchedule` | edit date/time/code/notes, delete, overlap, legacy codes, terminated employee, failures | covered | schedules-edit.spec.ts |
+| `deleteSchedule` | confirm dialog, already deleted, failure, double click | covered | schedules-edit.spec.ts "admin deletes a shift" |
+| `getScheduleEvents` | month navigation, correct local times, department/employee filter | covered | schedules-edit.spec.ts "admin calendar" |
+| `getMyScheduleEvents` | Central times, DST, only own shifts, details popup | covered | my-schedule.spec.ts (spring-forward gap is test.fixme) |
 | ScheduleTemplate model | no UI or action exists | not-testable | feature not built |
 | `/dashboard/team` | does not show schedules | not-testable | no schedule content |
-| Routes | `/admin/schedules`, `/dashboard/schedule` | partly covered | schedules*.spec.ts |
+| Routes | `/admin/schedules`, `/dashboard/schedule` | covered | schedules*.spec.ts |
