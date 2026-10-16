@@ -1,5 +1,5 @@
-"use client";
-
+// No "use client": the page (a server component) calls notificationPage() and
+// notificationPageCount() below, which is not allowed on client-module exports.
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
