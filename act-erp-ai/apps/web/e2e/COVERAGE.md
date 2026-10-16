@@ -29,3 +29,4 @@ AI features are switched off in the test setup (`AI_ENABLED=false`), so they are
 | `api/v1/identity/jwks`, `api/v1/identity/[operation]` | customer portal identity adapter | not-testable | needs HMAC and private-key config that is not part of the test environment |
 | `api/auth/[...nextauth]` | NextAuth handler | covered | `login.spec.ts` (sign-in) and `access-*` (sessions) |
 | `api/health` | health check | covered | used as the web server readiness probe in `playwright.config.ts` |
+| `api/version` | deployed build version (used by the kiosk to detect a stale page) | covered | `kiosk-session.spec.ts`, `smoke.spec.ts` (route reachable); logic in `src/lib/kiosk-version.test.ts` |
