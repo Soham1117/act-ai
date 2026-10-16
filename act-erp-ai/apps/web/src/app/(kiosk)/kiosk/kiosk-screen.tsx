@@ -32,6 +32,7 @@ import {
 import { BUSINESS_TIME_ZONE, getAvatarUrl } from "@/lib/format";
 import { toast } from "sonner";
 import { toastAction } from "@/lib/toast-action";
+import { setKioskBusy } from "@/lib/kiosk-version";
 import type { ActionOk } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
 import { ContractCrewPanel, KioskModeSwitch } from "./contract-crew-panel";
@@ -104,6 +105,13 @@ export function KioskScreen({
   const newPinRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const camera = usePunchCamera();
+
+  // Tell the version watcher not to reload mid-punch.
+  const busy = !!match || pending;
+  useEffect(() => {
+    setKioskBusy("screen", busy);
+    return () => setKioskBusy("screen", false);
+  }, [busy]);
   const { start: startCamera, stop: stopCamera } = camera;
 
   const loadRoster = useCallback(async () => {

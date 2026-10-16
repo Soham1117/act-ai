@@ -1,7 +1,19 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
+// One id per build, shared by the client bundle (NEXT_PUBLIC_BUILD_ID, inlined
+// below) and the /api/version route. Next loads this file in more than one
+// process during `next build`, so the id is stored in process.env on first load;
+// child workers inherit it. Dev uses a constant.
+const isDev = process.env.NODE_ENV !== "production";
+process.env.ACT_BUILD_ID ??= isDev
+  ? "dev"
+  : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+const buildId = process.env.ACT_BUILD_ID;
+
 const nextConfig: NextConfig = {
+  generateBuildId: async () => buildId,
+  env: { NEXT_PUBLIC_BUILD_ID: buildId },
   reactStrictMode: true,
   // Standalone server bundle for the Docker image (infra/Dockerfile.web).
   output: "standalone",
