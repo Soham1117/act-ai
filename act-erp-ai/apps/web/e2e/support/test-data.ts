@@ -1,5 +1,5 @@
 /** Fixed identifiers created by e2e/seed.ts. Specs import these, never hard-code. */
-export const E2E_PORT = 3100;
+export const E2E_PORT = Number(process.env.E2E_PORT ?? 3100);
 export const BASE_URL = `http://localhost:${E2E_PORT}`;
 
 export const IP_INSIDE = "10.99.1.5"; // inside KIOSK_ALLOWED_NETWORKS

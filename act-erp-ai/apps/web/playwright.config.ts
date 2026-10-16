@@ -2,9 +2,13 @@ import { defineConfig, devices } from "@playwright/test";
 
 // Load the fake test environment (never real credentials). Values already in
 // the shell win, so CI or a developer can override any of them.
+// Port and database can be overridden so several runs can live side by side
+// (e.g. E2E_PORT=3101 DATABASE_URL=postgresql://act:act@localhost:5433/act_e2e_2).
+const PORT = Number(process.env.E2E_PORT ?? 3100);
+process.env.E2E_PORT = String(PORT);
+process.env.AWS_ENDPOINT_URL = `http://127.0.0.1:${PORT + 1000}`; // fake S3
+process.env.NEXT_PUBLIC_SITE_URL = `http://localhost:${PORT}`;
 process.loadEnvFile(".env.e2e");
-
-const PORT = 3100;
 const BASE_URL = `http://localhost:${PORT}`;
 const isCI = !!process.env.CI;
 

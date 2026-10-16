@@ -8,21 +8,62 @@ export function isServerAction(route: Route) {
 }
 
 /**
- * Make every server action fail the way a dropped connection (`abort`) or a
- * crashing server (`500`) would. Returns how many calls were intercepted.
+ * Make server actions fail. Modes:
+ *  - "abort": connection dropped (fetch throws)
+ *  - "500":   server crashed
+ *  - "stale": page is from an older deployment ("Failed to find Server Action")
+ * Options: `times` fails only the first N calls then lets the rest through (for
+ * retry tests); `match` limits it to calls whose request body includes the text.
+ * Returns how many calls were intercepted.
  */
 export async function failServerActions(
   page: Page,
-  mode: "abort" | "500" = "abort",
+  mode: "abort" | "500" | "stale" = "abort",
+  opts: { times?: number; match?: string | RegExp } = {},
 ): Promise<{ count: () => number }> {
   let n = 0;
   await page.route("**/*", async (route) => {
     if (!isServerAction(route)) return route.continue();
+    const body = route.request().postData() ?? "";
+    const matches =
+      !opts.match || (typeof opts.match === "string" ? body.includes(opts.match) : opts.match.test(body));
+    if (!matches || (opts.times !== undefined && n >= opts.times)) return route.continue();
     n += 1;
     if (mode === "abort") return route.abort("failed");
+    if (mode === "stale") {
+      return route.fulfill({
+        status: 404,
+        contentType: "text/plain",
+        headers: { "x-nextjs-action-not-found": "1" },
+        body: "Server action not found.",
+      });
+    }
     return route.fulfill({ status: 500, contentType: "text/plain", body: "Internal Server Error" });
   });
   return { count: () => n };
+}
+
+/**
+ * Slow every server action down (and count them) so a test can double-click
+ * or double-submit while the first call is still in flight.
+ */
+export async function delayServerActions(page: Page, ms = 1500): Promise<{ count: () => number }> {
+  let n = 0;
+  await page.route("**/*", async (route) => {
+    if (!isServerAction(route)) return route.continue();
+    n += 1;
+    await new Promise((r) => setTimeout(r, ms));
+    return route.continue();
+  });
+  return { count: () => n };
+}
+
+/** Collects browser console errors and uncaught page errors (for smoke tests). */
+export function collectConsoleErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on("pageerror", (e) => errors.push(String(e)));
+  return errors;
 }
 
 /** The app must never fall back to Next's error screen or a blank page. */

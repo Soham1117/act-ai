@@ -4,6 +4,9 @@
  * table first, so it REFUSES to run unless the database name contains "e2e".
  */
 import { createHash } from "node:crypto";
+import { existsSync, readdirSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { businessDateOnly } from "../src/lib/format";
@@ -88,6 +91,18 @@ async function makeEmployee(opts: {
     },
   });
 }
+
+export type SeedContext = {
+  db: PrismaClient;
+  hash: (v: string) => Promise<string>;
+  daysAgo: (n: number) => Date;
+  at: (date: Date, hourUtc: number, minute?: number) => Date;
+  makeEmployee: typeof makeEmployee;
+  admin: { id: string; email: string | null };
+  erin: { id: string };
+  pia: { id: string };
+  agency: { id: string };
+};
 
 async function main() {
   await wipe();
@@ -243,6 +258,17 @@ async function main() {
       createdById: admin.id,
     },
   });
+
+  // Area-specific extra data: every e2e/seed-parts/*.ts (sorted) default-exports
+  // `async (ctx: SeedContext) => void`. Keeps each spec area's data in its own file.
+  const ctx: SeedContext = { db, hash, daysAgo, at, makeEmployee, admin, erin, pia, agency };
+  const partsDir = path.resolve(__dirname, "seed-parts");
+  if (existsSync(partsDir)) {
+    for (const f of readdirSync(partsDir).filter((n) => n.endsWith(".ts")).sort()) {
+      const mod = await import(pathToFileURL(path.join(partsDir, f)).href);
+      await mod.default(ctx);
+    }
+  }
 
   console.log(`E2E seed done in "${dbName}".`);
 }

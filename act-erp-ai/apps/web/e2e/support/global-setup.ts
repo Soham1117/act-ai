@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { chromium } from "@playwright/test";
-import { ADMIN_STATE, BASE_URL, env } from "./test-data";
+import { startFakeS3 } from "./fake-s3";
+import { ADMIN_STATE, BASE_URL, E2E_PORT, env } from "./test-data";
 
 /**
  * Runs once before all tests (the web server is already up):
@@ -8,6 +9,10 @@ import { ADMIN_STATE, BASE_URL, env } from "./test-data";
  * 2. Sign in as the admin once and save the session for admin specs.
  */
 export default async function globalSetup() {
+  // In-memory S3 for upload/download flows. Closed when the runner exits.
+  const s3 = await startFakeS3(E2E_PORT + 1000);
+  s3.unref();
+
   try {
     execSync("pnpm e2e:db", { stdio: "pipe" });
   } catch (err) {

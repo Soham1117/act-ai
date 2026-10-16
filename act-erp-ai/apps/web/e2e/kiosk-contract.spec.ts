@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { db } from "./support/db";
 import { expectNoCrash, failServerActions, openKiosk, toast } from "./support/helpers";
+import { fakeS3Keys } from "./support/fake-s3";
 import { CONTRACT_WORKER, JOB_CODE, KIOSK_CREW_SLUG } from "./support/test-data";
 
 async function openCrew(browser: import("@playwright/test").Browser) {
@@ -36,6 +37,9 @@ test.describe("kiosk: contract crew clock in/out", () => {
     const [open] = await entries();
     expect(open?.status).toBe("ACTIVE");
     expect(open?.jobCode).toBe(JOB_CODE.code);
+    // The photo reached storage and is recorded on the entry.
+    await expect.poll(async () => (await entries())[0]?.clockInPhotoKey).toBeTruthy();
+    expect((await fakeS3Keys()).some((k) => k.includes("kiosk-photos"))).toBe(true);
 
     // Clock out (still no break buttons while on shift)
     await pickWorker(page);
