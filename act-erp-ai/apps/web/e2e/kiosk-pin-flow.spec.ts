@@ -290,11 +290,11 @@ test.describe("kiosk PIN flow: search and ID entry", () => {
     await enterId(page, "6021");
     await expect(page.getByText(EMP.search.name)).toBeVisible();
     await cancelBtn(page).click();
-    // "1" is padded to 0001 and finds the base employee Erin.
+    // "630" is padded to 0630 and finds the one employee with that ending.
     await page.getByRole("button", { name: /enter id/i }).click();
-    await page.getByPlaceholder("Full ID or last digits").fill("1");
+    await page.getByPlaceholder("Full ID or last digits").fill("630");
     await page.getByRole("button", { name: /^continue$/i }).click();
-    await expect(page.getByText("EMP-2026-0001")).toBeVisible();
+    await expect(page.getByText(EMP.padded.employeeId)).toBeVisible();
     await page.context().close();
   });
 
@@ -321,7 +321,7 @@ test.describe("kiosk PIN flow: search and ID entry", () => {
     browser,
   }) => {
     const page = await openK(browser, "flow-ids");
-    await enterId(page, "2"); // Ivan (terminated) is the only match
+    await enterId(page, "777"); // the only match is a departed person
     await expect(toast(page, /isn.t active for kiosk use/i)).toBeVisible();
     await enterId(page, "9999");
     await expect(toast(page, /unknown employee id/i)).toBeVisible();

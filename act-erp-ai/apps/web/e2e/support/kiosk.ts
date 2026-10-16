@@ -54,6 +54,8 @@ export const EMP = {
   twinA: { employeeId: "EMP-2026-6101", name: "Twin Alpha" },
   twinB: { employeeId: "EMP-2027-6101", name: "Twin Beta" },
   twinActive: { employeeId: "EMP-2026-6103", name: "Twin Current" },
+  padded: { employeeId: "EMP-2026-0630", name: "Padded Person" },
+  soloGone: { employeeId: "EMP-2019-0777", name: "Solo Departed", status: "TERMINATED" },
   twinGone: { employeeId: "EMP-2020-6103", name: "Twin Departed", status: "TERMINATED" },
 } satisfies Record<string, Emp>;
 /** Five more people for the per-kiosk IP lockout (20 failures / 5 min). */
