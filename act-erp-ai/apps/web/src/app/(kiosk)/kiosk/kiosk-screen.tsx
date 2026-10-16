@@ -60,6 +60,11 @@ const IDLE_CANCEL_MS = 30_000;
 
 type ViewMode = "grid" | "list";
 
+/** A dropped connection or an old page: say so, keep the kiosk usable. */
+function connectionProblem() {
+  toast.error("Could not reach the server. Check the connection and try again.");
+}
+
 function statusLabel(status: KioskRosterEmployee["status"]) {
   if (status === "ACTIVE") return "On shift";
   if (status === "ON_BREAK") return "On break";
@@ -107,13 +112,18 @@ export function KioskScreen({
   const { start: startCamera, stop: stopCamera } = camera;
 
   const loadRoster = useCallback(async () => {
-    const res = await kioskListEmployees(slug);
-    if (!res.ok) {
-      toastAction(res);
-      setRosterLoading(false);
-      return;
+    try {
+      const res = await kioskListEmployees(slug);
+      if (!res.ok) {
+        toastAction(res);
+        setRosterLoading(false);
+        return;
+      }
+      setRoster(res.employees);
+    } catch {
+      // A dropped connection must not blank the kiosk; keep the last roster.
+      connectionProblem();
     }
-    setRoster(res.employees);
     setRosterLoading(false);
   }, [slug]);
 
@@ -185,7 +195,13 @@ export function KioskScreen({
 
   function selectByEmployeeId(employeeId: string) {
     startTransition(async () => {
-      const r = await kioskLookup(slug, employeeId);
+      let r: Awaited<ReturnType<typeof kioskLookup>>;
+      try {
+        r = await kioskLookup(slug, employeeId);
+      } catch {
+        connectionProblem();
+        return;
+      }
       if (!toastAction(r)) return;
       if (r.requirePin !== requirePin) {
         // The kiosk PIN setting changed since this page loaded; trust the server.
@@ -217,7 +233,21 @@ export function KioskScreen({
       action === "CLOCK_IN" || action === "CLOCK_OUT"
         ? ((await camera.capture()) ?? undefined)
         : undefined;
-    const res = await kioskAction({ slug, employeeId: m.employeeId, pin: requirePin ? pinValue : undefined, action, photo });
+    let res: Awaited<ReturnType<typeof kioskAction>>;
+    try {
+      res = await kioskAction({
+        slug,
+        employeeId: m.employeeId,
+        pin: requirePin ? pinValue : undefined,
+        action,
+        photo,
+      });
+    } catch {
+      // Connection dropped: keep the card open so the person can try again.
+      connectionProblem();
+      setPin("");
+      return false;
+    }
     if (!toastAction(res)) {
       setPin("");
       return false;
@@ -277,12 +307,18 @@ export function KioskScreen({
       return;
     }
     startTransition(async () => {
-      const changed = await kioskChangePin({
-        slug,
-        employeeId: match.employeeId,
-        currentPin: pin,
-        newPin,
-      });
+      let changed: Awaited<ReturnType<typeof kioskChangePin>>;
+      try {
+        changed = await kioskChangePin({
+          slug,
+          employeeId: match.employeeId,
+          currentPin: pin,
+          newPin,
+        });
+      } catch {
+        connectionProblem();
+        return;
+      }
       if (!toastAction(changed)) {
         // A wrong temporary PIN sends them back to re-enter it; a weak PIN stays here.
         if (/incorrect pin|too many/i.test(changed.error)) {
@@ -292,7 +328,11 @@ export function KioskScreen({
         return;
       }
       toast.success("PIN updated. Use your new PIN from now on.");
-      await runAction(match, pendingAction, newPin);
+      // The PIN is saved. If the punch below fails, the card must not ask for the
+      // temporary PIN again.
+      setMatch({ ...match, mustChangePin: false });
+      setStep("pin");
+      await runAction({ ...match, mustChangePin: false }, pendingAction, newPin);
     });
   }
 
