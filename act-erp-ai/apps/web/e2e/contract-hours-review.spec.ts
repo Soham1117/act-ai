@@ -328,7 +328,7 @@ test.describe("admin hours: bulk approve and reject", () => {
 
   test("the same bulk request sent twice at once approves each entry once", async ({ page }) => {
     const { agency, workers } = await setup({ workers: 2 });
-    const entries = [];
+    const entries: Awaited<ReturnType<typeof makeEntry>>[] = [];
     for (const w of workers) entries.push(await makeEntry(w.id));
     const seen = await captureActions(page);
     await openHours(page, agency.id);

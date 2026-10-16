@@ -24,7 +24,6 @@ test.use({ storageState: ADMIN_STATE });
 const row = (page: Page, name: string) => page.getByRole("row").filter({ hasText: name });
 const workerCount = () => db.contractWorker.count();
 const byName = (name: string) => db.contractWorker.findFirst({ where: { name } });
-const ymdDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 
 async function openWorkers(page: Page, q = "") {
   await page.goto(workersUrl(q));

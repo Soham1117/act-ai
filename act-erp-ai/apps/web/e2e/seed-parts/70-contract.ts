@@ -11,7 +11,7 @@ import {
 } from "../support/contract-data";
 
 /** Contract-worker area: own agencies, job codes, workers and kiosks. */
-export default async function (ctx: SeedContext) {
+export default async function seedContract(ctx: SeedContext) {
   const { db, admin, daysAgo } = ctx;
 
   const alpha = await db.staffingAgency.create({ data: { name: CW_AGENCY.alpha } });
