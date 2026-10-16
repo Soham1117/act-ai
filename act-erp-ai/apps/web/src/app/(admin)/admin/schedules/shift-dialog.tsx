@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   CalendarIcon,
   Check,
@@ -30,6 +31,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -149,7 +157,17 @@ function ShiftForm({
   const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [startTime, setStartTime] = useState(() => edit?.startTime ?? "08:00");
   const [endTime, setEndTime] = useState(() => edit?.endTime ?? "17:00");
-  const [jobCode, setJobCode] = useState(() => edit?.jobCode ?? "ACT001");
+  // Only real, active codes can be picked. An edited shift may still carry a
+  // code that was since deactivated or deleted; keep it so the edit can save.
+  const [jobCode, setJobCode] = useState(() => edit?.jobCode ?? jobCodes[0]?.code ?? "");
+  const editJobCode = edit?.jobCode;
+  const jobCodeOptions = useMemo(
+    () =>
+      editJobCode && !jobCodes.some((j) => j.code === editJobCode)
+        ? [...jobCodes, { code: editJobCode, title: "inactive or deleted" }]
+        : jobCodes,
+    [jobCodes, editJobCode],
+  );
   const [notes, setNotes] = useState(() => edit?.notes ?? "");
   const [search, setSearch] = useState("");
 
@@ -535,19 +553,29 @@ function ShiftForm({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs">Job code</Label>
-            <Input
-              value={jobCode}
-              list="shift-job-codes"
-              onChange={(e) => setJobCode(e.target.value.toUpperCase())}
-              className="font-mono"
-            />
-            <datalist id="shift-job-codes">
-              {jobCodes.map((j) => (
-                <option key={j.code} value={j.code}>
-                  {j.title}
-                </option>
-              ))}
-            </datalist>
+            {jobCodeOptions.length > 0 ? (
+              <Select value={jobCode} onValueChange={setJobCode}>
+                <SelectTrigger className="font-mono">
+                  <SelectValue placeholder="Pick a job code" />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobCodeOptions.map((j) => (
+                    <SelectItem key={j.code} value={j.code}>
+                      <span className="font-mono">{j.code}</span>
+                      <span className="ml-2 text-muted-foreground">{j.title}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No active job codes. Add one in{" "}
+                <Link href="/admin/job-codes" className="underline">
+                  Job codes
+                </Link>{" "}
+                first.
+              </p>
+            )}
           </div>
         </div>
         <div className="space-y-1.5">
@@ -582,6 +610,7 @@ function ShiftForm({
               type="submit"
               disabled={
                 pending ||
+                !jobCode ||
                 (!isEdit && selected.length === 0) ||
                 (!isEdit && mode === "range" && expandedDates.length === 0)
               }

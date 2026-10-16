@@ -60,7 +60,8 @@ export default async function SchedulesPage() {
     safe(
       db.jobCode.findMany({
         where: { isActive: true },
-        orderBy: { code: "asc" },
+        // Default code first: the shift dialog preselects the first entry.
+        orderBy: [{ isDefault: "desc" }, { code: "asc" }],
         select: { code: true, title: true },
       }),
       [],
