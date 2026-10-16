@@ -26,7 +26,7 @@ export const SS = {
 } as const;
 
 export const SS_DEPARTMENT = "E2E Self-Service Dept"; // only Nina belongs to it
-export const SS_EMPTY_DEPARTMENT = "E2E Empty Dept"; // nobody belongs to it
+export const SS_EMPTY_DEPARTMENT = "E2E SS Empty Dept"; // nobody belongs to it
 export const SS_PLAN_MEDICAL = "E2E Medical PPO"; // seeded, tiers EMPLOYEE_ONLY + FAMILY
 export const SS_PLAN_DENTAL = "E2E Dental Basic"; // seeded, tier EMPLOYEE_ONLY only
 export const SS_PLAN_401K = "E2E 401k Plan"; // seeded retirement plan
