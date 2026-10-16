@@ -168,7 +168,11 @@ test.describe("admin: terminate and reactivate", () => {
   });
 });
 
-async function tick(page: Page, name: string) {
+/** Tick one row. Searches first so the row is on screen whatever else is seeded (pagination); the
+ * search clears the selection, so to tick several rows pass search: null for the later ones. */
+async function tick(page: Page, name: string, opts: { search?: string | null } = {}) {
+  const term = opts.search === undefined ? name : opts.search;
+  if (term) await page.getByPlaceholder(/search name/i).fill(term);
   await page.getByRole("row").filter({ hasText: name }).getByRole("checkbox").click();
 }
 
@@ -185,8 +189,8 @@ test.describe("admin: bulk actions", () => {
 
   test("bulk terminate two employees; they are removed from the active list", async ({ page }) => {
     await page.goto("/admin/employees");
-    await tick(page, PEOPLE.bulkA.name);
-    await tick(page, PEOPLE.bulkB.name);
+    await tick(page, PEOPLE.bulkA.name, { search: "Bulk" });
+    await tick(page, PEOPLE.bulkB.name, { search: null });
     await page.getByRole("button", { name: /^terminate 2$/i }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByPlaceholder(/resigned/i).fill("Season ended");
@@ -274,6 +278,7 @@ test.describe("admin: bulk actions", () => {
     await db.user.update({ where: { id: rory.userId }, data: { role: "ADMIN" } });
     try {
       await page.goto("/admin/employees");
+      await page.getByPlaceholder(/search name/i).fill(PEOPLE.rory.name);
       await expect(page.getByRole("row").filter({ hasText: PEOPLE.rory.name }).getByRole("checkbox")).toBeDisabled();
     } finally {
       await db.user.update({ where: { id: rory.userId }, data: { role: "EMPLOYEE" } });
