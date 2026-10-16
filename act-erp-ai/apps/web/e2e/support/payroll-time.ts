@@ -154,6 +154,42 @@ export function fakePdf(tag: string): Buffer {
   );
 }
 
+/**
+ * A real one-page PDF laid out like the payroll provider's template, so the
+ * app's paystub parser can read the name, SSN last 4, period, pay date and net pay.
+ * Dates are MM/DD/YYYY. `tag` makes the bytes (and sha256) unique.
+ */
+export function paystubPdf(o: { name: string; last4: string; start: string; end: string; payDate: string; tag: string }): Buffer {
+  const NL = "\n";
+  const lines = [
+    `${o.name} ***-**-${o.last4}, Hourly`,
+    `Pay Period: ${o.start} - ${o.end}`,
+    `Pay Date: ${o.payDate}`,
+    `Check number: ${o.tag}`,
+    `Net Pay 1,234.56`,
+  ];
+  const text = lines.map((l) => "(" + l.split("(").join("").split(")").join("") + ") Tj T*").join(" ");
+  const stream = `BT /F1 12 Tf 50 700 Td 14 TL ${text} ET`;
+  const objs = [
+    "<</Type/Catalog/Pages 2 0 R>>",
+    "<</Type/Pages/Kids[3 0 R]/Count 1>>",
+    "<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>",
+    `<</Length ${stream.length}>>${NL}stream${NL}${stream}${NL}endstream`,
+    "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+  ];
+  let out = `%PDF-1.4${NL}`;
+  const offsets: number[] = [];
+  objs.forEach((body, i) => {
+    offsets.push(out.length);
+    out += `${i + 1} 0 obj${NL}${body}${NL}endobj${NL}`;
+  });
+  const xref = out.length;
+  out += `xref${NL}0 ${objs.length + 1}${NL}0000000000 65535 f ${NL}`;
+  for (const off of offsets) out += `${String(off).padStart(10, "0")} 00000 n ${NL}`;
+  out += `trailer<</Size ${objs.length + 1}/Root 1 0 R>>${NL}startxref${NL}${xref}${NL}%%EOF${NL}`;
+  return Buffer.from(out, "latin1");
+}
+
 /** Put an object in the in-memory fake S3 (key is "<prefix>/<path>"). */
 export async function putFakeS3(key: string, body: Buffer, contentType: string) {
   const res = await fetch(`${process.env.AWS_ENDPOINT_URL}/${process.env.S3_BUCKET}/${key}`, {
