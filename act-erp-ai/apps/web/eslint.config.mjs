@@ -7,6 +7,8 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   prettier,
+  // Playwright fixtures take a callback named `use`, which is not a React hook.
+  { files: ["e2e/**"], rules: { "react-hooks/rules-of-hooks": "off" } },
   globalIgnores([
     ".next/**",
     "out/**",
