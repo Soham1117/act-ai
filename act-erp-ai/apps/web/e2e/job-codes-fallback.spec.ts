@@ -16,11 +16,20 @@ async function punchIn(browser: import("@playwright/test").Browser) {
   return db.timeEntry.findFirstOrThrow({ where: { employeeId: emp.id, status: "ACTIVE" } });
 }
 
+let snapshot: { id: string; isActive: boolean; isDefault: boolean }[] = [];
+test.beforeEach(async () => {
+  snapshot = await db.jobCode.findMany({ select: { id: true, isActive: true, isDefault: true } });
+});
+
 test.afterEach(async () => {
   const emp = await personRow("jcB");
   await db.timeEntry.deleteMany({ where: { employeeId: emp.id, source: "KIOSK" } });
   await db.jobCodeAssignment.deleteMany({ where: { employeeId: emp.id } });
   await restoreJobCodes();
+  // These tests deactivate every code, including other areas'; put each back exactly as it was.
+  for (const c of snapshot) {
+    await db.jobCode.updateMany({ where: { id: c.id }, data: { isActive: c.isActive, isDefault: c.isDefault } });
+  }
 });
 
 test.describe("job codes: what the kiosk stamps on a punch", () => {

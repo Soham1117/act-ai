@@ -11,14 +11,14 @@ export const CUSTOM_PIN = "5827";
 
 type Person = { employeeId: string; name: string; email: string };
 const person = (n: string, name: string): Person => ({
-  employeeId: `PPL-${n}`,
+  employeeId: `PPL-57${n.slice(2)}`, // never ends in 0001..0020: kiosk specs search IDs by last digits
   name,
   email: `${name.split(" ")[0]!.toLowerCase()}@pp.e2e.test`,
 });
 
 export const PEOPLE = {
   edith: person("0001", "Edith Editable"), // inline-edit tests
-  terry: person("0002", "Terry Terminate"), // terminate / reactivate / login effects
+  terry: person("0002", "Teddy Terminate"), // terminate / reactivate / login effects
   bulkA: person("0003", "Bella Bulk"), // bulk terminate
   bulkB: person("0004", "Boris Bulk"), // bulk terminate
   bulkC: person("0005", "Cleo Cleanup"), // terminated, no history: bulk delete
@@ -28,15 +28,15 @@ export const PEOPLE = {
   pico: person("0009", "Pico Picture"), // profile picture upload
   supa: person("0010", "Sven Supervisor"), // supervisor loop tests
   supb: person("0011", "Sara Subordinate"),
-  rory: person("0012", "Rory Roleplay"), // promote / demote admin
-  pend1: person("0013", "Penny Pending"), // approve a pending hire
+  rory: person("0012", "Ronan Roleplay"), // promote / demote admin
+  pend1: person("0013", "Peggy Pending"), // approve a pending hire
   pend2: person("0014", "Percy Pending"), // reject a pending hire
   jcA: person("0015", "Jules Jobcode"), // job code assignment
   jcB: person("0016", "Jade Jobcode"),
   hp1: person("0017", "Hugo Hirepacket"), // hire packet import
   hp2: person("0018", "Hana Hirepacket"),
-  dept: person("0019", "Dana Deptmember"), // member of the staffed department
-  onleave: person("0020", "Olive Onleave"), // ON_LEAVE (not on kiosk roster)
+  dept: person("0019", "Dani Deptmember"), // member of the staffed department
+  onleave: person("0020", "Opal Onleave"), // ON_LEAVE (not on kiosk roster)
 } as const;
 
 export const DEPTS = {

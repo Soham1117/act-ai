@@ -116,7 +116,8 @@ export const NEW_CODE_PREFIX = "PPX";
  */
 export async function restoreJobCodes(purge = true) {
   if (purge) await db.jobCode.deleteMany({ where: { code: { startsWith: NEW_CODE_PREFIX } } });
-  await db.jobCode.updateMany({ data: { isDefault: false } });
+  const mine = ["E2E100", "E2E999", "PPJC1", "PPJC2", "PPJCDEL", "PPJCUSE"];
+  await db.jobCode.updateMany({ where: { code: { in: mine } }, data: { isDefault: false } });
   await db.jobCode.updateMany({
     where: { code: { in: ["E2E100", "PPJC1", "PPJC2", "PPJCDEL", "PPJCUSE"] } },
     data: { isActive: true },

@@ -143,7 +143,8 @@ test.describe("onboarding: admin invites", () => {
   });
 
   test("generate: failure shows the error screen; double click makes one invite", async ({ page }) => {
-    const before = await db.onboardingInvite.count();
+    const beforeIds = (await db.onboardingInvite.findMany({ select: { id: true } })).map((i) => i.id);
+    const before = beforeIds.length;
     let d = await openDialog(page);
     await failServerActions(page, "abort");
     await d.getByRole("button", { name: /generate link/i }).click();
@@ -156,7 +157,7 @@ test.describe("onboarding: admin invites", () => {
     await expect(d.locator("input[readonly]")).toBeVisible();
     expect(calls.count()).toBe(1);
     expect(await db.onboardingInvite.count()).toBe(before + 1);
-    await db.onboardingInvite.deleteMany({ where: { email: null, jobTitle: null, status: "PENDING", completedAt: null, token: { not: { startsWith: "pp-" } } } });
+    await db.onboardingInvite.deleteMany({ where: { id: { notIn: beforeIds } } }); // only the invite this test made
   });
 
   test("revoking an invite makes its link show Expired; revoking twice is refused", async ({ page, browser }) => {
