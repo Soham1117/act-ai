@@ -95,13 +95,18 @@ test.describe("read-only account", () => {
     await expect(page.getByRole("button", { name: "Update password" })).toBeVisible();
   });
 
-  test("notifications can still be read and marked read", async ({ page }) => {
+  test("notifications can still be read; opening the inbox marks them read even for a read-only account", async ({ page }) => {
+    await db.notificationRecipient.deleteMany({ where: { employeeId: roryId } });
     await db.notification.create({
       data: { type: "COMPANY", title: "Rory notice", message: "hello", recipients: { create: [{ employeeId: roryId }] } },
     });
+    expect((await (await page.request.get("/api/notifications/unread")).json()).unread).toBe(1);
     await page.goto("/dashboard/notifications");
-    await page.getByRole("listitem").filter({ hasText: "Rory notice" }).getByRole("button", { name: "Mark as read" }).click();
+    await expect(page.getByRole("listitem").filter({ hasText: "Rory notice" })).toBeVisible(); // still listed
+    // Seeing the inbox clears unread (markAllNotificationsRead is not blocked by read-only access).
     await expect.poll(() => db.notificationRecipient.count({ where: { employeeId: roryId, read: false } })).toBe(0);
+    expect((await db.notificationRecipient.findFirstOrThrow({ where: { employeeId: roryId } })).readAt).not.toBeNull();
+    await expect.poll(async () => (await (await page.request.get("/api/notifications/unread")).json()).unread).toBe(0);
   });
 
   test("benefits page says coverage ended for a terminated employee", async ({ page }) => {
