@@ -184,8 +184,10 @@ Dev-only helper scripts (**never run in production**): `scripts/create-admin.ts`
 
 | Layer | Command | What it covers |
 |---|---|---|
-| Unit (vitest) | `pnpm test` | Pure lib code, plus a guard that fails on hard-coded job codes (like `ACT001`) in `src/app` |
-| End-to-end (Playwright) | `pnpm e2e` | Real browser, real database: login, schedules, kiosk, contract crew, hours approval, time-entry edit, payroll CSV. Each flow has a happy path and an error path |
+| Unit (vitest) | `pnpm test` | Pure lib code, plus two guards: no hard-coded job codes (like `ACT001`) in `src/app`, and every server action and API route has a row in `e2e/COVERAGE.md` or `e2e/coverage/*.md` (add a row, even "planned" or "not-testable" with a reason, when you add one) |
+| End-to-end (Playwright) | `pnpm e2e` | About 1,075 tests in a real browser against a real database: access control, login, employee self-service, people admin, onboarding, payroll, time tracking, schedules, kiosk (PIN and no-PIN), contract workers. Each flow has a happy path, validation and permission paths, and failure injection |
+
+Where to look: `e2e/COVERAGE.md` (index and the matrix), `e2e/coverage/<area>.md` (one row per action and scenario), `e2e/AUTHORING.md` (how to add tests: seed parts, helpers, rules). A test marked `test.fixme` documents a known app bug; the reason is in a comment next to it.
 
 ### Run the E2E tests locally
 
@@ -203,7 +205,7 @@ pnpm exec playwright install chromium
 pnpm e2e
 ```
 
-`pnpm e2e` does everything else for you: it starts the app on port 3100,
+The full suite takes about 25 minutes on the dev server. Run one area with e.g. `pnpm exec playwright test kiosk`. For a second run side by side set `E2E_PORT` and `DATABASE_URL` to another `act_e2e_N` database. `pnpm e2e` does everything else for you: it starts the app on port 3100,
 resets the `act_e2e` database (`prisma db push` + `e2e/seed.ts`), and runs
 `e2e/*.spec.ts`. Useful extras: `pnpm exec playwright test kiosk` (one file),
 `pnpm exec playwright test --ui` (watch mode), `pnpm e2e:report` (HTML report).
@@ -223,7 +225,7 @@ How the tests fake the outside world:
   calls. Tests then check the UI shows a message and nothing was saved.
 - **Camera:** Chromium runs with fake-camera flags (see `playwright.config.ts`),
   so punch photos are taken. Tests check the photo is sent to the server.
-  Photo upload to S3 itself is not tested (no storage in the test setup).
+  Uploads (receipts, documents, punch photos) go to an in-memory fake S3 (`e2e/support/fake-s3.ts`).
 - **Safety:** the seed and the tests refuse to run unless the database name
   contains `e2e`, so they cannot wipe your dev database.
 
@@ -231,8 +233,7 @@ How the tests fake the outside world:
 
 `.github/workflows/ci.yml` (in the repository root) runs on every push and pull
 request to `main`: install, `prisma generate`, typecheck, ESLint, vitest, then
-Playwright against a Postgres service container. On failure the HTML report is
-attached to the run as the `playwright-report` artifact. In CI the app is built
+Playwright. The Playwright step is split in 5 shards, each with its own Postgres service container (about 5 to 10 minutes each). On failure each shard attaches its HTML report as the `playwright-report-shard-N` artifact. In CI the app is built
 and run in production mode. The workflow does not deploy anything.
 
 ## Feature flag: `AI_ENABLED`
