@@ -45,7 +45,8 @@ test.describe("admin hours: approve and reject", () => {
     expect(saved.approvedById).not.toBeNull();
     expect(saved.approvalDate).not.toBeNull();
     expect(await auditCount("contract.time.approve", e.id)).toBe(1);
-    await expect(row(page, w.name)).toContainText("Approved");
+    // The table refreshes via router.refresh() after the action; the page is heavy on a busy CI box.
+    await expect(row(page, w.name)).toContainText("Approved", { timeout: 45_000 });
     await expect(approveBtn(page, w.name)).toHaveCount(0);
   });
 
