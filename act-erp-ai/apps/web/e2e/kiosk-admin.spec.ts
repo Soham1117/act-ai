@@ -208,8 +208,8 @@ test.describe("admin: trusted networks", () => {
     expect(rows.find((r) => r.cidr === "198.51.100.7/32")!.label).toBe("Dock 2");
     await expect.poll(() => auditCount("kiosk.network.add")).toBe(3);
     await page.reload();
-    await expect(page.getByText("198.51.100.7/32")).toBeVisible();
-    await expect(page.getByText("10.99.0.0/16")).toBeVisible(); // server config
+    await expect(page.getByText("198.51.100.7/32").first()).toBeVisible();
+    await expect(page.getByText("10.99.0.0/16").first()).toBeVisible(); // server config
     await page.context().close();
   });
 

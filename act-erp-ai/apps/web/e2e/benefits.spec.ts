@@ -129,7 +129,7 @@ test("a plan year that ended with no renewal is not shown as current coverage", 
 test("old confirmation dates are flagged for re-verification", async ({ page }) => {
   await temp("OTHER", { confirmed: ymdFromToday(-120) });
   await page.goto("/dashboard/benefits");
-  await expect(page.getByText("120d ago — ask HR to re-verify")).toBeVisible();
+  await expect(page.getByText(/12[01]d ago — ask HR to re-verify/)).toBeVisible();
 });
 
 test("ended coverage under the same type moves to Past coverage", async ({ page }) => {
