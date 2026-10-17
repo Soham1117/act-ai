@@ -661,7 +661,7 @@ test.describe("admin: workers - list, filters and detail", () => {
     await page.goto(workersUrl(ag.name.toUpperCase()));
     await expect(row(page, a.name)).toBeVisible();
     await page.goto(workersUrl("zzz-nobody-matches-this"));
-    await expect(page.getByText(/no contract workers match/i).first()).toBeVisible();
+    await expect(page.getByRole("tabpanel", { name: /^Workers/ }).getByText(/no contract workers match/i)).toBeVisible();
   });
 
   test("the filter form applies and resets", async ({ page }) => {
