@@ -650,20 +650,24 @@ test.describe("admin: workers - list, filters and detail", () => {
     await expect(row(page, a.name)).toBeVisible();
     await expect(row(page, b.name)).toHaveCount(0);
 
-    // Search by worker ID and by agency name, case-insensitive.
+  });
+
+  test("search by worker id and agency name is case-insensitive; no match says so", async ({ page }) => {
+    const ag = await makeAgency();
+    const a = await makeWorker({ agencyId: ag.id, name: uniq("Searchable") });
+    const c = await makeWorker({ name: uniq("Elsewhere") });
     await page.goto(workersUrl(c.workerId.toLowerCase()));
     await expect(row(page, c.name)).toBeVisible();
     await page.goto(workersUrl(ag.name.toUpperCase()));
     await expect(row(page, a.name)).toBeVisible();
-
     await page.goto(workersUrl("zzz-nobody-matches-this"));
-    await expect(page.getByText(/no contract workers match/i)).toBeVisible();
+    await expect(page.getByText(/no contract workers match/i).first()).toBeVisible();
   });
 
   test("the filter form applies and resets", async ({ page }) => {
     const w = await makeWorker({ name: uniq("FormFilter") });
     await page.goto("/admin/contract-workers?tab=workers");
-    await page.getByLabel("Search").fill(w.name);
+    await page.getByLabel("Search", { exact: true }).fill(w.name);
     await page.getByRole("button", { name: /^apply$/i }).click();
     await expect(page).toHaveURL(/q=/);
     await expect(row(page, w.name)).toBeVisible();
