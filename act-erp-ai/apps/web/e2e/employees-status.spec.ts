@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import bcrypt from "bcryptjs";
 import { db, businessYmd } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, openKiosk, toast } from "./support/helpers";
 import {
@@ -28,6 +29,76 @@ test.afterAll(async () => {
     select: { id: true },
   });
   await db.user.deleteMany({ where: { id: { in: users.map((u) => u.id) } } });
+});
+
+/** The employees-table search box (exact placeholder: other inputs on the page also say "search"). */
+const searchBox = (page: Page) => page.locator('input[placeholder^="Search name, email, ID"]');
+
+/**
+ * Put one of this file's people back in a known state before every test, creating them if an
+ * earlier attempt (CI retries) deleted them. Keeps every test independent of the others.
+ */
+async function ensure(
+  key: keyof typeof PEOPLE,
+  status: "ACTIVE" | "TERMINATED" | "PENDING_REVIEW",
+  opts: { hours?: boolean } = {},
+) {
+  const p = PEOPLE[key];
+  let emp = await db.employee.findUnique({ where: { employeeId: p.employeeId } });
+  if (!emp) {
+    const user = await db.user.create({
+      data: { email: p.email, name: p.name, role: "EMPLOYEE", passwordHash: await bcrypt.hash(PEOPLE_PASSWORD, 4) },
+    });
+    emp = await db.employee.create({
+      data: {
+        employeeId: p.employeeId,
+        userId: user.id,
+        name: p.name,
+        email: p.email,
+        gender: "OTHER",
+        employmentType: "FULL_PART_TIME",
+        compensationType: "HOURLY_RATE",
+        compensationValue: 25,
+        jobTitle: "Fabricator",
+        kioskPinHash: await bcrypt.hash("3214", 4),
+      },
+    });
+  }
+  await db.employee.update({
+    where: { id: emp.id },
+    data: {
+      employmentStatus: status,
+      terminationDate: status === "TERMINATED" ? new Date() : null,
+      terminationReason: null,
+    },
+  });
+  if (opts.hours && (await db.timeEntry.count({ where: { employeeId: emp.id } })) === 0) {
+    const d = new Date(`${businessYmd(55)}T00:00:00Z`);
+    await db.timeEntry.create({
+      data: {
+        employeeId: emp.id,
+        date: d,
+        clockIn: new Date(d.getTime() + 14 * 3600_000),
+        clockOut: new Date(d.getTime() + 22 * 3600_000),
+        totalWorkMin: 480,
+        status: "APPROVED",
+        jobCode: "E2E100",
+        source: "MANUAL",
+        approvalStatus: "APPROVED",
+        approvalDate: new Date(),
+      },
+    });
+  }
+}
+
+test.beforeEach(async () => {
+  await ensure("terry", "ACTIVE", { hours: true });
+  await ensure("bulkA", "ACTIVE", { hours: true });
+  await ensure("bulkB", "ACTIVE", { hours: true });
+  await ensure("bulkC", "TERMINATED");
+  await ensure("bulkD", "ACTIVE", { hours: true });
+  await ensure("pend1", "PENDING_REVIEW");
+  await ensure("pend2", "PENDING_REVIEW");
 });
 
 const terminateDialog = (page: Page) => page.getByRole("dialog", { name: /terminate employee/i });
@@ -172,7 +243,7 @@ test.describe("admin: terminate and reactivate", () => {
  * search clears the selection, so to tick several rows pass search: null for the later ones. */
 async function tick(page: Page, name: string, opts: { search?: string | null } = {}) {
   const term = opts.search === undefined ? name : opts.search;
-  if (term) await page.getByPlaceholder(/search name/i).fill(term);
+  if (term) await searchBox(page).fill(term);
   await page.getByRole("row").filter({ hasText: name }).getByRole("checkbox").click();
 }
 
@@ -278,7 +349,7 @@ test.describe("admin: bulk actions", () => {
     await db.user.update({ where: { id: rory.userId }, data: { role: "ADMIN" } });
     try {
       await page.goto("/admin/employees");
-      await page.getByPlaceholder(/search name/i).fill(PEOPLE.rory.name);
+      await searchBox(page).fill(PEOPLE.rory.name);
       await expect(page.getByRole("row").filter({ hasText: PEOPLE.rory.name }).getByRole("checkbox")).toBeDisabled();
     } finally {
       await db.user.update({ where: { id: rory.userId }, data: { role: "EMPLOYEE" } });
@@ -288,13 +359,16 @@ test.describe("admin: bulk actions", () => {
 
 test.describe("admin: approve or reject a pending hire", () => {
   test("approving moves the hire to ACTIVE and notifies them; a second approve is refused", async ({ page }) => {
+    const auditsBefore = await db.auditLog.count({
+      where: { action: "employee.approve", resource: `Employee:${(await personRow("pend1")).id}` },
+    });
     await page.goto("/admin/employees");
     const card = page.locator("div").filter({ hasText: PEOPLE.pend1.name }).filter({ has: page.getByRole("button", { name: /approve/i }) }).last();
     await card.getByRole("button", { name: /approve/i }).click();
     await expect(toast(page, `${PEOPLE.pend1.name} approved`)).toBeVisible();
     const e = await personRow("pend1");
     expect(e.employmentStatus).toBe("ACTIVE");
-    expect(await db.auditLog.count({ where: { action: "employee.approve", resource: `Employee:${e.id}` } })).toBe(1);
+    expect(await db.auditLog.count({ where: { action: "employee.approve", resource: `Employee:${e.id}` } })).toBe(auditsBefore + 1);
     expect(await db.notificationRecipient.count({ where: { employeeId: e.id } })).toBeGreaterThan(0);
   });
 
