@@ -336,7 +336,7 @@ model TimeEntry {
   totalBreakMin   Int             @default(0)
   totalWorkMin    Int             @default(0)
   status          TimeEntryStatus @default(ACTIVE)
-  jobCode         String          @default("ACT001")
+  jobCode         String          // always set by the code that creates the entry; no made-up default
   rate            Decimal?        @db.Decimal(10, 2)
   timesheetNotes  String?         @db.Text
   source          TimeEntrySource @default(WEB)
@@ -1524,7 +1524,7 @@ model ContractTimeEntry {
   totalBreakMin    Int                 @default(0)
   totalWorkMin     Int                 @default(0)
   status           TimeEntryStatus     @default(ACTIVE)
-  jobCode          String              @default("ACT001")
+  jobCode          String              // always set on creation; no made-up default
   timesheetNotes   String?             @db.Text
   kioskSlug        String?
   kioskLabel       String?

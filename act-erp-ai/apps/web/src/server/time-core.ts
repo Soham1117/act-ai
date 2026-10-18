@@ -48,8 +48,12 @@ export function revalidateTimePages() {
   revalidatePath("/admin");
 }
 
-/** Resolve the best job code for an employee using the legacy 5-tier resolver. */
-async function resolveJobCode(tx: Tx, employeeId: string): Promise<string> {
+/**
+ * Resolve the best ACTIVE job code for an employee: primary assignment, any
+ * assignment, the employee's primary code, then the company default. Returns
+ * null when none exists; callers must refuse the punch rather than invent a code.
+ */
+async function resolveJobCode(tx: Tx, employeeId: string): Promise<string | null> {
   const primaryAssignment = await tx.jobCodeAssignment.findFirst({
     where: { employeeId, isPrimary: true, jobCode: { isActive: true } },
     include: { jobCode: true },
@@ -71,8 +75,11 @@ async function resolveJobCode(tx: Tx, employeeId: string): Promise<string> {
   const def = await tx.jobCode.findFirst({ where: { isDefault: true, isActive: true } });
   if (def) return def.code;
 
-  return "ACT001";
+  return null;
 }
+
+export const NO_JOB_CODE_MESSAGE =
+  "No active job code is set up, so this punch cannot be recorded. Ask an admin to add or reactivate a job code in Job codes.";
 
 /**
  * Close an open entry at `requestedEnd` (capped at the max shift length).
@@ -173,12 +180,14 @@ export async function _clockIn(
       if (open.some((e) => !isStaleShift(e.clockIn, now))) {
         return { kind: "already" as const };
       }
+      // Resolve the code first: if there is none, change nothing (not even stale shifts).
+      const code = jobCode ?? (await resolveJobCode(tx, employeeId));
+      if (!code) return { kind: "nocode" as const };
       const closedIds: string[] = [];
       for (const stale of open) {
         await closeOpenEntry(tx, stale, now);
         closedIds.push(stale.id);
       }
-      const code = jobCode ?? (await resolveJobCode(tx, employeeId));
       const entry = await tx.timeEntry.create({
         data: {
           employeeId,
@@ -200,6 +209,7 @@ export async function _clockIn(
     if (outcome.kind === "already") {
       return fail("You are already clocked in. Clock out first, or refresh if this looks wrong.");
     }
+    if (outcome.kind === "nocode") return fail(NO_JOB_CODE_MESSAGE);
     await reportAutoClosed(employeeId, outcome.closedIds, "clock_in");
     revalidateTimePages();
     return ok({

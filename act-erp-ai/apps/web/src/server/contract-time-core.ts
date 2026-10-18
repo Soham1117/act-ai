@@ -10,6 +10,7 @@
  * has already authenticated the caller (active kiosk session, or an admin).
  */
 import { revalidatePath } from "next/cache";
+import { NO_JOB_CODE_MESSAGE } from "@/server/time-core";
 import type {
   ContractTimeBreak,
   ContractTimeEntry,
@@ -34,7 +35,19 @@ export type ContractEntryWithBreaks = ContractTimeEntry & { breaks: ContractTime
 
 export const CONTRACT_AUTO_CLOSE_REASON = `Auto-closed: shift ran longer than ${MAX_SHIFT_MINUTES / 60} hours (counted time capped). Needs admin review.`;
 
-const DEFAULT_JOB_CODE = "ACT001";
+/**
+ * The worker's own job code if it is still an active code, else the company
+ * default (active). Null when neither exists: the punch is refused rather than
+ * stamped with a code that does not exist.
+ */
+async function resolveContractJobCode(tx: Tx, workerCode: string | null): Promise<string | null> {
+  if (workerCode) {
+    const own = await tx.jobCode.findFirst({ where: { code: workerCode, isActive: true } });
+    if (own) return own.code;
+  }
+  const def = await tx.jobCode.findFirst({ where: { isDefault: true, isActive: true } });
+  return def?.code ?? null;
+}
 
 /**
  * Run `fn` in a transaction holding a per-worker advisory lock so punches,
@@ -163,6 +176,8 @@ export async function _contractClockIn(
       if (open.some((e) => !isStaleShift(e.clockIn, now))) {
         return { kind: "already" as const };
       }
+      const jobCode = await resolveContractJobCode(tx, worker.jobCode);
+      if (!jobCode) return { kind: "nocode" as const };
       const closedIds: string[] = [];
       for (const stale of open) {
         await closeOpenContractEntry(tx, stale, now);
@@ -173,7 +188,7 @@ export async function _contractClockIn(
           contractWorkerId,
           date: today,
           clockIn: now,
-          jobCode: worker.jobCode ?? DEFAULT_JOB_CODE,
+          jobCode,
           status: "ACTIVE" as TimeEntryStatus,
           kioskSlug: kiosk?.kioskSlug ?? null,
           kioskLabel: kiosk?.kioskLabel ?? null,
@@ -186,6 +201,7 @@ export async function _contractClockIn(
       return fail("That contract worker was not found. Refresh the kiosk and try again.");
     }
     if (outcome.kind === "ineligible") return fail(outcome.reason);
+    if (outcome.kind === "nocode") return fail(NO_JOB_CODE_MESSAGE);
     if (outcome.kind === "already") {
       return fail("You are already clocked in. Clock out first, or refresh if this looks wrong.");
     }
