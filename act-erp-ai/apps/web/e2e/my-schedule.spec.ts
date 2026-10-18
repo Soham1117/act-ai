@@ -1,5 +1,6 @@
 import { test as base, expect } from "@playwright/test";
 import { BASE_URL } from "./support/test-data";
+import { expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { calEvents, gotoMonth, OLIVE, OLIVE_SHIFT, SCHED_PASSWORD, WES, WES_SHIFTS, WES_STATE, saveLogin } from "./support/schedules";
 
 // Log in once per file (login is rate limited), then give each test a page on that session.
@@ -51,7 +52,7 @@ test.describe("My schedule shows Central time", () => {
 
   // A wall-clock time inside the spring-forward gap (2:30 AM on Mar 8) does not exist;
   // the calendar shifts it to 3:30 AM. Stored 02:30 should read 2:30 AM.
-  test.fixme("a shift inside the spring-forward gap keeps its stored time", async ({ page }) => {
+  test("a shift inside the spring-forward gap keeps its stored time", async ({ page }) => {
     await checkShift(page, WES_SHIFTS.springGap);
   });
 
@@ -62,6 +63,29 @@ test.describe("My schedule shows Central time", () => {
     await checkShift(page, WES_SHIFTS.beforeSpring);
     await expect(page.getByRole("dialog")).toContainText("(next day)");
   });
+});
+
+const LOAD_ERROR = /could not load shifts for this month\. check the connection and try again/i;
+
+test.describe("My schedule month navigation failures", () => {
+  for (const mode of ["abort", "500"] as const) {
+    test(`a failed month fetch (${mode}) shows a message and keeps the calendar usable`, async ({ page }) => {
+      await page.goto("/dashboard/schedule");
+      await gotoMonth(page, WES_SHIFTS.early.date);
+      await expect(calEvents(page, /^8:00 AM\s*E2E100/).first()).toBeVisible();
+
+      // The next month fails once; the calendar stays on screen and the next try works.
+      const failing = await failServerActions(page, mode, { times: 1 });
+      await gotoMonth(page, WES_SHIFTS.beforeFall.date);
+      await expect(toast(page, LOAD_ERROR)).toBeVisible();
+      expect(failing.count()).toBe(1);
+      await expectNoCrash(page);
+      await expect(page.locator(".sx__range-heading")).toHaveText("October 2026");
+
+      await gotoMonth(page, WES_SHIFTS.afterFall.date);
+      await expect(calEvents(page, /^1:00 PM\s*E2E100/).first()).toBeVisible();
+    });
+  }
 });
 
 test.describe("My schedule privacy", () => {

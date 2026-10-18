@@ -194,8 +194,8 @@ export const APIS: RouteRow[] = [
     { method: "POST" },
   ),
 
-  // Unread badge: a dead session just gets zero, never data.
-  api("/api/notifications/unread", { anon: FILE_NEEDS_SESSION, employee: "ok", grace: "ok", ended: "ok", admin: "ok" }),
+  // Unread badge: a dead session ("ended") gets 401, never data.
+  api("/api/notifications/unread", { anon: FILE_NEEDS_SESSION, employee: "ok", grace: "ok", ended: 401, admin: "ok" }),
 
   // AI assistant is off: the route answers 503 before it looks at the session.
   api("/api/chat", { anon: FILE_NEEDS_SESSION, employee: 503, grace: 503, ended: 503, admin: 503 }, { method: "POST" }),

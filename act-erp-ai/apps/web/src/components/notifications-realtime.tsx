@@ -24,6 +24,12 @@ export function NotificationsRealtime({
     const poll = async () => {
       try {
         const r = await fetch("/api/notifications/unread", { cache: "no-store" });
+        if (r.status === 401) {
+          // Session ended. Stop polling; the next page load sends the user to sign in.
+          active = false;
+          clearInterval(id);
+          return;
+        }
         if (!r.ok) return;
         const d = await r.json();
         if (active) setUnread(d.unread ?? 0);

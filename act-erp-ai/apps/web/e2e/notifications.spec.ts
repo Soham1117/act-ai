@@ -51,6 +51,22 @@ test.describe("notifications: employee inbox", () => {
     await expect(page.getByText("Olive Secret Notice")).toHaveCount(0);
   });
 
+  test("the bell poller handles a 401 quietly and stops polling", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await page.goto("/dashboard/notifications");
+    let calls = 0;
+    await page.route("**/api/notifications/unread", (route) => {
+      calls += 1;
+      return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Not signed in" }) });
+    });
+    const fire = () => page.evaluate(() => window.dispatchEvent(new Event("act:notifications-changed")));
+    await fire();
+    await expect.poll(() => calls).toBe(1);
+    await expectNoCrash(page);
+    expect(errors).toEqual([]);
+  });
+
   test("an external link opens in a new tab; an unsafe link is not shown", async ({ page }) => {
     await notify("External", { link: "https://example.com/x" });
     await notify("Unsafe", { link: "javascript:alert(1)" });
@@ -97,6 +113,13 @@ test.describe("notifications: admin broadcast", () => {
     return page.getByRole("dialog", { name: "Send broadcast" });
   }
   const send = (d: ReturnType<Page["locator"]>) => d.getByRole("button", { name: "Send" });
+
+  // The revoked-session 401 is checked in access-session.spec.ts.
+  test("the unread API still answers 200 with a count for a signed-in account", async ({ page }) => {
+    const res = await page.request.get("/api/notifications/unread");
+    expect(res.status()).toBe(200);
+    expect(typeof (await res.json()).unread).toBe("number");
+  });
 
   test("sends to one department: only its members get it, with priority and link", async ({ page }) => {
     const d = await open(page);

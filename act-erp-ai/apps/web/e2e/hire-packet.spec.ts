@@ -219,10 +219,9 @@ test.describe("hire packet import", () => {
     const bigPath = join(tmpdir(), "pp-big.zip");
     writeFileSync(bigPath, Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(51 * 1024 * 1024)]));
     await upload(page, "hp2", bigPath);
-    // The server says "too large", or the request is cut off by the body limit; either way no job.
-    await expect(
-      toast(page, /too large \(max 50 mb\)/i).or(page.getByText(/something went wrong|unexpected end of form/i).first()),
-    ).toBeVisible({ timeout: 60_000 });
+    // The 60 MB proxy limit lets the 51 MB body through, so the server answers with the proper message.
+    await expect(toast(page, /too large \(max 50 mb\)/i)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/something went wrong|unexpected end of form/i)).toHaveCount(0);
     expect((await jobs("hp2")).length).toBe(before);
   });
 

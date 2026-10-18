@@ -35,6 +35,25 @@ async function setPin(page: Page, password: string, pin: string, confirm = pin) 
   return c;
 }
 
+test.describe("settings: kiosk PIN hint", () => {
+  test("names the temporary PIN only while it is still the PIN in use", async ({ page }) => {
+    const original = await pinHash();
+    try {
+      await db.employee.update({ where: { id: samId }, data: { kioskPinHash: await bcrypt.hash("3214", 4) } });
+      await page.goto("/dashboard/settings");
+      await expect(page.getByRole("main").getByText("Your temporary PIN is 3214.")).toBeVisible();
+
+      await db.employee.update({ where: { id: samId }, data: { kioskPinHash: await bcrypt.hash("7391", 4) } });
+      await page.goto("/dashboard/settings");
+      await expect(page.getByRole("main").getByText("Change your kiosk PIN here.")).toBeVisible();
+      await expect(page.getByText(/temporary PIN is/i)).toHaveCount(0);
+      await expect(page.getByText("3214")).toHaveCount(0);
+    } finally {
+      await db.employee.update({ where: { id: samId }, data: { kioskPinHash: original } });
+    }
+  });
+});
+
 test.describe("settings: kiosk PIN", () => {
   test("sets a new PIN: stored as a hash, audited, and the form is cleared", async ({ page }) => {
     const c = await setPin(page, SS.sam.password, "7391");
@@ -212,7 +231,9 @@ test.describe("settings: personal email and consents", () => {
     await page.goto("/dashboard/settings");
     await expect(page.getByText(SS.sam.email)).toBeVisible();
     await expect(page.getByText(SS.sam.name, { exact: true })).toBeVisible();
-    await expect(page.getByText("Your temporary PIN is 3214.")).toBeVisible();
+    // Sam has already changed the PIN by now, so the card must not name the temporary one.
+    await expect(page.getByText("Kiosk PIN", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/temporary PIN is/i)).toHaveCount(0);
   });
 });
 

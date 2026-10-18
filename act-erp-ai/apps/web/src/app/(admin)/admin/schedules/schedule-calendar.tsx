@@ -26,7 +26,10 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { getScheduleEvents, type ScheduleEvent } from "@/server/actions/schedules";
-import { runAction, toastAction } from "@/lib/toast-action";
+import { patchListTimes, storedTimeContent } from "@/lib/schedule-display";
+import { toast } from "sonner";
+
+const LOAD_ERROR = "Could not load shifts for this month. Check the connection and try again.";
 
 type RawEvent = ScheduleEvent;
 
@@ -94,10 +97,18 @@ export function ScheduleCalendar({
     // first screen shows up straight away.
     const r = range ?? rangeRef.current ?? initialWindow();
     if (!r) return;
-    const res = await runAction(() => getScheduleEvents(r));
-    if (!toastAction(res)) return;
+    let res: Awaited<ReturnType<typeof getScheduleEvents>>;
+    try {
+      res = await getScheduleEvents(r);
+    } catch {
+      res = { ok: false, error: LOAD_ERROR };
+    }
     // Ignore stale responses if the admin has navigated on.
     if (rangeRef.current && (rangeRef.current.start !== r.start || rangeRef.current.end !== r.end)) return;
+    if (!res.ok) {
+      toast.error(LOAD_ERROR);
+      return;
+    }
     setEvents(res.events);
   }, []);
 
@@ -172,6 +183,7 @@ export function ScheduleCalendar({
         end: toZonedDateTime(e.end),
         description: e.description,
         calendarId: e.departmentId ?? "none",
+        _customContent: storedTimeContent(e),
       })),
     [filteredEvents],
   );
@@ -238,6 +250,18 @@ export function ScheduleCalendar({
     if (!calendar) return;
     calendar.events.set(sxEvents);
   }, [calendar, sxEvents]);
+
+  // The List view formats times from the moved instant; keep the stored ones on screen.
+  const calendarBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = calendarBoxRef.current;
+    if (!box) return;
+    const apply = () => patchListTimes(box, filteredEvents);
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(box, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [filteredEvents]);
 
   function openCreate() {
     setEdit(null);
@@ -341,7 +365,7 @@ export function ScheduleCalendar({
         </div>
       )}
 
-      <div className="sx-react-calendar-wrapper" style={{ height: 640 }}>
+      <div ref={calendarBoxRef} className="sx-react-calendar-wrapper" style={{ height: 640 }}>
         <ScheduleXCalendar calendarApp={calendar} />
       </div>
 
