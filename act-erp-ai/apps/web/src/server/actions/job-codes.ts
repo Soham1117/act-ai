@@ -23,6 +23,8 @@ const schema = z.object({
 });
 
 const GONE = "That job code no longer exists. Refresh the page and try again.";
+const DEFAULT_MUST_BE_ACTIVE =
+  "The default job code must be active. Turn on Active, or pick a different default.";
 
 export async function createJobCode(
   input: z.input<typeof schema>,
@@ -30,6 +32,7 @@ export async function createJobCode(
   await requireAdmin();
   try {
     const data = schema.parse(input);
+    if (data.isDefault && !data.isActive) return fail(DEFAULT_MUST_BE_ACTIVE);
     const jc = await db.$transaction(async (tx) => {
       if (data.isDefault) {
         await tx.jobCode.updateMany({
@@ -60,6 +63,7 @@ export async function updateJobCode(
   await requireAdmin();
   try {
     const data = schema.parse(input);
+    if (data.isDefault && !data.isActive) return fail(DEFAULT_MUST_BE_ACTIVE);
     const before = await db.jobCode.findUnique({ where: { id } });
     if (!before) return fail(GONE);
     const jc = await db.$transaction(async (tx) => {
@@ -101,14 +105,20 @@ export async function toggleJobCodeActive(
   try {
     const current = await db.jobCode.findUnique({ where: { id } });
     if (!current) return fail(GONE);
+    // A deactivated code cannot stay the default (punches would use a dead code).
+    const clearDefault = current.isActive && current.isDefault;
     const updated = await db.jobCode.update({
       where: { id },
-      data: { isActive: !current.isActive },
+      data: { isActive: !current.isActive, ...(clearDefault ? { isDefault: false } : {}) },
     });
     await audit({
       action: "job_code.toggle_active",
       resource: `JobCode:${id}`,
-      diff: { code: updated.code, isActive: updated.isActive },
+      diff: {
+        code: updated.code,
+        isActive: updated.isActive,
+        ...(clearDefault ? { isDefault: { from: true, to: false } } : {}),
+      },
     });
     revalidatePath("/admin/job-codes");
     return ok({ id: updated.id, isActive: updated.isActive });
@@ -122,13 +132,27 @@ export async function deleteJobCode(id: string): Promise<ActionResult> {
   try {
     const jc = await db.jobCode.findUnique({ where: { id }, select: { code: true } });
     if (!jc) return fail(GONE);
-    const [assignments, primaries] = await Promise.all([
+    const [assignments, primaries, workers, templates] = await Promise.all([
       db.jobCodeAssignment.count({ where: { jobCodeId: id } }),
       db.employee.count({ where: { primaryJobCodeId: id } }),
+      // Contract workers and schedule templates store the code text, not the id.
+      db.contractWorker.count({ where: { jobCode: jc.code } }),
+      db.scheduleTemplate.count({ where: { jobCode: jc.code } }),
     ]);
     if (assignments > 0 || primaries > 0) {
       return fail(
         `Cannot delete: ${Math.max(assignments, primaries)} employee(s) are still assigned to this job code. Toggle it inactive instead, or unassign them first.`,
+      );
+    }
+    if (workers > 0 || templates > 0) {
+      const what = [
+        workers > 0 ? `${workers} contract worker(s)` : null,
+        templates > 0 ? `${templates} schedule template(s)` : null,
+      ]
+        .filter(Boolean)
+        .join(" and ");
+      return fail(
+        `Cannot delete: ${what} still use this job code. Toggle it inactive instead, or change them first.`,
       );
     }
     await db.jobCode.delete({ where: { id } });
