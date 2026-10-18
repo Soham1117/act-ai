@@ -28,7 +28,9 @@ async function openHours(page: Page, agencyId: string, extra = "") {
   await page.goto(hoursUrl(`&hagency=${agencyId}${extra}`));
   await expect(page.getByRole("button", { name: /download csv/i })).toBeVisible();
 }
-const row = (page: Page, name: string) => page.getByRole("row").filter({ hasText: name });
+// Visible rows only: Next can keep a hidden copy of the previous page state in the DOM.
+const row = (page: Page, name: string) =>
+  page.getByRole("row").filter({ hasText: name }).filter({ visible: true });
 const approveBtn = (page: Page, name: string) => page.getByRole("button", { name: `Approve entry for ${name}` });
 const rejectBtn = (page: Page, name: string) => page.getByRole("button", { name: `Reject entry for ${name}` });
 const get = (id: string) => db.contractTimeEntry.findUniqueOrThrow({ where: { id } });
@@ -649,7 +651,7 @@ test.describe("admin hours: filters and totals", () => {
     await page.getByRole("button", { name: /^apply$/i }).click();
     await expect(page).toHaveURL(/hagency=/);
     await expect(row(page, w.name)).toBeVisible();
-    await page.locator("#cw-h-approval").selectOption("APPROVED");
+    await page.locator("#cw-h-approval").filter({ visible: true }).selectOption("APPROVED");
     await page.getByRole("button", { name: /^apply$/i }).click();
     await expect(row(page, w.name)).toHaveCount(0);
     await page.getByRole("link", { name: /current week/i }).click();
