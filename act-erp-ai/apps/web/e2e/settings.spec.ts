@@ -288,8 +288,8 @@ test.describe("settings: password", () => {
     // Match on the new password so an unrelated background server action cannot use up the injected failure.
     await failServerActions(page, "abort", { match: "Another-Pass-1!" });
     await change(c, SS.pam.password, "Another-Pass-1!");
-    // The form now catches the dropped connection and toasts the error text (the browser's own "Failed to fetch").
-    await expect(toast(page, /something went wrong|failed to fetch/i)).toBeVisible();
+    // The form catches the dropped connection and shows a plain message (not the raw "Failed to fetch").
+    await expect(toast(page, "Could not reach the server. Check the connection and try again.")).toBeVisible();
     await expectNoCrash(page);
     expect((await db.user.findUniqueOrThrow({ where: { id: pam.id } })).passwordHash).toBe(pam.passwordHash);
     await ctx.close();

@@ -212,7 +212,7 @@ test.describe("admin reimbursements: review", () => {
     await openAll(page);
     await db.reimbursement.update({ where: { id: c.id }, data: { status: "APPROVED" } }); // approved elsewhere
     await choose(page, "Under review");
-    await expect(toast(page, "A approved claim can't be moved to under review. Refresh the page.")).toBeVisible();
+    await expect(toast(page, "An approved claim can't be moved to under review. Refresh the page.")).toBeVisible();
     expect((await claimRow(c.id)).status).toBe("APPROVED");
   });
 
