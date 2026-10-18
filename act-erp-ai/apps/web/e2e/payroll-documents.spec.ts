@@ -5,6 +5,7 @@ import { fakeS3Keys } from "./support/fake-s3";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { PT, dateOnly, fakePdf, paystubPdf, putFakeS3, sessionFor } from "./support/payroll-time";
 import { ADMIN_STATE, BASE_URL, PIN_EMPLOYEE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 const USED = [PT.rex, PT.tina, PT.penny].map((e) => e.employeeId);
 const S3 = () => `${process.env.S3_BUCKET}/payroll/`;
@@ -442,7 +443,7 @@ test.describe("admin payroll documents: list, download, delete", () => {
     await failServerActions(page, "abort");
     page.once("dialog", (dlg) => void dlg.accept());
     await item(page, "PT Admin Stub").getByRole("button", { name: /delete document/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect(await db.payroll.count({ where: { id: d.id } })).toBe(1);
     expect(await fakeS3Keys()).toContain(`${S3()}${d.fileName}`);
   });

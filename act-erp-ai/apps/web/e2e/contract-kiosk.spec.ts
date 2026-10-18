@@ -17,6 +17,7 @@ import {
   replay,
   tamperActions,
 } from "./support/contract";
+import { SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 const clockIn = (p: Page) => p.getByRole("button", { name: /^clock in$/i });
 const clockOut = (p: Page) => p.getByRole("button", { name: /^clock out$/i });
@@ -407,7 +408,7 @@ test.describe("kiosk contract crew: failures", () => {
       await pickKioskWorker(page, w.name);
       await failServerActions(page, mode);
       await clockIn(page).click();
-      await expect(page.getByText(/something went wrong|try again|refresh|reload/i).first()).toBeVisible();
+      await expect(toast(page, mode === "500" ? SERVER_ERROR : STALE_ERROR)).toBeVisible();
       await expectNoCrash(page);
       expect(await entriesOf(w.id)).toHaveLength(0);
       await page.context().close();
@@ -432,12 +433,9 @@ test.describe("kiosk contract crew: failures", () => {
     await pickKioskWorker(page, w.name);
     await failServerActions(page, "500", { times: 1, match: "CLOCK_IN" });
     await clockIn(page).click();
-    await expect(page.getByText(/something went wrong|try again/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     expect(await entriesOf(w.id)).toHaveLength(0);
-    // Reload (the error screen's recovery) and punch again.
-    await page.reload();
-    await page.getByRole("button", { name: /contract crew/i }).click();
-    await pickKioskWorker(page, w.name);
+    // The kiosk stays on the same screen: punch again.
     await clockIn(page).click();
     await expect(toast(page, /clocked in at/i)).toBeVisible();
     expect(await entriesOf(w.id)).toHaveLength(1);

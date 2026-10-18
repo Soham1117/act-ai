@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { uploadDocumentBulk } from "@/server/actions/documents";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 const TYPES = ["PERSONAL", "COMPANY", "ONBOARDING", "BENEFITS", "TRAINING"] as const;
 type DocType = (typeof TYPES)[number];
@@ -91,7 +91,7 @@ export function UploadDocumentBulkDialog({
 
     startTransition(async () => {
       const bytes = await file.arrayBuffer();
-      const result = await uploadDocumentBulk(
+      const result = await runAction(() => uploadDocumentBulk(
         {
           title: title.trim(),
           description: description.trim() || undefined,
@@ -101,7 +101,7 @@ export function UploadDocumentBulkDialog({
           erisaDisclosure: docType === "BENEFITS" ? erisaDisclosure : undefined,
         },
         { name: file.name, type: file.type || "application/octet-stream", bytes },
-      );
+      ));
       if (!toastAction(result)) return;
       toast.success(`Uploaded to ${result.created} employee${result.created === 1 ? "" : "s"}`);
       if (result.skippedEmployeeIds.length > 0) {

@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { FUTURE, PERIOD_A, PERIOD_B, dateOnly } from "./support/payroll-time";
 import { ADMIN_STATE } from "./support/test-data";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -114,7 +115,7 @@ test.describe("admin payroll: create pay period", () => {
     await fillPeriod(dialog, { title: TEMP, ...FUTURE });
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await count(TEMP)).toBe(0);
   });
@@ -124,7 +125,7 @@ test.describe("admin payroll: create pay period", () => {
     await fillPeriod(dialog, { title: TEMP, ...FUTURE });
     await failServerActions(page, "500");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await count(TEMP)).toBe(0);
   });
@@ -144,9 +145,8 @@ test.describe("admin payroll: create pay period", () => {
     await fillPeriod(dialog, { title: TEMP, ...FUTURE });
     await failServerActions(page, "stale");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    // The app has no special stale-deployment handling: Next's own error path runs.
-    // Whatever the user sees must be a visible error (toast or error screen), never a silent success.
-    await expect(page.getByText(/something went wrong|failed|try again|refresh|reload/i).first()).toBeVisible();
+    // A plain "reload the page" toast; the dialog stays open and nothing is saved.
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expect(toast(page, /pay period created/i)).toHaveCount(0);
     expect(await count(TEMP)).toBe(0);
   });
@@ -233,7 +233,7 @@ test.describe("admin payroll: edit and delete pay period", () => {
     await dialog.getByRole("textbox").first().fill("PT Temp Never Saved");
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await db.payrollCalendar.findUniqueOrThrow({ where: { id: p.id } })).title).toBe(TEMP);
   });
 
@@ -275,7 +275,7 @@ test.describe("admin payroll: edit and delete pay period", () => {
     await failServerActions(page, "abort");
     page.once("dialog", (d) => void d.accept());
     await row(page, TEMP).getByRole("button", { name: /delete pay period/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect(await count(TEMP)).toBe(1);
   });
 

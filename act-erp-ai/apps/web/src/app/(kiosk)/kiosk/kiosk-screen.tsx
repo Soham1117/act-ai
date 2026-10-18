@@ -29,7 +29,7 @@ import {
   kioskLookup,
   type KioskRosterEmployee,
 } from "@/server/actions/kiosk";
-import { BUSINESS_TIME_ZONE, getAvatarUrl } from "@/lib/format";
+import { BUSINESS_TIME_ZONE, formatBusinessTime, getAvatarUrl, plainSpaces } from "@/lib/format";
 import { toast } from "sonner";
 import { toastAction } from "@/lib/toast-action";
 import { setKioskBusy } from "@/lib/kiosk-version";
@@ -89,7 +89,9 @@ export function KioskScreen({
   label: string;
   requirePin: boolean;
 }) {
-  const [now, setNow] = useState(new Date());
+  // Null until mounted: a clock rendered on the server never matches the client
+  // (time and locale differ), which breaks hydration.
+  const [now, setNow] = useState<Date | null>(null);
   const [roster, setRoster] = useState<KioskRosterEmployee[]>([]);
   const [rosterLoading, setRosterLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -136,8 +138,13 @@ export function KioskScreen({
   }, [slug]);
 
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
+    const tick = () => setNow(new Date());
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
   }, []);
 
   useEffect(() => {
@@ -357,20 +364,19 @@ export function KioskScreen({
         </div>
         <div className="text-right">
           <p className="font-mono text-2xl font-semibold tabular-nums">
-            {now.toLocaleTimeString([], {
-              timeZone: BUSINESS_TIME_ZONE,
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true,
-            })}
+            {now ? formatBusinessTime(now) : " "}
           </p>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {now.toLocaleDateString([], {
-              timeZone: BUSINESS_TIME_ZONE,
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-            })}
+            {now
+              ? plainSpaces(
+                  now.toLocaleDateString("en-US", {
+                    timeZone: BUSINESS_TIME_ZONE,
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  }),
+                )
+              : " "}
           </p>
         </div>
       </header>

@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE } from "./support/test-data";
 import { SS, answerNextDialog, dateOnly, empDbId, labelled, loginState, pick, ymdFromToday } from "./support/self-service";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 // Benefits, admin side: plan catalog (/admin/benefits) and per-employee enrolment (employee page). Employee: Bea.
 test.use({ storageState: ADMIN_STATE });
@@ -513,7 +514,7 @@ test.describe("admin benefits: failures and double submits", () => {
     await fillEnroll(page, d, { plan: /AdmPlan F1/, tier: "Employee only" });
     await failServerActions(page, "abort");
     await saveEnroll(d).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await db.benefitEnrollment.count({ where: { employeeId: beaId } })).toBe(0);
   });
@@ -523,7 +524,7 @@ test.describe("admin benefits: failures and double submits", () => {
     await fillPlan(d, "AdmPlan F2");
     await failServerActions(page, "500");
     await d.getByRole("button", { name: "Create plan" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     expect(await db.benefitPlan.count({ where: { name: "AdmPlan F2" } })).toBe(0);
   });
 
@@ -536,7 +537,9 @@ test.describe("admin benefits: failures and double submits", () => {
     await labelled(d, "End date").fill(ymdFromToday(0));
     await failServerActions(page, "stale");
     await d.getByRole("button", { name: "End enrollment" }).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(d).toBeVisible();
     await expectNoCrash(page);
     expect((await db.benefitEnrollment.findUniqueOrThrow({ where: { id: e.id } })).endDate).toBeNull();
   });

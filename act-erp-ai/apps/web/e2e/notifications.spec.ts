@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE } from "./support/test-data";
 import { SS, SS_DEPARTMENT, SS_EMPTY_DEPARTMENT, empDbId, labelled, loginState, pick } from "./support/self-service";
+import { SERVER_ERROR } from "./support/action-errors";
 
 // Notifications: employee inbox (Nina) and the admin broadcast dialog.
 test.use({ storageState: "e2e/.auth/nina.json" });
@@ -48,6 +49,27 @@ test.describe("notifications: employee inbox", () => {
     await expect(item(page, "Policy update").getByRole("link", { name: "View details" })).toHaveAttribute("href", "/dashboard/leave");
     await expect(item(page, "Old news").getByRole("button", { name: "Mark as read" })).toHaveCount(0);
     await expect(page.getByText("Olive Secret Notice")).toHaveCount(0);
+  });
+
+  test("the bell poller handles a 401 quietly and stops polling", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await page.goto("/dashboard/notifications");
+    let calls = 0;
+    await page.route("**/api/notifications/unread", (route) => {
+      calls += 1;
+      return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Not signed in" }) });
+    });
+    const fire = () => page.evaluate(() => window.dispatchEvent(new Event("act:notifications-changed")));
+    await fire();
+    await expect.poll(() => calls).toBe(1);
+    // After the 401 the poller is stopped: more change events send no request.
+    await fire();
+    await fire();
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    expect(calls).toBe(1);
+    await expectNoCrash(page);
+    expect(errors).toEqual([]);
   });
 
   test("an external link opens in a new tab; an unsafe link is not shown", async ({ page }) => {
@@ -96,6 +118,13 @@ test.describe("notifications: admin broadcast", () => {
     return page.getByRole("dialog", { name: "Send broadcast" });
   }
   const send = (d: ReturnType<Page["locator"]>) => d.getByRole("button", { name: "Send" });
+
+  // The revoked-session 401 is checked in access-session.spec.ts.
+  test("the unread API still answers 200 with a count for a signed-in account", async ({ page }) => {
+    const res = await page.request.get("/api/notifications/unread");
+    expect(res.status()).toBe(200);
+    expect(typeof (await res.json()).unread).toBe("number");
+  });
 
   test("sends to one department: only its members get it, with priority and link", async ({ page }) => {
     const d = await open(page);
@@ -148,7 +177,7 @@ test.describe("notifications: admin broadcast", () => {
     await d.getByRole("checkbox", { name: SS_DEPARTMENT }).click();
     await failServerActions(page, "500", { times: 1 });
     await send(d).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     expect(await db.notification.count({ where: { title: "Flaky send" } })).toBe(0);
   });
 

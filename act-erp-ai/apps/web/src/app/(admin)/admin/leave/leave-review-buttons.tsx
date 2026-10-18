@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import type { ActionResult } from "@/lib/action-result";
 import { cancelLeaveRequest, reviewLeave } from "@/server/actions/leave";
 
@@ -63,13 +63,13 @@ function ReviewDialog({
     startTransition(async () => {
       const res: ActionResult<Record<string, unknown>> =
         mode === "REVERT"
-          ? await cancelLeaveRequest(id, notes)
-          : await reviewLeave({
+          ? await runAction(() => cancelLeaveRequest(id, notes))
+          : await runAction(() => reviewLeave({
               requestId: id,
               decision: mode === "APPROVE" ? "APPROVED" : "REJECTED",
               notes: notes.trim() || undefined,
               overrideBalance: mode === "APPROVE" ? override : undefined,
-            });
+            }));
       if (!toastAction(res)) return;
       toast.success(mode === "APPROVE" ? "Approved" : mode === "REJECT" ? "Rejected" : "Leave cancelled");
       onOpenChange(false);

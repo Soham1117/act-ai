@@ -6,6 +6,7 @@ import {
   CONTRACT_WORKER_APPROVE,
   CONTRACT_WORKER_REJECT,
 } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -30,7 +31,7 @@ test.describe("admin: contract worker hours", () => {
     await page
       .getByRole("button", { name: `Approve entry for ${CONTRACT_WORKER_APPROVE.name}` })
       .click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await statusOf(CONTRACT_WORKER_APPROVE.workerId)).toBe("PENDING");
   });

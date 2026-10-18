@@ -11,6 +11,7 @@ import {
   parseCsv,
   tamperActions,
 } from "./support/contract";
+import { SERVER_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -91,15 +92,19 @@ test.describe("admin hours: CSV export", () => {
     expect(parseCsv((await download(page)).text).slice(1)).toHaveLength(2);
   });
 
-  test("an empty range gives a header-only file and the table says there is nothing", async ({ page }) => {
-    // Observed behaviour: the export does not warn about an empty range; it downloads a file
-    // with only the header row. The on-screen table shows "No entries in this range."
+  test("an empty range shows a message and downloads nothing", async ({ page }) => {
     const agency = await makeAgency();
     await openHours(page, agency.id);
     await expect(page.getByText(/no entries in this range/i)).toBeVisible();
-    const { text } = await download(page);
-    const rows = parseCsv(text);
-    expect(rows).toEqual([HEADER]);
+    let downloaded = false;
+    page.on("download", () => {
+      downloaded = true;
+    });
+    await page.getByRole("button", { name: /download csv/i }).click();
+    await expect(toast(page, /no entries in this range, so there is nothing to export\./i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /download csv/i })).toBeEnabled();
+    expect(downloaded).toBe(false);
+    await expect(toast(page, /csv downloaded/i)).toHaveCount(0);
   });
 
   test("spreadsheet formulas in names are neutralised and quotes are escaped", async ({ page }) => {
@@ -129,13 +134,15 @@ test.describe("admin hours: CSV export", () => {
     page.on("download", () => (downloaded = true));
     await failServerActions(page, "500");
     await page.getByRole("button", { name: /download csv/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(downloaded).toBe(false);
   });
 
   test("double-clicking Download CSV exports once", async ({ page }) => {
     const agency = await makeAgency();
+    const w = await makeWorker({ agencyId: agency.id });
+    await makeEntry(w.id, { daysAgo: 1 });
     await openHours(page, agency.id);
     const slow = await delayServerActions(page, 1200);
     const btn = page.getByRole("button", { name: /download csv/i });

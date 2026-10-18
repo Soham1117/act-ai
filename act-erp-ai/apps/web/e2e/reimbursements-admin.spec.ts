@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE } from "./support/test-data";
 import { SS, empDbId, labelled, loginState, pdfFile, putFakeS3, statValue } from "./support/self-service";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 // Reimbursements, admin side. Dedicated employee: Rita. Admin session from global setup.
 test.use({ storageState: ADMIN_STATE });
@@ -284,7 +285,7 @@ test.describe("admin reimbursements: failures and double submits", () => {
     await openAll(page);
     await failServerActions(page, "abort");
     await choose(page, "Approve");
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await claimRow(c.id)).status).toBe("PENDING");
   });
@@ -297,7 +298,9 @@ test.describe("admin reimbursements: failures and double submits", () => {
     await dlg.locator("textarea").fill("Policy violation");
     await failServerActions(page, "500");
     await dlg.getByRole("button", { name: "Reject claim" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dlg).toBeVisible();
     await expectNoCrash(page);
     const after = await claimRow(c.id);
     expect(after.status).toBe("PENDING");
@@ -310,7 +313,7 @@ test.describe("admin reimbursements: failures and double submits", () => {
     await choose(page, "Mark paid");
     await failServerActions(page, "stale");
     await page.getByRole("dialog", { name: "Mark paid" }).getByRole("button", { name: "Mark paid" }).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await claimRow(c.id)).status).toBe("APPROVED");
   });

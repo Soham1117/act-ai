@@ -53,7 +53,7 @@ import {
   deleteSchedule,
   updateSchedule,
 } from "@/server/actions/schedules";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { isOvernight } from "@/lib/schedule-rules";
 
 /** Surface non-blocking warnings (e.g. approved leave overlap) returned by the server. */
@@ -239,14 +239,14 @@ function ShiftForm({
 
     startTransition(async () => {
       if (isEdit && edit) {
-        const res = await updateSchedule({
+        const res = await runAction(() => updateSchedule({
           id: edit.id,
           date,
           jobCode,
           startTime,
           endTime,
           notes: notes || null,
-        });
+        }));
         if (!toastAction(res)) return;
         toast.success("Shift updated");
         showWarnings(res.warnings);
@@ -261,14 +261,14 @@ function ShiftForm({
       }
 
       if (mode === "single" && selected.length === 1) {
-        const res = await createSchedule({
+        const res = await runAction(() => createSchedule({
           employeeId: selected[0],
           date,
           jobCode,
           startTime,
           endTime,
           notes: notes || undefined,
-        });
+        }));
         if (!toastAction(res)) return;
         toast.success("Shift created");
         showWarnings(res.warnings);
@@ -282,14 +282,14 @@ function ShiftForm({
         return;
       }
 
-      const result = await createSchedulesBulk({
+      const result = await runAction(() => createSchedulesBulk({
         employeeIds: selected,
         dates: expandedDates,
         jobCode,
         startTime,
         endTime,
         notes: notes || undefined,
-      });
+      }));
       if (!toastAction(result)) return;
       toast.success(
         `Created ${result.created} shift${result.created === 1 ? "" : "s"}` +
@@ -304,7 +304,7 @@ function ShiftForm({
   function onDelete() {
     if (!edit) return;
     startTransition(async () => {
-      const res = await deleteSchedule(edit.id);
+      const res = await runAction(() => deleteSchedule(edit.id));
       if (!toastAction(res)) return;
       toast.success("Shift deleted");
       setConfirmDelete(false);

@@ -146,7 +146,7 @@ export default async function ContractWorkersPage({ searchParams }: { searchPara
         actions={<WorkerFormDialog agencies={agencyOptions} jobCodes={jobCodes} />}
       />
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="On site now" value={onSite.length} icon={<Activity className="h-4 w-4 text-primary" />} />
+        <StatCard label="On site now" value={onSite.filter((e) => !e.stale).length} icon={<Activity className="h-4 w-4 text-primary" />} />
         <StatCard label="Active workers" value={activeCount} icon={<HardHat className="h-4 w-4" />} />
         <StatCard label="Ending this week" value={endingSoonCount} icon={<Timer className="h-4 w-4" />} />
       </div>
@@ -232,7 +232,9 @@ export default async function ContractWorkersPage({ searchParams }: { searchPara
                           {formatBusinessTime(e.clockIn)}
                         </p>
                       </div>
-                      {e.status === "ON_BREAK" ? (
+                      {e.stale ? (
+                        <Badge variant="destructive" className="text-[10px]">Open more than 16 hours</Badge>
+                      ) : e.status === "ON_BREAK" ? (
                         <Badge variant="warning" className="text-[10px]">On break</Badge>
                       ) : (
                         <Badge variant="success" className="text-[10px]">Working</Badge>

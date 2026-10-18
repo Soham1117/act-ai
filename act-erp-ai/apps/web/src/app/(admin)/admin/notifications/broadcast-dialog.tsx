@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { broadcastNotification } from "@/server/actions/notifications";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 const TYPES = ["PAYROLL", "COMPANY", "ANNOUNCEMENT", "POLICY", "OTHER"] as const;
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
@@ -48,14 +48,14 @@ export function BroadcastDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const r = await broadcastNotification({
+      const r = await runAction(() => broadcastNotification({
         type,
         priority,
         title,
         message,
         link: link || undefined,
         departmentIds: scope === "departments" ? selectedDepts : undefined,
-      });
+      }));
       if (!toastAction(r)) return;
       toast.success(`Sent to ${r.recipientCount} recipient(s)`);
       setOpen(false);

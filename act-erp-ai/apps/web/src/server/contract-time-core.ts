@@ -109,8 +109,17 @@ export async function closeOpenContractEntry(
       approvalDate: null,
       totalBreakMin: totals.totalBreakMin,
       totalWorkMin: totals.totalWorkMin,
-      ...(totals.capped ? { autoClosed: true, editReason: CONTRACT_AUTO_CLOSE_REASON } : {}),
       ...extra,
+      // Keep the auto-close note when the cap kicked in; a caller's own reason is appended.
+      ...(totals.capped
+        ? {
+            autoClosed: true,
+            editReason:
+              typeof extra.editReason === "string" && extra.editReason
+                ? `${CONTRACT_AUTO_CLOSE_REASON} ${extra.editReason}`
+                : CONTRACT_AUTO_CLOSE_REASON,
+          }
+        : {}),
     },
   });
   return { entry: updated, capped: totals.capped };

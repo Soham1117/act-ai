@@ -58,16 +58,28 @@ export function formatHours(minutes: number | null | undefined) {
 /** Business timezone used for schedules, punches, and kiosk displays. */
 export const BUSINESS_TIME_ZONE = "America/Chicago";
 
+/**
+ * Node and browsers ship different ICU versions: one may put a narrow no-break
+ * space (U+202F) or no-break space (U+00A0) before "AM"/"PM" and the other a
+ * plain space. Server-rendered text then differs from the client and React
+ * throws a hydration error (#418). Always normalise to a plain space.
+ */
+export function plainSpaces(text: string): string {
+  return text.replace(/[  ]/g, " ");
+}
+
 export function formatBusinessTime(date: Date | string | null | undefined) {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString("en-US", {
+  return plainSpaces(
+    d.toLocaleTimeString("en-US", {
     timeZone: BUSINESS_TIME_ZONE,
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-  });
+  }),
+  );
 }
 
 /**
@@ -79,14 +91,16 @@ export function formatBusinessDateTime(date: Date | string | null | undefined) {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-US", {
+  return plainSpaces(
+    d.toLocaleString("en-US", {
     timeZone: BUSINESS_TIME_ZONE,
     month: "numeric",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  });
+  }),
+  );
 }
 
 /** Convert an instant to the UTC-midnight value for its Central calendar day. */
@@ -134,12 +148,14 @@ export function formatDateOnly(date: Date | string | null | undefined) {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", {
+  return plainSpaces(
+    d.toLocaleDateString("en-US", {
     timeZone: "UTC",
     year: "numeric",
     month: "short",
     day: "numeric",
-  });
+  }),
+  );
 }
 
 export function getInitials(name: string | null | undefined) {

@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createPayrollPeriod } from "@/server/actions/payroll";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 export function CreatePayrollPeriodDialog() {
   const [open, setOpen] = useState(false);
@@ -38,14 +38,14 @@ export function CreatePayrollPeriodDialog() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await createPayrollPeriod({
+      const res = await runAction(() => createPayrollPeriod({
         title,
         payPeriodStart: start,
         payPeriodEnd: end,
         payDate,
         status,
         notes: notes || undefined,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Pay period created");
       setOpen(false);

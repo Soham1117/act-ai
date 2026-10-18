@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { Loader2, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { deactivateBenefitPlan } from "@/server/actions/benefits";
 
 /**
@@ -19,7 +19,7 @@ export function DeactivatePlanButton({ planId, planName }: { planId: string; pla
   function onClick() {
     if (!confirm(`Deactivate "${planName}"? It stays visible on past coverage but can no longer be selected for new enrollments.`)) return;
     startTransition(async () => {
-      const res = await deactivateBenefitPlan(planId);
+      const res = await runAction(() => deactivateBenefitPlan(planId));
       if (!toastAction(res)) return;
       toast.success("Plan deactivated");
     });

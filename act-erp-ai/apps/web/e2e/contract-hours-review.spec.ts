@@ -14,6 +14,7 @@ import {
   replay,
   tamperActions,
 } from "./support/contract";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -53,15 +54,7 @@ test.describe("admin hours: approve and reject", () => {
     await expect(approveBtn(page, w.name)).toHaveCount(0);
   });
 
-  // POSSIBLE BUG (seen only on GitHub CI, production build, 4 of 5 runs; never
-  // reproduced locally, also not with CI=1): after Approve the toast shows and the
-  // DB row is APPROVED, but the visible Hours table keeps showing "Pending" with
-  // the Approve button for 45s+. hours-table.tsx calls router.refresh() and the
-  // action revalidates /admin/contract-workers. The page also showed two copies
-  // of the tab content (strict-mode "2 elements" errors), which points at a
-  // hydration mismatch / duplicate render. Proposed next step: capture a CI trace
-  // of this test and check hydration errors on /admin/contract-workers.
-  test.fixme("the Hours table updates in place after Approve (no reload)", async ({ page }) => {
+  test("the Hours table updates in place after Approve (no reload)", async ({ page }) => {
     const { agency, w } = await setup();
     await makeEntry(w.id);
     await openHours(page, agency.id);
@@ -169,7 +162,7 @@ test.describe("admin hours: approve and reject", () => {
     await openHours(page, agency.id);
     await failServerActions(page, "500");
     await approveBtn(page, a.name).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await get(ea.id)).approvalStatus).toBe("PENDING");
 
@@ -177,7 +170,7 @@ test.describe("admin hours: approve and reject", () => {
     await page.unroute("**/*");
     await failServerActions(page, "stale");
     await approveBtn(page, b.name).click();
-    await expect(page.getByText(/something went wrong|refresh|reload/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await get(eb.id)).approvalStatus).toBe("PENDING");
   });
@@ -190,7 +183,7 @@ test.describe("admin hours: approve and reject", () => {
     await page.getByRole("dialog").getByLabel(/reason/i).fill("Not on the sheet");
     await failServerActions(page, "abort");
     await page.getByRole("dialog").getByRole("button", { name: /^reject$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await get(e.id)).approvalStatus).toBe("PENDING");
   });
@@ -330,7 +323,7 @@ test.describe("admin hours: bulk approve and reject", () => {
     await page.getByRole("checkbox", { name: "Select all pending entries" }).check();
     await failServerActions(page, "500");
     await page.getByRole("button", { name: /approve selected/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     for (const e of entries) expect((await get(e.id)).approvalStatus).toBe("PENDING");
   });
@@ -594,7 +587,7 @@ test.describe("admin hours: edit times", () => {
     await fillTimes(dialog, `${day}T08:00`, `${day}T16:00`, "Will not be saved");
     await failServerActions(page, "abort");
     await save(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await get(e.id)).editReason).toBeNull();
   });

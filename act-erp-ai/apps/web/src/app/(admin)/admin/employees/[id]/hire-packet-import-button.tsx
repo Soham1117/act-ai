@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { uploadHirePacketZip } from "@/server/actions/hire-packet";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 export function HirePacketImportButton({ employeeId }: { employeeId: string }) {
   const router = useRouter();
@@ -36,7 +36,7 @@ export function HirePacketImportButton({ employeeId }: { employeeId: string }) {
 
     startTransition(async () => {
       const bytes = await file.arrayBuffer();
-      const res = await uploadHirePacketZip(employeeId, { name: file.name, bytes });
+      const res = await runAction(() => uploadHirePacketZip(employeeId, { name: file.name, bytes }));
       if (!toastAction(res)) return;
 
       setOpen(false);

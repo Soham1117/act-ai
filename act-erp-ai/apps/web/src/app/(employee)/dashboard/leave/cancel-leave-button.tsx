@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { cancelLeaveRequest } from "@/server/actions/leave";
 
 export function CancelLeaveButton({ id, approved }: { id: string; approved?: boolean }) {
@@ -22,7 +22,7 @@ export function CancelLeaveButton({ id, approved }: { id: string; approved?: boo
           : "Cancel this leave request?";
         if (!window.confirm(msg)) return;
         startTransition(async () => {
-          const res = await cancelLeaveRequest(id);
+          const res = await runAction(() => cancelLeaveRequest(id));
           if (!toastAction(res)) return;
           toast.success("Cancelled");
         });

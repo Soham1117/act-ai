@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { uploadDocument } from "@/server/actions/documents";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 const TYPES = ["PERSONAL", "COMPANY", "ONBOARDING", "BENEFITS", "TRAINING"] as const;
 type DocType = (typeof TYPES)[number];
@@ -73,7 +73,7 @@ export function UploadDocumentDialog({
     }
     startTransition(async () => {
       const bytes = await file.arrayBuffer();
-      const res = await uploadDocument(
+      const res = await runAction(() => uploadDocument(
         {
           title: title.trim(),
           description: description.trim() || undefined,
@@ -81,7 +81,7 @@ export function UploadDocumentDialog({
           employeeId,
         },
         { name: file.name, type: file.type || "application/octet-stream", bytes },
-      );
+      ));
       if (!toastAction(res)) return;
       toast.success("Document uploaded");
       setOpen(false);

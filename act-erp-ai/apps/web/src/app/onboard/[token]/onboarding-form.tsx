@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { submitOnboarding, type OnboardingSubmit } from "@/server/actions/onboarding";
 
 const STEPS = [
@@ -87,9 +87,11 @@ const NONE = "__none__";
 export function OnboardingForm({
   token,
   suggestedEmail,
+  status,
 }: {
   token: string;
   suggestedEmail: string;
+  status: "open" | "completed" | "expired";
 }) {
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
@@ -163,7 +165,7 @@ export function OnboardingForm({
 
       const { confirmPassword, ...rest } = form;
       void confirmPassword;
-      const res = await submitOnboarding(
+      const res = await runAction(() => submitOnboarding(
         token,
         {
           ...rest,
@@ -172,7 +174,7 @@ export function OnboardingForm({
           personalEmail: rest.personalEmail.trim().toLowerCase(),
         },
         fileEntries,
-      );
+      ));
       if (!res.ok) {
         // Keep the (possibly long, per-file) message on screen, not just a toast.
         setSubmitError(res.error);
@@ -198,6 +200,21 @@ export function OnboardingForm({
         <Button asChild>
           <Link href="/login">Go to sign in</Link>
         </Button>
+      </div>
+    );
+  }
+
+  if (status !== "open") {
+    return (
+      <div className="space-y-3">
+        <Button asChild className="w-full">
+          <Link href="/login">Go to sign in</Link>
+        </Button>
+        {status === "expired" && (
+          <p className="text-center text-xs text-muted-foreground">
+            Already finished onboarding? Sign in with the username or email you chose.
+          </p>
+        )}
       </div>
     );
   }

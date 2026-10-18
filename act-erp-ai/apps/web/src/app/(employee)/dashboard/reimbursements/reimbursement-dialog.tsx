@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { submitReimbursement } from "@/server/actions/reimbursements";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { MAX_RECEIPTS, MAX_REIMBURSEMENT_AMOUNT } from "@/lib/reimbursement";
 import { businessDateString } from "@/lib/business-time";
 
@@ -96,7 +96,7 @@ export function ReimbursementDialog() {
           bytes: await f.arrayBuffer(),
         })),
       );
-      const res = await submitReimbursement(
+      const res = await runAction(() => submitReimbursement(
         {
           title,
           category,
@@ -107,7 +107,7 @@ export function ReimbursementDialog() {
           priority: "MEDIUM",
         },
         receipts,
-      );
+      ));
       if (!toastAction(res)) return;
       toast.success("Claim submitted");
       setOpen(false);

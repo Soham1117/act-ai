@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { updateEmployee, updateEmployeeProfilePic } from "@/server/actions/employees";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { formatCurrency, formatMoneyInput, parseMoneyInput } from "@/lib/format";
 
 const NONE = "__none__";
@@ -44,11 +44,11 @@ export function ProfilePicEditor({
     if (!file) return;
     startTransition(async () => {
       const bytes = await file.arrayBuffer();
-      const res = await updateEmployeeProfilePic(employeeId, {
+      const res = await runAction(() => updateEmployeeProfilePic(employeeId, {
         name: file.name,
         type: file.type || "image/jpeg",
         bytes,
-      });
+      }));
       if (!toastAction(res)) return;
       setAvatar(res.url);
       toast.success("Profile picture updated");
@@ -249,7 +249,7 @@ export function PersonalEditableCard({
 
   function save() {
     startTransition(async () => {
-      const res = await updateEmployee(employeeId, {
+      const res = await runAction(() => updateEmployee(employeeId, {
         gender: form.gender,
         maritalStatus: (form.maritalStatus || null) as
           | "SINGLE" | "MARRIED" | "DIVORCED" | "WIDOWED" | "SEPARATED" | "OTHER" | null,
@@ -263,7 +263,7 @@ export function PersonalEditableCard({
         phoneNumber: form.phoneNumber || null,
         emergencyName: form.emergencyName || null,
         emergencyPhone: form.emergencyPhone || null,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Saved");
       setEditing(false);
@@ -394,7 +394,7 @@ export function EmploymentEditableCard({
 
   function save() {
     startTransition(async () => {
-      const res = await updateEmployee(employeeId, {
+      const res = await runAction(() => updateEmployee(employeeId, {
         jobTitle: form.jobTitle || null,
         position: form.position || null,
         jobDescription: form.jobDescription || null,
@@ -404,7 +404,7 @@ export function EmploymentEditableCard({
         workPhoneNumber: form.workPhoneNumber || null,
         departmentId: form.departmentId === NONE ? null : form.departmentId,
         supervisorId: form.supervisorId === NONE ? null : form.supervisorId,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Saved");
       setEditing(false);
@@ -531,12 +531,12 @@ export function CompensationEditableCard({
 
   function save() {
     startTransition(async () => {
-      const res = await updateEmployee(employeeId, {
+      const res = await runAction(() => updateEmployee(employeeId, {
         compensationType: form.compensationType,
         compensationValue: parseMoneyInput(form.compensationValue),
         defaultHourlyRate: parseMoneyInput(form.defaultHourlyRate) ?? 0,
         primaryJobCodeId: form.primaryJobCodeId === NONE ? null : form.primaryJobCodeId,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Saved");
       setEditing(false);
@@ -644,7 +644,7 @@ export function NameEditor({
       return;
     }
     startTransition(async () => {
-      const res = await updateEmployee(employeeId, { name: name.trim() });
+      const res = await runAction(() => updateEmployee(employeeId, { name: name.trim() }));
       if (!toastAction(res)) return;
       toast.success("Saved");
       setEditing(false);

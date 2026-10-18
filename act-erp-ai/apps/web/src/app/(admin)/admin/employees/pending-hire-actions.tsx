@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { approveEmployee, rejectPendingHire } from "@/server/actions/employees";
 
 /** Approve / reject a self-onboarded hire that is awaiting review. */
@@ -39,7 +39,7 @@ export function PendingHireActions({
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
-              const res = await approveEmployee(employeeId);
+              const res = await runAction(() => approveEmployee(employeeId));
               if (!toastAction(res)) return;
               toast.success(`${name} approved`);
               router.refresh();
@@ -80,7 +80,7 @@ export function PendingHireActions({
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
-                  const res = await rejectPendingHire(employeeId);
+                  const res = await runAction(() => rejectPendingHire(employeeId));
                   if (!toastAction(res)) return;
                   toast.success(`${name} rejected`);
                   setConfirmReject(false);

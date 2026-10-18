@@ -33,7 +33,7 @@ import {
   confirmEnrollment,
   confirmRetirementElection,
 } from "@/server/actions/benefits";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { benefitTypeLabel, tierLabel, coverageState, utcToday } from "@/lib/benefits";
 import { formatCurrency, formatDateOnly } from "@/lib/format";
 
@@ -203,7 +203,7 @@ function ConfirmButton({
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          const res = await onConfirm();
+          const res = await runAction(onConfirm);
           if (!toastAction(res)) return;
           toast.success("Confirmed");
         })
@@ -236,7 +236,7 @@ function EnrollDialog({ employeeId, plans }: { employeeId: string; plans: PlanOp
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await upsertEnrollment({
+      const res = await runAction(() => upsertEnrollment({
         employeeId,
         planId,
         tier: status === "WAIVED" ? null : (tier || null),
@@ -246,7 +246,7 @@ function EnrollDialog({ employeeId, plans }: { employeeId: string; plans: PlanOp
         employeeCostOverride: employeeCostOverride ? Number(employeeCostOverride) : null,
         employerCostOverride: employerCostOverride ? Number(employerCostOverride) : null,
         notes: notes || undefined,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Enrollment saved");
       setOpen(false);
@@ -346,12 +346,12 @@ function ChangeTierDialog({ enrollment, plans }: { enrollment: EnrollmentRow; pl
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await changeEnrollmentTier({
+      const res = await runAction(() => changeEnrollmentTier({
         enrollmentId: enrollment.id,
         newTier,
         effectiveDate,
         memberId: memberId || undefined,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Tier changed — old row ended, new row created");
       setOpen(false);
@@ -413,7 +413,7 @@ function EndEnrollmentDialog({ enrollmentId }: { enrollmentId: string }) {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await endEnrollment({ enrollmentId, endDate, notes: notes || undefined });
+      const res = await runAction(() => endEnrollment({ enrollmentId, endDate, notes: notes || undefined }));
       if (!toastAction(res)) return;
       toast.success("Enrollment ended");
       setOpen(false);
@@ -468,7 +468,7 @@ function ElectionDialog({ employeeId, plans }: { employeeId: string; plans: Plan
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await upsertRetirementElection({
+      const res = await runAction(() => upsertRetirementElection({
         employeeId,
         planId,
         status,
@@ -477,7 +477,7 @@ function ElectionDialog({ employeeId, plans }: { employeeId: string; plans: Plan
         flatAmountPerPay: mode === "flat" && flatAmountPerPay ? Number(flatAmountPerPay) : null,
         effectiveDate,
         notes: notes || undefined,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Election saved");
       setOpen(false);
@@ -574,7 +574,7 @@ function EndElectionDialog({ electionId }: { electionId: string }) {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await endRetirementElection({ electionId, endDate });
+      const res = await runAction(() => endRetirementElection({ electionId, endDate }));
       if (!toastAction(res)) return;
       toast.success("Election ended");
       setOpen(false);

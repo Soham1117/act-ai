@@ -18,6 +18,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getMyScheduleEvents } from "@/server/actions/schedules";
+import { storedTimeContent } from "@/lib/schedule-display";
+import { formatHHMM } from "@/lib/schedule-rules";
+import { toast } from "sonner";
 
 type RawEvent = {
   id: string;
@@ -41,12 +44,12 @@ function formatDay(s: string) {
     year: "numeric",
   });
 }
+/** Shows the stored HH:mm as it is (a time inside a DST gap must not move). */
 function formatTime(s: string) {
-  return toZonedDateTime(s).toPlainTime().toLocaleString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatHHMM(s.slice(11, 16));
 }
+
+const LOAD_ERROR = "Could not load shifts for this month. Check the connection and try again.";
 
 export function EmployeeScheduleCalendar({ events: initialEvents }: { events: RawEvent[] }) {
   const { resolvedTheme } = useTheme();
@@ -62,6 +65,7 @@ export function EmployeeScheduleCalendar({ events: initialEvents }: { events: Ra
         start: toZonedDateTime(e.start),
         end: toZonedDateTime(e.end),
         description: e.description,
+        _customContent: storedTimeContent(e),
       })),
     [events],
   );
@@ -80,9 +84,15 @@ export function EmployeeScheduleCalendar({ events: initialEvents }: { events: Ra
         const key = start + "|" + end;
         if (rangeRef.current === key) return;
         rangeRef.current = key;
-        void getMyScheduleEvents({ start, end }).then((res) => {
-          if (res.ok && rangeRef.current === key) setEvents(res.events);
-        });
+        getMyScheduleEvents({ start, end })
+          .then((res) => {
+            if (rangeRef.current !== key) return;
+            if (res.ok) setEvents(res.events);
+            else toast.error(LOAD_ERROR);
+          })
+          .catch(() => {
+            if (rangeRef.current === key) toast.error(LOAD_ERROR);
+          });
       },
     },
   });

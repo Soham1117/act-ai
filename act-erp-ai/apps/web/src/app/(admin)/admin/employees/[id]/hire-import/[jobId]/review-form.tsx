@@ -21,7 +21,7 @@ import {
   type HirePacketFileResult,
   type HirePacketProposals,
 } from "@/lib/hire-packet/types";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 type Props = {
   jobId: string;
@@ -81,7 +81,7 @@ export function HireImportReviewForm({
   const isApplied = status === "APPLIED";
 
   const refresh = useCallback(async () => {
-    const res = await getHirePacketImportStatus(jobId);
+    const res = await runAction(() => getHirePacketImportStatus(jobId));
     if (!res.ok) return;
     setStatus(res.status);
     setErrorMessage(res.errorMessage);
@@ -137,10 +137,10 @@ export function HireImportReviewForm({
 
   function onApply() {
     startTransition(async () => {
-      const res = await applyHirePacketImport({
+      const res = await runAction(() => applyHirePacketImport({
         jobId,
         selectedFields: [...selected],
-      });
+      }));
       if (!toastAction(res)) return;
       router.push(`/admin/employees/${employeeId}?tab=documents`);
       router.refresh();
@@ -149,7 +149,7 @@ export function HireImportReviewForm({
 
   function onRetry() {
     startTransition(async () => {
-      const res = await retryHirePacketImport(jobId);
+      const res = await runAction(() => retryHirePacketImport(jobId));
       if (!toastAction(res)) return;
       setErrorMessage(null);
       setStatus("PENDING"); // restarts polling
@@ -158,7 +158,7 @@ export function HireImportReviewForm({
 
   function onCancel() {
     startTransition(async () => {
-      const res = await cancelHirePacketImport(jobId);
+      const res = await runAction(() => cancelHirePacketImport(jobId));
       if (!toastAction(res)) return;
       router.push(`/admin/employees/${employeeId}`);
     });

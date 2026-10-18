@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createEmployee } from "@/server/actions/employees";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
 import { AdminPasswordField } from "./password-field";
 
@@ -111,7 +111,7 @@ export function AddEmployeeDialog({
 
   function onSubmit(values: Values) {
     startTransition(async () => {
-      const res = await createEmployee({
+      const res = await runAction(() => createEmployee({
         ...values,
         departmentId: values.departmentId === NONE ? null : values.departmentId,
         jobTitle: values.jobTitle || null,
@@ -122,7 +122,7 @@ export function AddEmployeeDialog({
         state: values.state || null,
         zipCode: values.zipCode || null,
         compensationValue: parseMoneyInput(values.compensationValue ?? ""),
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success(`Created ${values.name}`);
       setOpen(false);

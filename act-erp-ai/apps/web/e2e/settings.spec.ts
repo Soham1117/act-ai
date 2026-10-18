@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import bcrypt from "bcryptjs";
 import { db } from "./support/db";
+import { NETWORK_ERROR, STALE_ERROR } from "./support/action-errors";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE, env } from "./support/test-data";
 import { SS, empDbId, labelled, loginState } from "./support/self-service";
@@ -33,6 +34,25 @@ async function setPin(page: Page, password: string, pin: string, confirm = pin) 
   await labelled(c, "Confirm PIN").fill(confirm);
   return c;
 }
+
+test.describe("settings: kiosk PIN hint", () => {
+  test("names the temporary PIN only while it is still the PIN in use", async ({ page }) => {
+    const original = await pinHash();
+    try {
+      await db.employee.update({ where: { id: samId }, data: { kioskPinHash: await bcrypt.hash("3214", 4) } });
+      await page.goto("/dashboard/settings");
+      await expect(page.getByRole("main").getByText("Your temporary PIN is 3214.")).toBeVisible();
+
+      await db.employee.update({ where: { id: samId }, data: { kioskPinHash: await bcrypt.hash("7391", 4) } });
+      await page.goto("/dashboard/settings");
+      await expect(page.getByRole("main").getByText("Change your kiosk PIN here.")).toBeVisible();
+      await expect(page.getByText(/temporary PIN is/i)).toHaveCount(0);
+      await expect(page.getByText("3214")).toHaveCount(0);
+    } finally {
+      await db.employee.update({ where: { id: samId }, data: { kioskPinHash: original } });
+    }
+  });
+});
 
 test.describe("settings: kiosk PIN", () => {
   test("sets a new PIN: stored as a hash, audited, and the form is cleared", async ({ page }) => {
@@ -107,15 +127,18 @@ test.describe("settings: kiosk PIN", () => {
     let c = await setPin(page, SS.sam.password, "7391");
     await failServerActions(page, "abort", { match: "7391" });
     await c.getByRole("button", { name: "Set PIN" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
+    // The form keeps what was typed.
+    await expect(labelled(c, "Current password")).toHaveValue(SS.sam.password);
     expect(await pinHash()).toBe(before);
 
     await page.unroute("**/*");
     c = await setPin(page, SS.sam.password, "7391");
     await failServerActions(page, "stale", { match: "7391" });
     await c.getByRole("button", { name: "Set PIN" }).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
+    await expectNoCrash(page);
     expect(await pinHash()).toBe(before);
 
     await page.unroute("**/*");
@@ -193,7 +216,8 @@ test.describe("settings: personal email and consents", () => {
     await page.goto("/dashboard/settings");
     await failServerActions(page, "abort", { times: 1 });
     await page.getByRole("button", { name: "I consent to electronic W-2 delivery" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    await expectNoCrash(page);
     expect((await db.employee.findUniqueOrThrow({ where: { id: samId } })).w2ConsentAt).toBeNull();
     await page.unroute("**/*");
     await page.goto("/dashboard/settings");
@@ -207,7 +231,9 @@ test.describe("settings: personal email and consents", () => {
     await page.goto("/dashboard/settings");
     await expect(page.getByText(SS.sam.email)).toBeVisible();
     await expect(page.getByText(SS.sam.name, { exact: true })).toBeVisible();
-    await expect(page.getByText("Your temporary PIN is 3214.")).toBeVisible();
+    // Sam has already changed the PIN by now, so the card must not name the temporary one.
+    await expect(page.getByText("Kiosk PIN", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/temporary PIN is/i)).toHaveCount(0);
   });
 });
 

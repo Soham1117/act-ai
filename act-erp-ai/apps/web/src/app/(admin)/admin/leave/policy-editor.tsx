@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { saveLeavePolicies } from "@/server/actions/leave";
 import type { AccrualMode, LeavePolicyValues } from "@/lib/leave-balance";
 
@@ -29,7 +29,7 @@ export function PolicyEditor({ initial }: { initial: Row[] }) {
 
   function save() {
     startTransition(async () => {
-      const res = await saveLeavePolicies({
+      const res = await runAction(() => saveLeavePolicies({
         policies: rows.map((r) => ({
           leaveType: r.leaveType as never,
           daysPerYear: Number(r.daysPerYear) || 0,
@@ -37,7 +37,7 @@ export function PolicyEditor({ initial }: { initial: Row[] }) {
           accrualMode: r.accrualMode,
           carryoverMax: Number(r.carryoverMax) || 0,
         })),
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Leave policy saved");
     });

@@ -13,6 +13,7 @@ import {
   textField,
 } from "./support/people";
 import { ADMIN_STATE, INACTIVE_JOB_CODE, JOB_CODE } from "./support/test-data";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -157,12 +158,12 @@ test.describe("admin job codes: create", () => {
     await restoreJobCodes(false);
   });
 
-  test("server failure shows the error screen and saves nothing", async ({ page }) => {
+  test("server failure shows a toast, keeps the dialog and saves nothing", async ({ page }) => {
     const dialog = await openNew(page);
     await fillNew(dialog, NEW("F1"), "Failing");
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await byCode(NEW("F1"))).toBeNull();
   });
@@ -172,7 +173,7 @@ test.describe("admin job codes: create", () => {
     await fillNew(dialog, NEW("F2"), "Failing");
     await failServerActions(page, "500");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     expect(await byCode(NEW("F2"))).toBeNull();
   });
 
@@ -191,9 +192,9 @@ test.describe("admin job codes: create", () => {
     await fillNew(dialog, NEW("ST"), "Stale");
     await failServerActions(page, "stale");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    await expect
-      .poll(async () => (await page.getByText(/something went wrong|refresh|reload|try again/i).count()) > 0)
-      .toBe(true);
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
+    await expectNoCrash(page);
+    await expect(dialog).toBeVisible();
     expect(await byCode(NEW("ST"))).toBeNull();
   });
 });
@@ -305,7 +306,7 @@ test.describe("admin job codes: edit, default, active", () => {
     await textField(dialog, "Title").fill("Never saved");
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await byCode(NEW("A2B")))?.title).not.toBe("Never saved");
   });
 
@@ -396,7 +397,7 @@ test.describe("admin job codes: deactivate and delete", () => {
     await openList(page);
     await failServerActions(page, "abort");
     await rowMenu(page, NEW("FD"), /delete/i);
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect(await byCode(NEW("FD"))).not.toBeNull();
   });
 
@@ -404,7 +405,7 @@ test.describe("admin job codes: deactivate and delete", () => {
     await openList(page);
     await failServerActions(page, "abort");
     await rowMenu(page, NEW("FD"), /deactivate/i);
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await byCode(NEW("FD")))?.isActive).toBe(true);
   });
 

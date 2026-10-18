@@ -9,6 +9,7 @@ import { fakeS3Keys } from "./support/fake-s3";
 import { failServerActions, toast } from "./support/helpers";
 import { PEOPLE, personRow, personUrl, pngBytes } from "./support/people";
 import { ADMIN_STATE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -152,7 +153,7 @@ test.describe("hire packet import", () => {
     await expect(applyBtn(page)).toBeVisible();
     await failServerActions(page, "abort", { times: 1 });
     await applyBtn(page).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await db.hirePacketImport.findUniqueOrThrow({ where: { id: job.id } })).status).toBe("READY");
 
     await page.goto(`/admin/employees/${e.id}/hire-import/${job.id}`);
@@ -218,14 +219,13 @@ test.describe("hire packet import", () => {
     const bigPath = join(tmpdir(), "pp-big.zip");
     writeFileSync(bigPath, Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(51 * 1024 * 1024)]));
     await upload(page, "hp2", bigPath);
-    // The server says "too large", or the request is cut off by the body limit; either way no job.
-    await expect(
-      toast(page, /too large \(max 50 mb\)/i).or(page.getByText(/something went wrong|unexpected end of form/i).first()),
-    ).toBeVisible({ timeout: 60_000 });
+    // The 60 MB proxy limit lets the 51 MB body through, so the server answers with the proper message.
+    await expect(toast(page, /too large \(max 50 mb\)/i)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/something went wrong|unexpected end of form/i)).toHaveCount(0);
     expect((await jobs("hp2")).length).toBe(before);
   });
 
-  test("upload: server failure shows the error screen and no job is left behind", async ({ page }) => {
+  test("upload: server failure shows a toast and no job is left behind", async ({ page }) => {
     const before = (await jobs("hp2")).length;
     await page.goto(await personUrl("hp2"));
     if (await page.getByText("Page not found").count()) await page.reload();
@@ -234,7 +234,9 @@ test.describe("hire packet import", () => {
     await dialog.getByLabel(/zip file/i).setInputFiles({ name: "p.zip", mimeType: "application/zip", buffer: await goodZip() });
     await failServerActions(page, "abort", { times: 1 });
     await dialog.getByRole("button", { name: /upload & process/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     expect((await jobs("hp2")).length).toBe(before);
   });
 });

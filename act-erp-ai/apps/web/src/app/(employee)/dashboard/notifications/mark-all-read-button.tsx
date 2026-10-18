@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { markAllNotificationsRead } from "@/server/actions/notifications";
 import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notification-events";
 
@@ -19,7 +19,7 @@ export function MarkAllReadButton() {
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          const res = await markAllNotificationsRead();
+          const res = await runAction(() => markAllNotificationsRead());
           if (!toastAction(res)) return;
           window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
           router.refresh();

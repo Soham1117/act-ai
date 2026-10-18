@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { rollForwardPlanYear } from "@/server/actions/benefits";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { tierLabel } from "@/lib/benefits";
 
 const TIERS = [
@@ -72,7 +72,7 @@ export function RollForwardDialog({
             employerCost: Number(tierPrices[t].employerCost),
           }))
         : undefined;
-      const res = await rollForwardPlanYear({ oldPlanId: plan.id, planYearStart, planYearEnd, tiers });
+      const res = await runAction(() => rollForwardPlanYear({ oldPlanId: plan.id, planYearStart, planYearEnd, tiers }));
       if (!toastAction(res)) return;
       toast.success(`Rolled forward — ${res.migratedCount} enrollment(s) mirrored to the new plan year`);
       setOpen(false);

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { db } from "./support/db";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE, INACTIVE_JOB_CODE } from "./support/test-data";
 import {
@@ -192,13 +193,16 @@ test.describe("admin deletes a shift", () => {
 
   test("dropped connection / 500 / stale: error shown, shift kept", async ({ page }) => {
     await insertShift({ employeeId: SAM.employeeId, date: localYmd(), start: "08:00", end: "12:00" });
+    const message = { abort: NETWORK_ERROR, "500": SERVER_ERROR, stale: STALE_ERROR };
     for (const mode of ["abort", "500", "stale"] as const) {
       const dialog = await openEdit(page, SAM.name);
       await failServerActions(page, mode, { times: 1 });
       await dialog.getByRole("button", { name: /^delete$/i }).click();
       await page.getByRole("alertdialog").getByRole("button", { name: /^delete$/i }).click();
-      await expect(page.getByText(/something went wrong|refresh|new version/i).first()).toBeVisible();
+      await expect(toast(page, message[mode])).toBeVisible();
       await expectNoCrash(page);
+      // The delete confirmation stays open (the edit dialog sits behind it).
+      await expect(page.getByRole("alertdialog")).toBeVisible();
       expect(await shiftsOf(SAM.employeeId)).toHaveLength(1);
       await page.unrouteAll({ behavior: "ignoreErrors" });
     }
@@ -219,13 +223,17 @@ test.describe("admin deletes a shift", () => {
 test.describe("edit failures", () => {
   test("save: dropped connection and 500 keep the old values", async ({ page }) => {
     await insertShift({ employeeId: SAM.employeeId, date: localYmd(), start: "08:00", end: "12:00" });
+    const message = { abort: NETWORK_ERROR, "500": SERVER_ERROR };
     for (const mode of ["abort", "500"] as const) {
       const dialog = await openEdit(page, SAM.name);
       await endInput(dialog).fill("15:00");
       await failServerActions(page, mode, { times: 1 });
       await save(dialog).click();
-      await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+      await expect(toast(page, message[mode])).toBeVisible();
       await expectNoCrash(page);
+      // The dialog stays open with the typed value.
+      await expect(dialog).toBeVisible();
+      await expect(endInput(dialog)).toHaveValue("15:00");
       expect((await shiftsOf(SAM.employeeId))[0]!.endTime).toBe("12:00");
       await page.unrouteAll({ behavior: "ignoreErrors" });
     }

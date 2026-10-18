@@ -17,6 +17,7 @@ import {
   textField,
 } from "./support/people";
 import { ADMIN_STATE, env } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 test.afterAll(async () => {
@@ -25,9 +26,9 @@ test.afterAll(async () => {
   await db.department.deleteMany({ where: { name: { startsWith: "E2E Temp Dept" } } });
 });
 
-// After a successful submit the action revalidates paths, so the page may re-render as the
-// "Completed" card before the in-form thank-you shows. Both mean success.
-const DONE_RE = /you.re all set|your account has been created/i;
+// After a successful submit the page refreshes (invite now COMPLETED) but the form must still
+// show the thank-you message. Assert it strictly.
+const DONE_RE = /thanks, you.re all set/i;
 const PASS = "Onboard-Pass-123";
 const uname = (n: string) => `${NEW_PREFIX}-${n}`;
 
@@ -142,13 +143,15 @@ test.describe("onboarding: admin invites", () => {
     expect(await db.onboardingInvite.count()).toBe(before);
   });
 
-  test("generate: failure shows the error screen; double click makes one invite", async ({ page }) => {
+  test("generate: failure shows a toast; double click makes one invite", async ({ page }) => {
     const beforeIds = (await db.onboardingInvite.findMany({ select: { id: true } })).map((i) => i.id);
     const before = beforeIds.length;
     let d = await openDialog(page);
     await failServerActions(page, "abort");
     await d.getByRole("button", { name: /generate link/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(d).toBeVisible();
     expect(await db.onboardingInvite.count()).toBe(before);
 
     d = await openDialog(page);
@@ -185,7 +188,7 @@ test.describe("onboarding: admin invites", () => {
     await page.goto("/admin/onboarding");
     await failServerActions(page, "abort");
     await page.getByRole("listitem").filter({ hasText: inv.email! }).getByRole("button").last().click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await db.onboardingInvite.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe("PENDING");
   });
 });
@@ -380,7 +383,7 @@ test.describe("onboarding: the new hire submits", () => {
     await fillWizard(page, { name: "Retry Person", username: uname("retry") });
     await failServerActions(page, "abort", { times: 1 });
     await submit(page).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.onboardingInvite.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe("PENDING");
     await page.context().close();

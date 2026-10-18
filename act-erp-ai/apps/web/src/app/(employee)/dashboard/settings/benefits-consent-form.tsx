@@ -6,7 +6,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { consentToBenefitsEDelivery, withdrawBenefitsEConsent } from "@/server/actions/employees";
 
 export function BenefitsConsentForm({ consented }: { consented: boolean }) {
@@ -16,7 +16,7 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
 
   function give() {
     startTransition(async () => {
-      const res = await consentToBenefitsEDelivery();
+      const res = await runAction(() => consentToBenefitsEDelivery());
       if (!toastAction(res)) return;
       setIsConsented(true);
       toast.success("Electronic benefits document delivery enabled");
@@ -26,7 +26,7 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
 
   function withdraw() {
     startTransition(async () => {
-      const res = await withdrawBenefitsEConsent();
+      const res = await runAction(() => withdrawBenefitsEConsent());
       if (!toastAction(res)) return;
       setIsConsented(false);
       toast.success("Reverted to paper delivery for benefits documents");

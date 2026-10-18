@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { upsertBenefitPlan } from "@/server/actions/benefits";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { tierLabel } from "@/lib/benefits";
 
 const TYPES = [
@@ -123,7 +123,7 @@ export function PlanDialog({ plan }: { plan?: PlanForEdit }) {
         vestingDescription: vestingDescription || undefined,
         notes: notes || undefined,
       };
-      const planRes = await upsertBenefitPlan(input);
+      const planRes = await runAction(() => upsertBenefitPlan(input));
       if (!toastAction(planRes)) return;
 
       toast.success(isEdit ? "Plan updated" : "Plan created");

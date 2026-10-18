@@ -2,8 +2,10 @@
 
 import { toast } from "sonner";
 import {
+  type ActionFail,
   type ActionOk,
   type ActionResult,
+  failFromUnknown,
   humanizeUnexpectedError,
   isDigestErrorMessage,
 } from "@/lib/action-result";
@@ -31,4 +33,24 @@ export function toastCaught(err: unknown, fallback = DEFAULT_FALLBACK): void {
     return;
   }
   toast.error(humanizeUnexpectedError(err) ?? fallback);
+}
+
+/**
+ * Await a server action call. If the call throws (connection drop, server
+ * crash, stale deploy) the error is turned into a plain `{ ok: false, error }`
+ * result, so the usual `toastAction(res)` check shows the toast and the caller
+ * keeps its dialog and typed values instead of the error boundary taking over.
+ *
+ *   const res = await runAction(() => someAction(input));
+ *   if (!toastAction(res)) return;
+ */
+export async function runAction<T extends { ok: boolean }>(
+  call: () => Promise<T>,
+  fallback?: string,
+): Promise<T | ActionFail> {
+  try {
+    return await call();
+  } catch (err) {
+    return failFromUnknown(err, fallback);
+  }
 }

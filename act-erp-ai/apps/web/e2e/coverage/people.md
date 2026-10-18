@@ -6,8 +6,8 @@ Seed: `e2e/seed-parts/30-people.ts`. Helpers: `e2e/support/people.ts`, `people-d
 |---|---|---|---|
 | `createDepartment` | happy path, upper-case code, blank code allowed | covered | departments.spec.ts |
 | `createDepartment` | duplicate name / duplicate code / too short / server failure / double click / stale deployment | covered | departments.spec.ts |
-| `updateDepartment` | any | not-testable | no UI calls it (dead action); proposed: add an Edit dialog |
-| `deleteDepartment` | with employees, with open invite, empty | not-testable | no UI calls it (dead action); proposed: add a Delete button |
+| `updateDepartment` | happy path, clear code/description, duplicate name/code, too short, deleted meanwhile, server failure, double click | covered | departments.spec.ts "admin departments: edit" |
+| `deleteDepartment` | empty (with confirmation), cancel, with employees, with open invite, deleted meanwhile, server failure, double click | covered | departments.spec.ts "admin departments: delete" |
 | `createJobCode` | happy path, upper-case, rate NA, default clears old default | covered | job-codes.spec.ts |
 | `createJobCode` | duplicate code, short/long values, failure, double click, stale | covered | job-codes.spec.ts |
 | `updateJobCode` | edit fields, duplicate code, rename, default switch, retire, deleted meanwhile, failure, double click | covered | job-codes.spec.ts |

@@ -102,8 +102,16 @@ export function humanizeUnexpectedError(err: unknown): string | null {
     if (/failed to fetch|networkerror|load failed|network request failed/i.test(err.message)) {
       return "Could not reach the server. Check the connection and try again.";
     }
-    if (/failed to find server action/i.test(err.message)) {
+    if (/failed to find server action|was not found on the server/i.test(err.message)) {
       return "This page is out of date. Reload the page and try again.";
+    }
+    // The server crashed or a proxy in front of it failed: Next.js throws the raw body.
+    if (
+      /^internal server error$|unexpected response was received from the server|bad gateway|service unavailable|gateway time-?out/i.test(
+        err.message.trim(),
+      )
+    ) {
+      return "The server had a problem. Try again in a moment.";
     }
     // Don't leak raw Prisma / DB internals if they slipped through.
     if (/prisma|invocation|postgres|econnrefused/i.test(err.message)) {

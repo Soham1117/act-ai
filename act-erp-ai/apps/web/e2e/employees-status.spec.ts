@@ -13,6 +13,7 @@ import {
   purgeNewPeople,
 } from "./support/people";
 import { ADMIN_STATE, KIOSK_ACTIVE_SLUG } from "./support/test-data";
+import { NETWORK_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -200,7 +201,7 @@ test.describe("admin: terminate and reactivate", () => {
     await page.getByRole("button", { name: /^terminate$/i }).click();
     await failServerActions(page, "abort");
     await terminateDialog(page).getByRole("button", { name: /^terminate$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await personRow("terry")).employmentStatus).toBe("ACTIVE");
   });
@@ -222,7 +223,10 @@ test.describe("admin: terminate and reactivate", () => {
     await page.getByRole("button", { name: /^terminate$/i }).click();
     await failServerActions(page, "stale");
     await terminateDialog(page).getByRole("button", { name: /^terminate$/i }).click();
-    await expect.poll(async () => (await page.getByText(/something went wrong|refresh|reload|try again/i).count()) > 0).toBe(true);
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
+    await expectNoCrash(page);
+    // The terminate dialog stays open.
+    await expect(terminateDialog(page)).toBeVisible();
     expect((await personRow("terry")).employmentStatus).toBe("ACTIVE");
   });
 
@@ -254,7 +258,7 @@ test.describe("admin: bulk actions", () => {
     await page.getByRole("button", { name: /^terminate 1$/i }).click();
     await failServerActions(page, "abort");
     await page.getByRole("dialog").getByRole("button", { name: /^terminate$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await personRow("bulkA")).employmentStatus).toBe("ACTIVE");
   });
 
@@ -329,7 +333,9 @@ test.describe("admin: bulk actions", () => {
     await dialog.locator("input:not([type=checkbox])").fill("DELETE");
     await failServerActions(page, "abort", { times: 1 });
     await dialog.getByRole("button", { name: /delete permanently/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    // This dialog shows its errors inline; it stays open with "DELETE" typed.
+    await expect(dialog.getByText(NETWORK_ERROR)).toBeVisible();
+    await expect(dialog.locator("input:not([type=checkbox])")).toHaveValue("DELETE");
     expect(await db.employee.count({ where: { employeeId: PEOPLE.bulkC.employeeId } })).toBe(1);
 
     await page.reload();
@@ -391,7 +397,9 @@ test.describe("admin: approve or reject a pending hire", () => {
     const dialog = page.getByRole("dialog");
     await failServerActions(page, "abort", { times: 1 });
     await dialog.getByRole("button", { name: /reject and delete/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     expect(await db.employee.count({ where: { employeeId: PEOPLE.pend2.employeeId } })).toBe(1);
 
     await page.reload();

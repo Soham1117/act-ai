@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { changeEmployeePassword } from "@/server/actions/employees";
 import { AdminPasswordField } from "../password-field";
 
@@ -50,7 +50,7 @@ export function ChangePasswordModal({
       return;
     }
     startTransition(async () => {
-      const res = await changeEmployeePassword(employeeId, { password, mustChange });
+      const res = await runAction(() => changeEmployeePassword(employeeId, { password, mustChange }));
       if (!toastAction(res)) return;
       toast.success(`Password reset for ${employeeName}`);
       setOpen(false);

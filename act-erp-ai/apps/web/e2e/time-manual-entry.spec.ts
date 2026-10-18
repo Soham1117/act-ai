@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { PT, clearEntries, entriesUrl, hoursText, makeEntry, sessionFor } from "./support/payroll-time";
 import { ADMIN_STATE, INACTIVE_EMPLOYEE, JOB_CODE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 test.afterEach(() => clearEntries(PT.tina.employeeId));
@@ -207,7 +208,7 @@ test.describe("admin: add manual time entry", () => {
     await fillManual(dialog, {});
     await failServerActions(page, "abort");
     await submit(dialog);
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await tinaEntries()).toHaveLength(0);
   });

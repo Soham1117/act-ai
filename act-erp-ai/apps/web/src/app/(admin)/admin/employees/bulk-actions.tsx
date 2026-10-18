@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { bulkDeleteEmployees, bulkTerminateEmployees } from "@/server/actions/employees";
 import { todayDateString } from "@/lib/employee-validation";
 import { TERMINATION_GRACE_DAYS } from "@/lib/access";
@@ -105,10 +105,10 @@ export function BulkActions({
               disabled={pending || !date}
               onClick={() =>
                 startTransition(async () => {
-                  const res = await bulkTerminateEmployees(ids, {
+                  const res = await runAction(() => bulkTerminateEmployees(ids, {
                     terminationDate: date,
                     reason: reason || undefined,
-                  });
+                  }));
                   if (!toastAction(res)) return;
                   toast.success(
                     `Terminated ${res.count} employee${res.count === 1 ? "" : "s"}` +
@@ -173,7 +173,7 @@ export function BulkActions({
               onClick={() =>
                 startTransition(async () => {
                   setDeleteError(null);
-                  const res = await bulkDeleteEmployees(ids, { confirm: typed, force });
+                  const res = await runAction(() => bulkDeleteEmployees(ids, { confirm: typed, force }));
                   if (!res.ok) {
                     setDeleteError(res.error);
                     return;

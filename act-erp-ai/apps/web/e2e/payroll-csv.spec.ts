@@ -4,6 +4,7 @@ import { db } from "./support/db";
 import { expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ensurePayrollReady } from "./support/payroll-ready";
 import { ADMIN_STATE, EMPLOYEE, PAYROLL_BLOCKED_TITLE, PAYROLL_PERIOD_TITLE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -51,7 +52,7 @@ test.describe("admin: payroll CSV download", () => {
     page.on("download", () => (downloaded = true));
     await failServerActions(page, "abort");
     await page.getByRole("button", { name: /download csv/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(downloaded).toBe(false);
   });

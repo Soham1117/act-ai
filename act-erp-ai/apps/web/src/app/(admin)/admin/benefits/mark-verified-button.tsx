@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { markAllVerifiedToday } from "@/server/actions/benefits";
 
 /** For after the annual broker audit — resets the freshness StatCard on
@@ -15,7 +15,7 @@ export function MarkVerifiedButton() {
   function onClick() {
     if (!confirm("Mark every currently-open enrollment and 401(k) election as verified today?")) return;
     startTransition(async () => {
-      const res = await markAllVerifiedToday();
+      const res = await runAction(() => markAllVerifiedToday());
       if (!toastAction(res)) return;
       toast.success(`Marked verified: ${res.enrollments} enrollment(s), ${res.elections} election(s)`);
     });

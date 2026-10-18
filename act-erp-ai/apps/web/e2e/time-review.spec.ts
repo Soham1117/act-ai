@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { PT, clearEntries, makeEntry, sessionFor } from "./support/payroll-time";
 import { ADMIN_STATE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 const pendingUrl = (name: string) => `/admin/time-tracking?tab=pending&q=${encodeURIComponent(name)}`;
 /** Rex also has a seeded pending entry (March); always act on the Jul 7 row this test created. */
@@ -151,7 +152,7 @@ test.describe("time review: admin with an employee profile", () => {
     await page.goto(pendingUrl(PT.rex.name));
     await failServerActions(page, "abort");
     await jul7(page).getByRole("button", { name: /^approve$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await statusOf(e.id)).approvalStatus).toBe("PENDING");
     await page.unroute("**/*");

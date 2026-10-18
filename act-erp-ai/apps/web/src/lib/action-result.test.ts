@@ -41,6 +41,18 @@ describe("humanizeUnexpectedError", () => {
     );
   });
 
+  it("recognises the stale-action message the Next.js client throws", () => {
+    expect(
+      humanizeUnexpectedError(new Error('Server Action "abc" was not found on the server. Read more: https://nextjs.org/docs/messages/failed-to-find-server-action')),
+    ).toBe("This page is out of date. Reload the page and try again.");
+  });
+
+  it("turns a server crash body into a plain message", () => {
+    for (const m of ["Internal Server Error", "An unexpected response was received from the server.", "Bad Gateway"]) {
+      expect(humanizeUnexpectedError(new Error(m))).toBe("The server had a problem. Try again in a moment.");
+    }
+  });
+
   it("maps Prisma unique email conflicts", () => {
     expect(
       humanizeUnexpectedError({ code: "P2002", meta: { target: ["email"] } }),
