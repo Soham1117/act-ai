@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getDepartmentConfig } from "@/lib/departments";
 import { DepartmentDialog } from "./department-dialog";
+import { DepartmentActions } from "./department-actions";
 
 export const metadata = { title: "Departments" };
 
@@ -33,7 +34,12 @@ export default async function DepartmentsPage() {
           const cfg = getDepartmentConfig(d.name);
           const Icon = cfg.icon;
           return (
-            <Card key={d.id} className="transition-colors hover:border-primary/50">
+            <Card key={d.id} className="relative transition-colors hover:border-primary/50">
+              <div className="absolute bottom-2 right-2">
+                <DepartmentActions
+                  department={{ id: d.id, name: d.name, code: d.code, description: d.description }}
+                />
+              </div>
               <Link href={`/admin/departments/${d.id}`}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
