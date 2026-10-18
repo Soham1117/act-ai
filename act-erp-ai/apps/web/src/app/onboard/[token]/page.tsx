@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Brand } from "@/components/brand";
 import {
@@ -9,7 +8,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { OnboardingForm } from "./onboarding-form";
 
@@ -28,46 +26,10 @@ export default async function OnboardTokenPage({
   const expired = invite.status === "EXPIRED" || invite.expiresAt < new Date();
   const completed = invite.status === "COMPLETED";
 
-  if (completed || expired) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <header className="p-6">
-          <Brand href="/" />
-        </header>
-        <main className="flex flex-1 items-center justify-center p-6">
-          <Card className="w-full max-w-lg">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Welcome to ACT</CardTitle>
-                <Badge variant={completed ? "success" : "destructive"}>
-                  {completed ? "Completed" : "Expired"}
-                </Badge>
-              </div>
-              <CardDescription>
-                {completed
-                  ? "Your account has been created. Sign in with your username or work email and password."
-                  : "This invite has expired. Ask your admin for a new one."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button asChild className="w-full">
-                <Link href="/login">Go to sign in</Link>
-              </Button>
-              {!completed && (
-                <p className="text-center text-xs text-muted-foreground">
-                  Already finished onboarding? Sign in with the username or email you chose.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    );
-  }
-
   // Terms set by the admin on the invite. Shown for information only; the
   // new hire can't change them and the server ignores anything they send.
-  const department = invite.departmentId
+  const closed = completed || expired;
+  const department = !closed && invite.departmentId
     ? await db.department.findUnique({
         where: { id: invite.departmentId },
         select: { name: true },
@@ -81,6 +43,9 @@ export default async function OnboardTokenPage({
       : null,
   ].filter(Boolean) as string[];
 
+  // One layout for every state, so the form keeps its own state when a successful
+  // submit refreshes this page (the invite is then COMPLETED): the client still shows
+  // "Thanks, you're all set" instead of being replaced by the generic card.
   return (
     <div className="flex min-h-screen flex-col">
       <header className="p-6">
@@ -89,10 +54,20 @@ export default async function OnboardTokenPage({
       <main className="flex flex-1 items-center justify-center p-6">
         <Card className="w-full max-w-3xl">
           <CardHeader>
-            <CardTitle>Welcome to ACT</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Welcome to ACT</CardTitle>
+              {closed && (
+                <Badge variant={completed ? "success" : "destructive"}>
+                  {completed ? "Completed" : "Expired"}
+                </Badge>
+              )}
+            </div>
             <CardDescription>
-              Tell us about yourself and set up your account. This link expires{" "}
-              {invite.expiresAt.toLocaleDateString()}.
+              {completed
+                ? "Your account has been created. Sign in with your username or work email and password."
+                : expired
+                  ? "This invite has expired. Ask your admin for a new one."
+                  : `Tell us about yourself and set up your account. This link expires ${invite.expiresAt.toLocaleDateString()}.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -105,7 +80,11 @@ export default async function OnboardTokenPage({
                 </p>
               </div>
             )}
-            <OnboardingForm token={token} suggestedEmail={invite.email ?? ""} />
+            <OnboardingForm
+              token={token}
+              suggestedEmail={invite.email ?? ""}
+              status={completed ? "completed" : expired ? "expired" : "open"}
+            />
           </CardContent>
         </Card>
       </main>

@@ -25,9 +25,9 @@ test.afterAll(async () => {
   await db.department.deleteMany({ where: { name: { startsWith: "E2E Temp Dept" } } });
 });
 
-// After a successful submit the action revalidates paths, so the page may re-render as the
-// "Completed" card before the in-form thank-you shows. Both mean success.
-const DONE_RE = /you.re all set|your account has been created/i;
+// After a successful submit the page refreshes (invite now COMPLETED) but the form must still
+// show the thank-you message. Assert it strictly.
+const DONE_RE = /thanks, you.re all set/i;
 const PASS = "Onboard-Pass-123";
 const uname = (n: string) => `${NEW_PREFIX}-${n}`;
 
