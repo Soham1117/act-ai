@@ -41,14 +41,25 @@ test.describe("admin: on site tab", () => {
     await expect(li.getByRole("link", { name: w.name })).toHaveAttribute("href", `/admin/contract-workers/${w.id}`);
   });
 
-  test("a stale open shift (over 16 hours) is not counted as on site", async ({ page }) => {
+  test("a stale open shift (over 16 hours) is shown flagged, with a Clock out button, but is not counted as working", async ({ page }) => {
     const w = await makeWorker();
-    await makeOpenEntry(w.id, 20);
+    const open = await makeOpenEntry(w.id, 20);
     await openOnSite(page);
-    await expect(item(page, w.name)).toHaveCount(0);
-    // The workers tab agrees: shown as off site.
+    const li = item(page, w.name);
+    await expect(li).toBeVisible();
+    await expect(li).toContainText("Open more than 16 hours");
+    await expect(li).not.toContainText("Working");
+    // The workers tab still shows the worker as off site.
     await page.goto(`/admin/contract-workers?tab=workers&q=${encodeURIComponent(w.name)}`);
     await expect(page.getByRole("row").filter({ hasText: w.name })).toContainText(/off site/i);
+    // Closing it from On site caps it at 16 hours and keeps the auto-close note.
+    await openOnSite(page);
+    await clockOutBtn(page, w.name).click();
+    await confirmBtn(page).click();
+    await expect(toast(page, /clocked out/i)).toBeVisible();
+    const closed = await db.contractTimeEntry.findUniqueOrThrow({ where: { id: open.id } });
+    expect(closed).toMatchObject({ status: "COMPLETED", autoClosed: true, totalWorkMin: 16 * 60 });
+    await expect(item(page, w.name)).toHaveCount(0);
   });
 
   test("an empty on-site list says nobody is clocked in", async ({ page }) => {
@@ -190,7 +201,7 @@ test.describe("admin: on site tab", () => {
   });
 
   test("a clock-out for a shift that ran past 16 hours is capped and flagged for review", async ({ page }) => {
-    // The UI does not list stale shifts on site, but the action is still reachable (e.g. an old page).
+    // Re-aim a real request at the stale worker (same action the On site button sends).
     // Capture a real request for another worker and re-aim it at the stale one.
     const live = await makeWorker();
     await makeOpenEntry(live.id, 1);
@@ -207,13 +218,15 @@ test.describe("admin: on site tab", () => {
     const closed = await db.contractTimeEntry.findUniqueOrThrow({ where: { id: staleEntry.id } });
     expect(closed).toMatchObject({ status: "COMPLETED", autoClosed: true, approvalStatus: "PENDING", totalWorkMin: 16 * 60 });
     expect(closed.clockOut!.getTime() - closed.clockIn.getTime()).toBe(16 * 3_600_000);
-    // Observation: the admin clock-out overwrites the auto-close editReason; autoClosed stays true.
+    // The admin clock-out keeps the auto-close note and adds its own reason after it.
+    expect(closed.editReason).toContain("Auto-closed: shift ran longer than 16 hours");
+    expect(closed.editReason).toContain("Clocked out by an admin.");
     expect(await db.auditLog.count({ where: { action: "contract.time.auto_close", resource: `ContractTimeEntry:${staleEntry.id}` } })).toBe(0); // admin clock-out audits as force_clock_out
     expect(await auditCount("contract.time.force_clock_out", staleEntry.id)).toBe(1);
   });
 
   test("the On site count in the tab and the summary card follows reality", async ({ page }) => {
-    const before = await db.contractTimeEntry.count({ where: { status: { in: ["ACTIVE", "ON_BREAK"] }, clockIn: { gt: new Date(Date.now() - 16 * 3_600_000) } } });
+    const before = await db.contractTimeEntry.count({ where: { status: { in: ["ACTIVE", "ON_BREAK"] } } });
     const w = await makeWorker({ name: uniq("Counted") });
     await makeOpenEntry(w.id, 1);
     await openOnSite(page);

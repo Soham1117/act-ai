@@ -125,7 +125,11 @@ export async function listContractTimeEntries(args: {
   });
 }
 
-/** Workers clocked in right now (open entries that aren't stale). */
+/**
+ * Open entries (ACTIVE / ON_BREAK). Each has `stale: true` when the shift has
+ * run past the max shift length: it is not counted as on site, but an admin
+ * must still be able to close it.
+ */
 export async function onSiteNow() {
   const open = await db.contractTimeEntry.findMany({
     where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
@@ -137,7 +141,7 @@ export async function onSiteNow() {
     },
   });
   const now = new Date();
-  return open.filter((e) => !isStaleShift(e.clockIn, now));
+  return open.map((e) => ({ ...e, stale: isStaleShift(e.clockIn, now) }));
 }
 
 /**

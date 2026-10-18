@@ -53,15 +53,7 @@ test.describe("admin hours: approve and reject", () => {
     await expect(approveBtn(page, w.name)).toHaveCount(0);
   });
 
-  // POSSIBLE BUG (seen only on GitHub CI, production build, 4 of 5 runs; never
-  // reproduced locally, also not with CI=1): after Approve the toast shows and the
-  // DB row is APPROVED, but the visible Hours table keeps showing "Pending" with
-  // the Approve button for 45s+. hours-table.tsx calls router.refresh() and the
-  // action revalidates /admin/contract-workers. The page also showed two copies
-  // of the tab content (strict-mode "2 elements" errors), which points at a
-  // hydration mismatch / duplicate render. Proposed next step: capture a CI trace
-  // of this test and check hydration errors on /admin/contract-workers.
-  test.fixme("the Hours table updates in place after Approve (no reload)", async ({ page }) => {
+  test("the Hours table updates in place after Approve (no reload)", async ({ page }) => {
     const { agency, w } = await setup();
     await makeEntry(w.id);
     await openHours(page, agency.id);

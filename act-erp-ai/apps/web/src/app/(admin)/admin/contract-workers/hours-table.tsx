@@ -47,6 +47,11 @@ export function DownloadHoursCsvButton({
     startTransition(async () => {
       const res = await exportContractHoursCsv({ from, to, agencyId: agencyId || undefined });
       if (!toastAction(res)) return;
+      // Header row only: nothing to export.
+      if (!res.csv.includes("\n")) {
+        toast.info("No entries in this range, so there is nothing to export.");
+        return;
+      }
       const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
