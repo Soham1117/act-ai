@@ -15,20 +15,56 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { runAction, toastAction } from "@/lib/toast-action";
-import { createDepartment } from "@/server/actions/departments";
+import { toastAction, toastCaught } from "@/lib/toast-action";
+import { createDepartment, updateDepartment } from "@/server/actions/departments";
 
-export function DepartmentDialog() {
-  const [open, setOpen] = useState(false);
+export type DepartmentFormValues = {
+  id: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+};
+
+/**
+ * Create dialog (with its own "New department" button) or, when `existing` is
+ * given, a controlled edit dialog for that department.
+ */
+export function DepartmentDialog({
+  existing,
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  existing?: DepartmentFormValues;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
+  const [innerOpen, setInnerOpen] = useState(false);
+  const open = controlledOpen ?? innerOpen;
+  const setOpen = (v: boolean) => {
+    setInnerOpen(v);
+    onOpenChange?.(v);
+  };
   const [pending, startTransition] = useTransition();
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState(existing?.name ?? "");
+  const [code, setCode] = useState(existing?.code ?? "");
+  const [description, setDescription] = useState(existing?.description ?? "");
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await runAction(() => createDepartment({ name, code: code || null, description: description || null }));
+      const input = { name, code: code || null, description: description || null };
+      if (existing) {
+        try {
+          const res = await updateDepartment(existing.id, input);
+          if (!toastAction(res)) return;
+          toast.success(`Saved ${name.trim()}`);
+          setOpen(false);
+        } catch (err) {
+          toastCaught(err);
+        }
+        return;
+      }
+      const res = await createDepartment(input);
       if (!toastAction(res)) return;
       toast.success(`Created ${name}`);
       setOpen(false);
@@ -38,12 +74,14 @@ export function DepartmentDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> New department</Button>
-      </DialogTrigger>
+      {!existing && (
+        <DialogTrigger asChild>
+          <Button><Plus className="mr-2 h-4 w-4" /> New department</Button>
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New department</DialogTitle>
+          <DialogTitle>{existing ? "Edit department" : "New department"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-1.5">
@@ -62,7 +100,7 @@ export function DepartmentDialog() {
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={pending || name.length < 2}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create
+              {existing ? "Save" : "Create"}
             </Button>
           </DialogFooter>
         </form>

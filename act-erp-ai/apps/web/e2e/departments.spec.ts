@@ -1,8 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { DEPTS, PEOPLE, anonContext, textField } from "./support/people";
-import { ADMIN_STATE } from "./support/test-data";
+import { ADMIN_STATE, env } from "./support/test-data";
 import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
@@ -192,5 +193,214 @@ test.describe("admin departments: pages", () => {
     await page.goto("/admin/departments");
     await expect(page).toHaveURL(/\/login\?next=%2Fadmin%2Fdepartments/);
     await context.close();
+  });
+});
+
+// ---- edit and delete ----------------------------------------------------------------------
+
+let seq = 0;
+async function makeDept(over: { name?: string; code?: string | null; description?: string | null } = {}) {
+  seq += 1;
+  return db.department.create({
+    data: {
+      name: over.name ?? `${CREATED} Own ${Date.now()}-${seq}`,
+      code: over.code === undefined ? null : over.code,
+      description: over.description ?? null,
+    },
+  });
+}
+
+async function openActions(page: Page, name: string, item: "Edit" | "Delete") {
+  await page.goto("/admin/departments");
+  await page.getByRole("button", { name: `Actions for ${name}` }).click();
+  await page.getByRole("menuitem", { name: item }).click();
+}
+
+const editDialog = (page: Page) => page.getByRole("dialog", { name: /edit department/i });
+const deleteDialog = (page: Page) => page.getByRole("dialog", { name: /^delete /i });
+const getDept = (id: string) => db.department.findUniqueOrThrow({ where: { id } });
+const auditCount = (action: string, id: string) =>
+  db.auditLog.count({ where: { action, resource: `Department:${id}` } });
+
+test.describe("admin departments: edit", () => {
+  test("edits name, code and description; the code is saved upper-case; audited", async ({ page }) => {
+    const d = await makeDept({ code: "OLDC", description: "Old text" });
+    await openActions(page, d.name, "Edit");
+    const dialog = editDialog(page);
+    await expect(textField(dialog, "Name")).toHaveValue(d.name);
+    await expect(textField(dialog, "Short code (optional)")).toHaveValue("OLDC");
+    await textField(dialog, "Name").fill(`${d.name} Renamed`);
+    await textField(dialog, "Short code (optional)").fill("newc");
+    await dialog.getByRole("textbox").last().fill("New text");
+    await dialog.getByRole("button", { name: /^save$/i }).click();
+    await expect(toast(page, `Saved ${d.name} Renamed`)).toBeVisible();
+    await expect(dialog).toBeHidden();
+    expect(await getDept(d.id)).toMatchObject({
+      name: `${d.name} Renamed`,
+      code: "NEWC",
+      description: "New text",
+    });
+    expect(await auditCount("department.update", d.id)).toBe(1);
+    await expect(page.getByRole("link", { name: new RegExp(`${d.name} Renamed`) })).toContainText("NEWC");
+  });
+
+  test("clearing the code and description saves them as null", async ({ page }) => {
+    const d = await makeDept({ code: "CLR", description: "Gone soon" });
+    await openActions(page, d.name, "Edit");
+    const dialog = editDialog(page);
+    await textField(dialog, "Short code (optional)").fill("");
+    await dialog.getByRole("textbox").last().fill("");
+    await dialog.getByRole("button", { name: /^save$/i }).click();
+    await expect(toast(page, `Saved ${d.name}`)).toBeVisible();
+    expect(await getDept(d.id)).toMatchObject({ code: null, description: null });
+  });
+
+  test("a duplicate name or code is refused with a clear message and nothing changes", async ({ page }) => {
+    const d = await makeDept({ code: "EDUP" });
+    await openActions(page, d.name, "Edit");
+    const dialog = editDialog(page);
+    await textField(dialog, "Name").fill(DEPTS.staffed.name);
+    await dialog.getByRole("button", { name: /^save$/i }).click();
+    await expect(toast(page, /that name is already taken/i)).toBeVisible();
+    await expect(dialog).toBeVisible();
+    await textField(dialog, "Name").fill(d.name);
+    await textField(dialog, "Short code (optional)").fill(DEPTS.staffed.code);
+    await dialog.getByRole("button", { name: /^save$/i }).click();
+    await expect(toast(page, /that code is already in use/i)).toBeVisible();
+    expect(await getDept(d.id)).toMatchObject({ name: d.name, code: "EDUP" });
+  });
+
+  test("a name that is too short once trimmed is refused by the server", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Edit");
+    const dialog = editDialog(page);
+    await expect(dialog.getByRole("button", { name: /^save$/i })).toBeEnabled();
+    await textField(dialog, "Name").fill("A");
+    await expect(dialog.getByRole("button", { name: /^save$/i })).toBeDisabled();
+    await textField(dialog, "Name").fill(" x");
+    await dialog.getByRole("button", { name: /^save$/i }).click();
+    await expect(toast(page, /check name/i)).toBeVisible();
+    expect((await getDept(d.id)).name).toBe(d.name);
+  });
+
+  test("editing a department deleted meanwhile says so", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Edit");
+    await db.department.delete({ where: { id: d.id } });
+    const dialog = editDialog(page);
+    await textField(dialog, "Name").fill(`${d.name} Late`);
+    await dialog.getByRole("button", { name: /^save$/i }).click();
+    await expect(toast(page, /that department no longer exists/i)).toBeVisible();
+    expect(await db.department.count({ where: { name: `${d.name} Late` } })).toBe(0);
+  });
+
+  test("server failure shows an error and saves nothing", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Edit");
+    const dialog = editDialog(page);
+    await textField(dialog, "Name").fill(`${d.name} Fail`);
+    await failServerActions(page, "abort");
+    await dialog.getByRole("button", { name: /^save$/i }).click();
+    await expect(toast(page, /could not reach the server|something went wrong/i)).toBeVisible();
+    await expectNoCrash(page);
+    expect((await getDept(d.id)).name).toBe(d.name);
+  });
+
+  test("double click on Save saves once", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Edit");
+    const dialog = editDialog(page);
+    await textField(dialog, "Name").fill(`${d.name} Twice`);
+    const calls = await delayServerActions(page, 1500);
+    await dialog.getByRole("button", { name: /^save$/i }).dblclick();
+    await expect(toast(page, `Saved ${d.name} Twice`)).toBeVisible();
+    expect(calls.count()).toBe(1);
+    expect(await auditCount("department.update", d.id)).toBe(1);
+  });
+});
+
+test.describe("admin departments: delete", () => {
+  test("deletes an empty department after confirmation; audited", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Delete");
+    const dialog = deleteDialog(page);
+    await expect(dialog).toContainText(d.name);
+    await dialog.getByRole("button", { name: /^delete$/i }).click();
+    await expect(toast(page, `Deleted ${d.name}`)).toBeVisible();
+    await expect(dialog).toBeHidden();
+    expect(await db.department.count({ where: { id: d.id } })).toBe(0);
+    expect(await auditCount("department.delete", d.id)).toBe(1);
+    await expect(page.getByRole("link", { name: new RegExp(d.name) })).toHaveCount(0);
+  });
+
+  test("cancelling the confirmation deletes nothing", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Delete");
+    await deleteDialog(page).getByRole("button", { name: /cancel/i }).click();
+    await expect(deleteDialog(page)).toBeHidden();
+    expect(await db.department.count({ where: { id: d.id } })).toBe(1);
+  });
+
+  test("a department that still has employees is refused with a clear message", async ({ page }) => {
+    await openActions(page, DEPTS.staffed.name, "Delete");
+    await deleteDialog(page).getByRole("button", { name: /^delete$/i }).click();
+    await expect(
+      toast(page, /cannot delete this department: 1 employee\(s\) are still assigned/i),
+    ).toBeVisible();
+    expect(await db.department.count({ where: { name: DEPTS.staffed.name } })).toBe(1);
+    expect(await db.employee.count({ where: { department: { name: DEPTS.staffed.name } } })).toBe(1);
+  });
+
+  test("a department with an open onboarding invite is refused", async ({ page }) => {
+    const d = await makeDept();
+    const admin = await db.user.findFirstOrThrow({ where: { email: env("E2E_ADMIN_EMAIL") } });
+    const invite = await db.onboardingInvite.create({
+      data: {
+        token: `pp-dept-${randomUUID()}`,
+        expiresAt: new Date(Date.now() + 86_400_000),
+        createdById: admin.id,
+        departmentId: d.id,
+        employmentType: "FULL_PART_TIME",
+        compensationType: "HOURLY_RATE",
+      },
+    });
+    try {
+      await openActions(page, d.name, "Delete");
+      await deleteDialog(page).getByRole("button", { name: /^delete$/i }).click();
+      await expect(
+        toast(page, /cannot delete this department: 1 open onboarding invite\(s\) use it/i),
+      ).toBeVisible();
+      expect(await db.department.count({ where: { id: d.id } })).toBe(1);
+    } finally {
+      await db.onboardingInvite.delete({ where: { id: invite.id } });
+    }
+  });
+
+  test("deleting a department already deleted meanwhile says so", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Delete");
+    await db.department.delete({ where: { id: d.id } });
+    await deleteDialog(page).getByRole("button", { name: /^delete$/i }).click();
+    await expect(toast(page, /that department no longer exists/i)).toBeVisible();
+  });
+
+  test("server failure shows an error and deletes nothing", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Delete");
+    await failServerActions(page, "abort");
+    await deleteDialog(page).getByRole("button", { name: /^delete$/i }).click();
+    await expect(toast(page, /could not reach the server|something went wrong/i)).toBeVisible();
+    await expectNoCrash(page);
+    expect(await db.department.count({ where: { id: d.id } })).toBe(1);
+  });
+
+  test("double click on Delete sends one request and deletes once", async ({ page }) => {
+    const d = await makeDept();
+    await openActions(page, d.name, "Delete");
+    const calls = await delayServerActions(page, 1500);
+    await deleteDialog(page).getByRole("button", { name: /^delete$/i }).dblclick();
+    await expect(toast(page, `Deleted ${d.name}`)).toBeVisible();
+    expect(calls.count()).toBe(1);
+    expect(await auditCount("department.delete", d.id)).toBe(1);
   });
 });
