@@ -14,6 +14,7 @@ import "@schedule-x/theme-default/dist/index.css";
 // so Schedule-X's instanceof checks see the same class our events use.
 import { Temporal } from "@/lib/temporal-shim";
 import { useTheme } from "next-themes";
+import { addDays, endOfMonth, format, startOfMonth } from "date-fns";
 import { ShiftDialog, type EditTarget } from "./shift-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,16 @@ type EmployeeOption = {
 type Department = { id: string; name: string };
 
 const TZ = "America/Chicago";
+
+/** Same window the schedules page loads on first render (the visible month plus a week each side). */
+function initialWindow() {
+  const now = new Date();
+  return {
+    start: format(addDays(startOfMonth(now), -7), "yyyy-MM-dd"),
+    end: format(addDays(endOfMonth(now), 7), "yyyy-MM-dd"),
+  };
+}
+
 function toZonedDateTime(s: string) {
   return Temporal.ZonedDateTime.from(`${s.replace(" ", "T")}:00[${TZ}]`);
 }
@@ -78,7 +89,10 @@ export function ScheduleCalendar({
   }, [events]);
 
   const refetch = useCallback(async (range?: { start: string; end: string }) => {
-    const r = range ?? rangeRef.current;
+    // Schedule-X only reports a range when the admin navigates. Until then,
+    // refetch the window the page was rendered with, so a save made on the
+    // first screen shows up straight away.
+    const r = range ?? rangeRef.current ?? initialWindow();
     if (!r) return;
     const res = await getScheduleEvents(r);
     if (!toastAction(res)) return;

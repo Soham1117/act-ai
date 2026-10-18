@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toastAction } from "@/lib/toast-action";
+import { toastAction, toastCaught } from "@/lib/toast-action";
 import { changeMyPassword } from "@/server/actions/auth";
 
 export function ChangePasswordForm() {
@@ -20,14 +20,19 @@ export function ChangePasswordForm() {
     if (pw !== confirmPw) return toast.error("Passwords do not match");
     if (pw.length < 8) return toast.error("Min 8 characters");
     startTransition(async () => {
-      const res = await changeMyPassword(current, pw);
-      if (!toastAction(res)) return;
-      toast.success("Password updated — please sign in again");
-      setCurrent("");
-      setPw("");
-      setConfirmPw("");
-      // Sessions were revoked; bounce to login.
-      setTimeout(() => (window.location.href = "/login"), 1200);
+      try {
+        const res = await changeMyPassword(current, pw);
+        if (!toastAction(res)) return;
+        toast.success("Password updated — please sign in again");
+        setCurrent("");
+        setPw("");
+        setConfirmPw("");
+        // Sessions were revoked; bounce to login.
+        setTimeout(() => (window.location.href = "/login"), 1200);
+      } catch (err) {
+        // Network drop / server crash: show a message instead of crashing the page.
+        toastCaught(err);
+      }
     });
   }
 
