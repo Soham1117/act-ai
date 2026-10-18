@@ -9,6 +9,7 @@ import { fakeS3Keys } from "./support/fake-s3";
 import { failServerActions, toast } from "./support/helpers";
 import { PEOPLE, personRow, personUrl, pngBytes } from "./support/people";
 import { ADMIN_STATE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -152,7 +153,7 @@ test.describe("hire packet import", () => {
     await expect(applyBtn(page)).toBeVisible();
     await failServerActions(page, "abort", { times: 1 });
     await applyBtn(page).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await db.hirePacketImport.findUniqueOrThrow({ where: { id: job.id } })).status).toBe("READY");
 
     await page.goto(`/admin/employees/${e.id}/hire-import/${job.id}`);
@@ -225,7 +226,7 @@ test.describe("hire packet import", () => {
     expect((await jobs("hp2")).length).toBe(before);
   });
 
-  test("upload: server failure shows the error screen and no job is left behind", async ({ page }) => {
+  test("upload: server failure shows a toast and no job is left behind", async ({ page }) => {
     const before = (await jobs("hp2")).length;
     await page.goto(await personUrl("hp2"));
     if (await page.getByText("Page not found").count()) await page.reload();
@@ -234,7 +235,9 @@ test.describe("hire packet import", () => {
     await dialog.getByLabel(/zip file/i).setInputFiles({ name: "p.zip", mimeType: "application/zip", buffer: await goodZip() });
     await failServerActions(page, "abort", { times: 1 });
     await dialog.getByRole("button", { name: /upload & process/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     expect((await jobs("hp2")).length).toBe(before);
   });
 });

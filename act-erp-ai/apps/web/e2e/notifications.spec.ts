@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE } from "./support/test-data";
 import { SS, SS_DEPARTMENT, SS_EMPTY_DEPARTMENT, empDbId, labelled, loginState, pick } from "./support/self-service";
+import { SERVER_ERROR } from "./support/action-errors";
 
 // Notifications: employee inbox (Nina) and the admin broadcast dialog.
 test.use({ storageState: "e2e/.auth/nina.json" });
@@ -148,7 +149,7 @@ test.describe("notifications: admin broadcast", () => {
     await d.getByRole("checkbox", { name: SS_DEPARTMENT }).click();
     await failServerActions(page, "500", { times: 1 });
     await send(d).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     expect(await db.notification.count({ where: { title: "Flaky send" } })).toBe(0);
   });
 

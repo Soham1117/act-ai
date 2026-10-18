@@ -12,6 +12,7 @@ import {
   replay,
   uniq,
 } from "./support/contract";
+import { NETWORK_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -143,7 +144,7 @@ test.describe("admin: on site tab", () => {
     await clockOutBtn(page, w.name).click();
     await failServerActions(page, "abort");
     await confirmBtn(page).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.contractTimeEntry.findUniqueOrThrow({ where: { id: open.id } })).status).toBe("ACTIVE");
   });
@@ -155,7 +156,7 @@ test.describe("admin: on site tab", () => {
     await clockOutBtn(page, w.name).click();
     await failServerActions(page, "stale");
     await confirmBtn(page).click();
-    await expect(page.getByText(/something went wrong|refresh|reload/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.contractTimeEntry.findUniqueOrThrow({ where: { id: open.id } })).status).toBe("ACTIVE");
   });

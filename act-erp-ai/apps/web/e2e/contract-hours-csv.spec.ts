@@ -11,6 +11,7 @@ import {
   parseCsv,
   tamperActions,
 } from "./support/contract";
+import { SERVER_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -129,7 +130,7 @@ test.describe("admin hours: CSV export", () => {
     page.on("download", () => (downloaded = true));
     await failServerActions(page, "500");
     await page.getByRole("button", { name: /download csv/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(downloaded).toBe(false);
   });

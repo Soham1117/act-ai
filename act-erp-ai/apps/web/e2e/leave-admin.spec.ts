@@ -13,6 +13,7 @@ import {
   mondayWindow,
   pick,
 } from "./support/self-service";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 // Leave, admin side. Dedicated employee: Lou. Admin session from global setup.
 test.use({ storageState: ADMIN_STATE });
@@ -312,14 +313,14 @@ test.describe("admin leave: balances and policy", () => {
 });
 
 test.describe("admin leave: failures and double submits", () => {
-  test("connection dropped while approving: error screen, nothing saved", async ({ page }) => {
+  test("connection dropped while approving: toast, nothing saved", async ({ page }) => {
     const start = mondayWindow(14);
     const lr = await louLeave(start, start, 1);
     await openPending(page);
     await row(page).getByRole("button", { name: /approve/i }).click();
     await failServerActions(page, "abort");
     await dialogOf(page, "Approve leave").getByRole("button", { name: /^approve$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.leaveRequest.findUniqueOrThrow({ where: { id: lr.id } })).status).toBe("PENDING");
   });
@@ -333,7 +334,9 @@ test.describe("admin leave: failures and double submits", () => {
     await dlg.locator("textarea").fill("Not possible");
     await failServerActions(page, "500");
     await dlg.getByRole("button", { name: /^reject$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dlg).toBeVisible();
     await expectNoCrash(page);
     expect((await db.leaveRequest.findUniqueOrThrow({ where: { id: lr.id } })).status).toBe("PENDING");
   });
@@ -343,7 +346,7 @@ test.describe("admin leave: failures and double submits", () => {
     await page.getByRole("tab", { name: "Policy" }).click();
     await failServerActions(page, "stale");
     await page.getByRole("button", { name: /save policy/i }).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await db.leavePolicy.count()).toBe(0);
   });

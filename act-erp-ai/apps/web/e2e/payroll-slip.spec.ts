@@ -4,6 +4,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { PERIOD_A, PERIOD_B, PERIOD_C, PT, clearEntries, makeEntry } from "./support/payroll-time";
 import { ADMIN_STATE, EMPLOYEE, PIN_EMPLOYEE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -193,7 +194,9 @@ test.describe("admin payroll slip: readiness blockers", () => {
     await dialog.getByLabel(/override reason/i).fill("Finance approved late hours");
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /export with override/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
     expect(downloaded).toBe(false);
     expect(await db.auditLog.count({ where: { action: "payroll.export_override", resource: `PayrollCalendar:${p.id}` } })).toBe(before);

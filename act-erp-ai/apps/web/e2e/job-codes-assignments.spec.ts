@@ -4,6 +4,7 @@ import { INACTIVE_EMPLOYEE } from "./support/test-data";
 import { delayServerActions, failServerActions, toast } from "./support/helpers";
 import { CODES, PEOPLE, personRow, textField } from "./support/people";
 import { ADMIN_STATE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -127,12 +128,12 @@ test.describe("job code assignments", () => {
     void gone;
   });
 
-  test("assign: failure shows the error screen; double click assigns once", async ({ page }) => {
+  test("assign: failure shows a toast; double click assigns once", async ({ page }) => {
     const jc = await openCode(page, CODES.a.code);
     let d = await assign(page, PEOPLE.jcB.name);
     await failServerActions(page, "abort");
     await d.getByRole("button", { name: /^assign$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     const e = await personRow("jcB");
     expect(await db.jobCodeAssignment.count({ where: { employeeId: e.id, jobCodeId: jc.id } })).toBe(0);
 

@@ -3,6 +3,7 @@ import { businessYmd, db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { PT, clearEntries, entriesUrl, makeEntry } from "./support/payroll-time";
 import { ADMIN_STATE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -136,7 +137,7 @@ test.describe("admin: edit, delete and reopen entries", () => {
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /^delete$/i }).click();
     await page.getByRole("button", { name: /delete entry/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect(await db.timeEntry.count({ where: { id: e.id } })).toBe(1);
   });
 
@@ -192,7 +193,7 @@ test.describe("admin: edit, delete and reopen entries", () => {
     await reason(dialog, "Mistake");
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /reopen/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await fresh(e.id)).clockOut).not.toBeNull();
   });
 });
@@ -270,7 +271,7 @@ test.describe("admin: needs attention, force clock-out, 16 hour cap", () => {
     await rowOf(page, PT.fiona.name).getByRole("button", { name: /force clock-out/i }).click();
     await failServerActions(page, "abort");
     await page.getByRole("dialog", { name: /force clock-out/i }).getByRole("button", { name: /^clock out$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await fresh(e.id)).clockOut).toBeNull();
   });

@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { db } from "./support/db";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { EMP, auditCount, empRow, kioskSlug, pinMatches, resetEmployee, setPin } from "./support/kiosk";
 import { ADMIN_STATE, IP_INSIDE, IP_OUTSIDE } from "./support/test-data";
@@ -83,8 +84,10 @@ test.describe("admin: create, revoke and delete kiosks", () => {
       const dialog = await create(page, "K6a Fail", "k6a-fail");
       await failServerActions(page, mode);
       await dialog.getByRole("button", { name: /create kiosk/i }).click();
-      await expect(page.getByText(/something went wrong|unexpected response|failed|try again/i).first()).toBeVisible();
+      await expect(toast(page, { abort: NETWORK_ERROR, "500": SERVER_ERROR, stale: STALE_ERROR }[mode])).toBeVisible();
       await expectNoCrash(page);
+      // The dialog stays open with what was typed.
+      await expect(dialog).toBeVisible();
       expect(await db.kioskSession.count({ where: { slug: "k6a-fail" } })).toBe(0);
       await page.context().close();
     });
@@ -131,7 +134,7 @@ test.describe("admin: create, revoke and delete kiosks", () => {
     const fail = await failServerActions(page, "abort", { times: 1 });
     await kioskRow(page, "k6a-del").getByRole("button").last().click();
     await page.getByRole("menuitem", { name: /revoke session/i }).click();
-    await expect(page.getByText(/something went wrong|failed|try again/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect(fail.count()).toBe(1);
     expect((await db.kioskSession.findUniqueOrThrow({ where: { id: k.id } })).revokedAt).toBeNull();
 
@@ -257,7 +260,7 @@ test.describe("admin: trusted networks", () => {
     const page = await adminPage(browser, IP_INSIDE);
     await failServerActions(page, "abort");
     await add(page, "198.51.100.30");
-    await expect(page.getByText(/something went wrong|failed|try again/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await db.kioskTrustedNetwork.count()).toBe(0);
     await page.context().close();

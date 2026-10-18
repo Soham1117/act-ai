@@ -21,6 +21,7 @@ import {
   weekdayFromToday,
   ymdFromToday,
 } from "./support/self-service";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 // Leave, employee side. Dedicated employee: Leah (never Erin).
 test.use({ storageState: "e2e/.auth/leah.json" });
@@ -404,18 +405,14 @@ test.describe("leave: failures and double submits", () => {
     const dialog = await fillValid(page);
     const inject = await failServerActions(page, "abort", { times: 1 });
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(inject.count()).toBe(1);
     expect(await db.leaveRequest.count({ where: { employeeId: leahId } })).toBe(0);
-    // A dropped connection shows the page error screen (the dialog and what was typed are lost).
-    // "Try again" brings the Leave page back and a fresh request goes through.
-    await page.getByRole("button", { name: /try again/i }).click();
-    await expect(page.getByRole("button", { name: "Request leave" })).toBeVisible();
-    const retry = await openDialog(page);
-    await pick(page, retry, "Type", /^SICK/);
-    await fillRange(retry, mondayWindow(14), mondayWindow(14));
-    await submit(retry).click();
+    // The dialog stays open with what was typed, so the same click works once the connection is back.
+    await expect(dialog).toBeVisible();
+    await expect(labelled(dialog, "Start date")).toHaveValue(mondayWindow(14));
+    await submit(dialog).click();
     await expect(toast(page, "Leave request submitted (1 day)")).toBeVisible();
     expect(await db.leaveRequest.count({ where: { employeeId: leahId } })).toBe(1);
   });
@@ -424,7 +421,7 @@ test.describe("leave: failures and double submits", () => {
     const dialog = await fillValid(page);
     await failServerActions(page, "500");
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await db.leaveRequest.count({ where: { employeeId: leahId } })).toBe(0);
   });
@@ -433,7 +430,7 @@ test.describe("leave: failures and double submits", () => {
     const dialog = await fillValid(page);
     await failServerActions(page, "stale");
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await db.leaveRequest.count({ where: { employeeId: leahId } })).toBe(0);
   });
@@ -454,7 +451,7 @@ test.describe("leave: failures and double submits", () => {
     await failServerActions(page, "abort");
     answerNextDialog(page);
     await page.getByRole("button", { name: /cancel leave request/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.leaveRequest.findUniqueOrThrow({ where: { id: lr.id } })).status).toBe("PENDING");
   });

@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { SS, answerNextDialog, empDbId, labelled, loginState, pick } from "./support/self-service";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 // Requests, employee side. Dedicated employee: Quinn.
 test.use({ storageState: "e2e/.auth/quinn.json" });
@@ -244,11 +245,11 @@ test.describe("requests: failures and double submits", () => {
     return dialog;
   }
 
-  test("connection dropped while submitting: error screen, nothing saved", async ({ page }) => {
+  test("connection dropped while submitting: toast, dialog kept, nothing saved", async ({ page }) => {
     const dialog = await filled(page);
     await failServerActions(page, "abort");
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await count()).toBe(0);
   });
@@ -257,7 +258,7 @@ test.describe("requests: failures and double submits", () => {
     const dialog = await filled(page);
     await failServerActions(page, "500");
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await count()).toBe(0);
   });
@@ -266,7 +267,7 @@ test.describe("requests: failures and double submits", () => {
     const dialog = await filled(page);
     await failServerActions(page, "stale");
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await count()).toBe(0);
   });
@@ -289,7 +290,7 @@ test.describe("requests: failures and double submits", () => {
     await failServerActions(page, "abort");
     answerNextDialog(page);
     await item(page, "Keep me").getByRole("button", { name: "Withdraw" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.request.findUniqueOrThrow({ where: { id: r.id } })).status).toBe("PENDING");
   });

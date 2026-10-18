@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE } from "./support/test-data";
 import { SS, empDbId, loginState } from "./support/self-service";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 // Requests, admin side. Quinn is the requester here too (the two specs never overlap in time).
 test.use({ storageState: ADMIN_STATE });
@@ -200,7 +201,7 @@ test.describe("admin requests: failures and double submits", () => {
     await choose(page, "Complete");
     await failServerActions(page, "abort");
     await page.getByRole("dialog", { name: "Complete request" }).getByRole("button", { name: "Complete" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await load(r.id)).status).toBe("PENDING");
   });
@@ -213,7 +214,9 @@ test.describe("admin requests: failures and double submits", () => {
     await dlg.locator("textarea").fill("No can do");
     await failServerActions(page, "500");
     await dlg.getByRole("button", { name: "Reject" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dlg).toBeVisible();
     await expectNoCrash(page);
     expect((await load(r.id)).status).toBe("PENDING");
   });
@@ -226,7 +229,9 @@ test.describe("admin requests: failures and double submits", () => {
     await dlg.locator("textarea").fill("Please retry");
     await failServerActions(page, "stale");
     await dlg.getByRole("button", { name: "Reopen" }).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dlg).toBeVisible();
     await expectNoCrash(page);
     expect((await load(r.id)).status).toBe("REJECTED");
   });

@@ -14,6 +14,7 @@ import {
   textField,
 } from "./support/people";
 import { ADMIN_STATE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 test.afterAll(purgeNewPeople);
@@ -130,13 +131,13 @@ test.describe("admin: add employee", () => {
     expect(await countEmployees()).toBe(before);
   });
 
-  test("server failure shows the error screen and saves nothing", async ({ page }) => {
+  test("server failure shows a toast, keeps the form and saves nothing", async ({ page }) => {
     const before = await countEmployees();
     const dialog = await openAdd(page);
     await fill(dialog, { name: "Fail Person", email: mail("fail"), password: "Temp-Pass-123" });
     await failServerActions(page, "abort");
     await create(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await countEmployees()).toBe(before);
   });

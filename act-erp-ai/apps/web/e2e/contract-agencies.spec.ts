@@ -14,6 +14,7 @@ import {
   tamperActions,
   uniq,
 } from "./support/contract";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -136,7 +137,9 @@ test.describe("admin: agencies - create", () => {
     await dialog.getByLabel("Name", { exact: true }).fill(uniq("CW Fail Create"));
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /^add agency$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
     expect(await agencyCount()).toBe(before);
   });
@@ -148,7 +151,9 @@ test.describe("admin: agencies - create", () => {
     await dialog.getByLabel("Name", { exact: true }).fill(uniq("CW 500 Create"));
     await failServerActions(page, "500");
     await dialog.getByRole("button", { name: /^add agency$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
     expect(await agencyCount()).toBe(before);
   });
@@ -160,7 +165,9 @@ test.describe("admin: agencies - create", () => {
     await dialog.getByLabel("Name", { exact: true }).fill(uniq("CW Stale Create"));
     await failServerActions(page, "stale");
     await dialog.getByRole("button", { name: /^add agency$/i }).click();
-    await expect(page.getByText(/something went wrong|refresh|reload/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
     expect(await agencyCount()).toBe(before);
   });
@@ -247,7 +254,9 @@ test.describe("admin: agencies - edit", () => {
     await dialog.getByLabel("Name", { exact: true }).fill(uniq("CW Never Saved"));
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /save changes/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
     expect((await db.staffingAgency.findUniqueOrThrow({ where: { id: ag.id } })).name).toBe(ag.name);
   });
@@ -323,7 +332,7 @@ test.describe("admin: agencies - deactivate / activate", () => {
     await openAgencies(page);
     await failServerActions(page, "500");
     await row(page, ag.name).getByRole("button", { name: /^deactivate$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.staffingAgency.findUniqueOrThrow({ where: { id: ag.id } })).isActive).toBe(true);
   });

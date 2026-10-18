@@ -18,6 +18,7 @@ import {
   textField,
 } from "./support/people";
 import { ADMIN_STATE, KIOSK_ACTIVE_SLUG } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -62,7 +63,7 @@ test.describe("admin: reset an employee's password", () => {
     await textField(d, "Confirm password").fill("Another-Pass-1");
     await failServerActions(page, "abort");
     await d.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await personRow("paula")).user.passwordHash).toBe(before.user.passwordHash);
   });
 
@@ -121,7 +122,7 @@ test.describe("admin: reset kiosk PIN", () => {
     await failServerActions(page, "abort");
     page.once("dialog", (d) => void d.accept());
     await page.getByRole("button", { name: /reset kiosk pin/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect(await hashMatches(CUSTOM_PIN, (await personRow("pinn")).kioskPinHash)).toBe(true);
   });
 
@@ -168,7 +169,7 @@ test.describe("admin: make or remove admin access", () => {
     await page.getByRole("button", { name: /make admin/i }).click();
     await failServerActions(page, "abort", { times: 1 });
     await page.getByRole("dialog").getByRole("button", { name: /confirm/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await personRow("rory")).user.role).toBe("EMPLOYEE");
 
     await open(page, "rory");
@@ -214,7 +215,7 @@ test.describe("admin: profile picture", () => {
     const before = (await personRow("pico")).profilePic;
     await failServerActions(page, "abort");
     await input(page).setInputFiles({ name: "me2.png", mimeType: "image/png", buffer: pngBytes(16) });
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await personRow("pico")).profilePic).toBe(before);
   });
@@ -273,7 +274,7 @@ test.describe("admin: inline edit", () => {
     await textField(c2, "Job title").fill("Never Saved");
     await failServerActions(page, "abort");
     await c2.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect((await personRow("edith")).jobTitle).toBe("Lead Fabricator");
   });
 

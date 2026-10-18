@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { db } from "./support/db";
 import { expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE, EMPLOYEE, INACTIVE_JOB_CODE, JOB_CODE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -63,7 +64,9 @@ test.describe("admin schedules: new shift", () => {
     await dialog.getByRole("button", { name: EMPLOYEE.name }).click();
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
   });
 });

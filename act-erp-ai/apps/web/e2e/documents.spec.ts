@@ -13,6 +13,7 @@ import {
   putFakeS3,
   textFile,
 } from "./support/self-service";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 // Documents: employee (Dana) and admin sides.
 test.use({ storageState: "e2e/.auth/dana.json" });
@@ -220,7 +221,7 @@ test.describe("documents: failures and double submits", () => {
     const before = (await fakeS3Keys()).length;
     await failServerActions(page, "abort");
     await submit(d).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await docs()).toHaveLength(0);
     expect((await fakeS3Keys()).length).toBe(before);
@@ -231,7 +232,7 @@ test.describe("documents: failures and double submits", () => {
     await fillUpload(d, pdfFile());
     await failServerActions(page, "500");
     await submit(d).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     expect(await docs()).toHaveLength(0);
   });
 
@@ -240,7 +241,7 @@ test.describe("documents: failures and double submits", () => {
     await fillUpload(d, pdfFile());
     await failServerActions(page, "stale");
     await submit(d).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await docs()).toHaveLength(0);
   });
@@ -263,7 +264,7 @@ test.describe("documents: failures and double submits", () => {
     await failServerActions(page, "abort");
     answerNextDialog(page);
     await page.getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     expect(await docs()).toHaveLength(1);
   });
 });
@@ -415,7 +416,9 @@ test.describe("documents: admin failure", () => {
     await d.getByRole("checkbox", { name: new RegExp(SS.dana.name) }).click();
     await failServerActions(page, "500");
     await d.getByRole("button", { name: /^Upload to/ }).last().click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(d).toBeVisible();
     await expectNoCrash(page);
     expect(await db.document.count({ where: { title: "Failing bulk" } })).toBe(0);
   });

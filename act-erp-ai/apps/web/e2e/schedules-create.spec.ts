@@ -27,6 +27,7 @@ import {
   weekdayButtons,
   ymdOf,
 } from "./support/schedules";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -593,7 +594,9 @@ test.describe("failure injection and double submit", () => {
     await pickEmployee(dialog, SAM.name);
     const fail = await failServerActions(page, "abort");
     await createButton(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     expect(fail.count()).toBeGreaterThan(0);
     await expectNoCrash(page);
     expect(await shiftsOf(SAM.employeeId)).toHaveLength(0);
@@ -604,7 +607,9 @@ test.describe("failure injection and double submit", () => {
     await pickEmployee(dialog, SAM.name);
     await failServerActions(page, "500");
     await createButton(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
     expect(await shiftsOf(SAM.employeeId)).toHaveLength(0);
   });
@@ -615,7 +620,9 @@ test.describe("failure injection and double submit", () => {
     await pickEmployee(dialog, TARA.name);
     await failServerActions(page, "abort");
     await createButton(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
     expect(await db.schedule.count({ where: { employee: { employeeId: { in: [SAM.employeeId, TARA.employeeId] } } } })).toBe(0);
   });
@@ -625,7 +632,9 @@ test.describe("failure injection and double submit", () => {
     await pickEmployee(dialog, SAM.name);
     await failServerActions(page, "stale");
     await createButton(dialog).click();
-    await expect(page.getByText(/something went wrong|new version|refresh|reload/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     await expectNoCrash(page);
     expect(await shiftsOf(SAM.employeeId)).toHaveLength(0);
   });

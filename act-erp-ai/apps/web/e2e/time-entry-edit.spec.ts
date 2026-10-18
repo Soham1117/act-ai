@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { businessYmd, db } from "./support/db";
 import { expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE, EMPLOYEE } from "./support/test-data";
+import { NETWORK_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -65,7 +66,7 @@ test.describe("admin: manual time entry edit", () => {
     await dialog.getByPlaceholder(/forgot to clock out/i).fill("Network will fail");
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /save changes/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await seededEntry()).editReason).toBeNull();
   });

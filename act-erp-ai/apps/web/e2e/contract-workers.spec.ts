@@ -18,6 +18,7 @@ import {
   uniq,
   workersUrl,
 } from "./support/contract";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -274,7 +275,7 @@ test.describe("admin: workers - create", () => {
     await fillWorker(dialog, { name, agency: await alphaId() });
     await failServerActions(page, "abort");
     await submitAdd(dialog);
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await byName(name)).toBeNull();
   });
@@ -285,7 +286,7 @@ test.describe("admin: workers - create", () => {
     await fillWorker(dialog, { name, agency: await alphaId() });
     await failServerActions(page, "500");
     await submitAdd(dialog);
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await byName(name)).toBeNull();
   });
@@ -296,7 +297,7 @@ test.describe("admin: workers - create", () => {
     await fillWorker(dialog, { name, agency: await alphaId() });
     await failServerActions(page, "stale");
     await submitAdd(dialog);
-    await expect(page.getByText(/something went wrong|refresh|reload/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await byName(name)).toBeNull();
   });
@@ -444,7 +445,7 @@ test.describe("admin: workers - edit", () => {
     await fillWorker(dialog, { name: uniq("NeverSaved") });
     await failServerActions(page, "abort");
     await submitEdit(dialog);
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.contractWorker.findUniqueOrThrow({ where: { id: w.id } })).name).toBe(w.name);
   });
@@ -586,7 +587,7 @@ test.describe("admin: workers - end and reactivate", () => {
     await row(page, w.name).getByRole("button", { name: /^end$/i }).click();
     await failServerActions(page, "500");
     await page.getByRole("dialog").getByRole("button", { name: /end assignment/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.contractWorker.findUniqueOrThrow({ where: { id: w.id } })).status).toBe("ACTIVE");
     expect((await db.contractTimeEntry.findUniqueOrThrow({ where: { id: open.id } })).status).toBe("ACTIVE");
@@ -598,7 +599,7 @@ test.describe("admin: workers - end and reactivate", () => {
     await row(page, w.name).getByRole("button", { name: /reactivate/i }).click();
     await failServerActions(page, "abort");
     await page.getByRole("dialog").getByRole("button", { name: /^reactivate$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect((await db.contractWorker.findUniqueOrThrow({ where: { id: w.id } })).status).toBe("ENDED");
   });

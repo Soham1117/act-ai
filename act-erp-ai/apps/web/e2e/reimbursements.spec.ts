@@ -16,6 +16,7 @@ import {
   textFile,
   ymdFromToday,
 } from "./support/self-service";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 // Reimbursements, employee side. Dedicated employee: Reed.
 test.use({ storageState: "e2e/.auth/reed.json" });
@@ -394,12 +395,12 @@ test.describe("reimbursements: failures and double submits", () => {
     return dialog;
   }
 
-  test("connection dropped while submitting: error screen, no claim, no stored file", async ({ page }) => {
+  test("connection dropped while submitting: toast, dialog kept, no claim, no stored file", async ({ page }) => {
     const dialog = await filled(page);
     const before = (await fakeS3Keys()).length;
     await failServerActions(page, "abort");
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await claimCount()).toBe(0);
     expect((await fakeS3Keys()).length).toBe(before);
@@ -409,7 +410,7 @@ test.describe("reimbursements: failures and double submits", () => {
     const dialog = await filled(page);
     await failServerActions(page, "500");
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await claimCount()).toBe(0);
   });
@@ -418,7 +419,7 @@ test.describe("reimbursements: failures and double submits", () => {
     const dialog = await filled(page);
     await failServerActions(page, "stale");
     await submit(dialog).click();
-    await expect(page.getByText(/something went wrong|refresh|newer version/i).first()).toBeVisible();
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(await claimCount()).toBe(0);
   });

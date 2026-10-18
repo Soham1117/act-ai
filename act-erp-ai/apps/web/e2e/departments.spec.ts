@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { DEPTS, PEOPLE, anonContext, textField } from "./support/people";
 import { ADMIN_STATE } from "./support/test-data";
+import { NETWORK_ERROR, SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -106,15 +107,16 @@ test.describe("admin departments: create", () => {
     expect(await db.department.count()).toBe(before);
   });
 
-  test("server failure shows an error screen with Try again and saves nothing", async ({ page }) => {
+  test("dropped connection shows a toast, keeps the dialog and saves nothing", async ({ page }) => {
     const dialog = await openDialog(page);
     await textField(dialog, "Name").fill(`${CREATED} Fail`);
     await failServerActions(page, "abort");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    // The failed call surfaces in the page error screen (not a toast), with a way back.
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /try again/i })).toBeVisible();
+    await expect(toast(page, NETWORK_ERROR)).toBeVisible();
     await expectNoCrash(page);
+    // The dialog stays open with what was typed.
+    await expect(dialog).toBeVisible();
+    await expect(textField(dialog, "Name")).toHaveValue(`${CREATED} Fail`);
     expect(await count(`${CREATED} Fail`)).toBe(0);
   });
 
@@ -123,7 +125,9 @@ test.describe("admin departments: create", () => {
     await textField(dialog, "Name").fill(`${CREATED} Five`);
     await failServerActions(page, "500");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    await expect(page.getByText(/something went wrong/i).first()).toBeVisible();
+    await expect(toast(page, SERVER_ERROR)).toBeVisible();
+    // The dialog stays open (nothing was lost).
+    await expect(dialog).toBeVisible();
     expect(await count(`${CREATED} Five`)).toBe(0);
   });
 
@@ -144,10 +148,10 @@ test.describe("admin departments: create", () => {
     await textField(dialog, "Name").fill(`${CREATED} Stale`);
     await failServerActions(page, "stale");
     await dialog.getByRole("button", { name: /^create$/i }).click();
-    // Whatever the app does with a stale action, it must not save and must not white-screen.
-    await expect
-      .poll(async () => (await page.getByText(/something went wrong|refresh|reload|try again/i).count()) > 0)
-      .toBe(true);
+    await expect(toast(page, STALE_ERROR)).toBeVisible();
+    await expectNoCrash(page);
+    await expect(dialog).toBeVisible();
+    await expect(textField(dialog, "Name")).toHaveValue(`${CREATED} Stale`);
     expect(await count(`${CREATED} Stale`)).toBe(0);
     test.info().annotations.push({
       type: "stale-deployment",
