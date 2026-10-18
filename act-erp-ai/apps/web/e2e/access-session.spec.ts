@@ -72,6 +72,9 @@ test.describe("session revocation and role changes", () => {
     await expect(page).toHaveURL(/\/login/);
     const api = await ctx.request.get("/api/documents/acc-doc-erin/file", { maxRedirects: 0 });
     expect(api.status()).toBe(401);
+    // The bell poller route says "no session" too, not a quiet 0.
+    const bell = await ctx.request.get("/api/notifications/unread", { maxRedirects: 0 });
+    expect(bell.status()).toBe(401);
     await ctx.close();
   });
 

@@ -16,6 +16,7 @@ import { PersonalEmailForm } from "./personal-email-form";
 import { W2ConsentForm } from "./w2-consent-form";
 import { BenefitsConsentForm } from "./benefits-consent-form";
 import { env } from "@/lib/env";
+import { DEFAULT_KIOSK_PIN, isDefaultPin } from "@/lib/kiosk-pin";
 
 export const metadata = { title: "Settings" };
 
@@ -24,10 +25,12 @@ export default async function SettingsPage() {
   const employeeRow = user.employeeId
     ? await db.employee.findUnique({
         where: { id: user.employeeId },
-        select: { personalEmail: true, w2ConsentAt: true, benefitsEConsentAt: true },
+        select: { personalEmail: true, w2ConsentAt: true, benefitsEConsentAt: true, kioskPinHash: true },
       })
     : null;
   const personalEmail = employeeRow?.personalEmail;
+  // Only name the temporary PIN while it is still the one in use.
+  const onTemporaryPin = await isDefaultPin(employeeRow?.kioskPinHash);
   const canWrite = user.accessLevel === "FULL";
   const readOnlyNote = (
     <p className="text-xs text-muted-foreground">
@@ -85,7 +88,9 @@ export default async function SettingsPage() {
             <CardHeader>
               <CardTitle className="text-base">Kiosk PIN</CardTitle>
               <CardDescription>
-                Your temporary PIN is 3214. Change it here to a private 4–6 digit PIN.
+                {onTemporaryPin
+                  ? `Your temporary PIN is ${DEFAULT_KIOSK_PIN}. Change it here to a private 4–6 digit PIN.`
+                  : "Change your kiosk PIN here. Use a private 4–6 digit PIN."}
               </CardDescription>
             </CardHeader>
             <CardContent>
