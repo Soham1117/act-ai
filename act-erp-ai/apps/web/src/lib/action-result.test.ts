@@ -27,6 +27,20 @@ describe("isDigestErrorMessage", () => {
 });
 
 describe("humanizeUnexpectedError", () => {
+  it("turns browser network errors into a plain message", () => {
+    for (const m of ["Failed to fetch", "NetworkError when attempting to fetch resource.", "Load failed"]) {
+      expect(humanizeUnexpectedError(new TypeError(m))).toBe(
+        "Could not reach the server. Check the connection and try again.",
+      );
+    }
+  });
+
+  it("tells the user to reload a page left open across a deploy", () => {
+    expect(humanizeUnexpectedError(new Error('Failed to find Server Action "abc123".'))).toBe(
+      "This page is out of date. Reload the page and try again.",
+    );
+  });
+
   it("maps Prisma unique email conflicts", () => {
     expect(
       humanizeUnexpectedError({ code: "P2002", meta: { target: ["email"] } }),

@@ -56,7 +56,12 @@ export function PunchPhotos({
   // Stored but deleted from S3 by the 30-day rule (or the load failed).
   const gone = (s: Side) => isExpired(timeOf(s)) || failed[s];
   const has = (s: Side) => (s === "in" ? hasIn : hasOut) && !gone(s);
-  const markFailed = (s: Side) => setFailed((f) => ({ ...f, [s]: true }));
+  const markFailed = (s: Side) => setFailed((f) => (f[s] ? f : { ...f, [s]: true }));
+  // If the image already failed before React hydrated, onError never fires.
+  // Check the element once it is attached.
+  const checkLoaded = (s: Side) => (el: HTMLImageElement | null) => {
+    if (el && el.complete && el.naturalWidth === 0) queueMicrotask(() => markFailed(s));
+  };
 
   if (!hasIn && !hasOut && !fromKiosk) return null;
 
@@ -82,6 +87,7 @@ export function PunchPhotos({
                 alt={s === "in" ? "Clock in" : "Clock out"}
                 loading="lazy"
                 onError={() => markFailed(s)}
+                ref={checkLoaded(s)}
                 className="h-full w-full object-cover"
               />
             </button>
@@ -117,6 +123,7 @@ export function PunchPhotos({
                       alt={s === "in" ? "Clock in" : "Clock out"}
                       loading="lazy"
                       onError={() => markFailed(s)}
+                      ref={checkLoaded(s)}
                       className="aspect-[4/3] w-full rounded-md border bg-muted object-cover"
                     />
                   ) : (

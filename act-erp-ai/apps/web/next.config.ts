@@ -24,11 +24,17 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
   // Avoid bundling the heavy Prisma binary into route bundles.
-  serverExternalPackages: ["@prisma/client"],
+  // pdfjs-dist loads its worker file at runtime; bundling it breaks that
+  // lookup (pay stub auto-read and hire-packet PDF text both failed).
+  serverExternalPackages: ["@prisma/client", "pdfjs-dist"],
   experimental: {
     // File uploads travel through server actions; default is 1 MB. Per-file
     // limits are enforced in lib/upload-validation.ts.
     serverActions: { bodySizeLimit: "60mb" },
+    // The proxy buffers request bodies and cuts them at 10 MB by default, so
+    // uploads between 10 MB and the per-file limits broke with "Unexpected end
+    // of form". Keep this equal to the server action limit.
+    proxyClientMaxBodySize: "60mb",
   },
   poweredByHeader: false,
   async headers() {

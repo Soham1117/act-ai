@@ -70,8 +70,8 @@ export default async function KioskTerminalPage({
         <CardContent className="space-y-4">
           {revoked && (
             <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
-              This kiosk was revoked. Activating again will create a new
-              session.
+              This kiosk was revoked and cannot be activated again. Create a
+              new kiosk in Admin &rsaquo; Kiosks for this device.
             </div>
           )}
           <div className="rounded-md border bg-muted/30 p-3 text-xs">

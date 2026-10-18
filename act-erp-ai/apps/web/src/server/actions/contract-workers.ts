@@ -208,6 +208,7 @@ function parseWorkerDates(data: z.output<typeof workerSchema>) {
 async function checkWorkerRefs(data: z.output<typeof workerSchema>): Promise<string | null> {
   const agency = await db.staffingAgency.findUnique({ where: { id: data.agencyId } });
   if (!agency) return "That agency no longer exists. Refresh the page.";
+  if (!agency.isActive) return "That agency is inactive. Reactivate it under Agencies, or pick another agency.";
   return assertJobCode(data.jobCode);
 }
 
@@ -277,6 +278,7 @@ export async function updateContractWorker(
     if (data.agencyId !== before.agencyId) {
       const agency = await db.staffingAgency.findUnique({ where: { id: data.agencyId } });
       if (!agency) return fail("That agency no longer exists. Refresh the page.");
+      if (!agency.isActive) return fail("That agency is inactive. Reactivate it under Agencies, or pick another agency.");
     }
     if (data.jobCode !== before.jobCode) {
       const jcErr = await assertJobCode(data.jobCode);

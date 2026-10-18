@@ -180,6 +180,62 @@ Dev-only helper scripts (**never run in production**): `scripts/create-admin.ts`
 
 ---
 
+## Testing
+
+| Layer | Command | What it covers |
+|---|---|---|
+| Unit (vitest) | `pnpm test` | Pure lib code, plus two guards: no hard-coded job codes (like `ACT001`) in `src/app`, and every server action and API route has a row in `e2e/COVERAGE.md` or `e2e/coverage/*.md` (add a row, even "planned" or "not-testable" with a reason, when you add one) |
+| End-to-end (Playwright) | `pnpm e2e` | About 1,075 tests in a real browser against a real database: access control, login, employee self-service, people admin, onboarding, payroll, time tracking, schedules, kiosk (PIN and no-PIN), contract workers. Each flow has a happy path, validation and permission paths, and failure injection |
+
+Where to look: `e2e/COVERAGE.md` (index and the matrix), `e2e/coverage/<area>.md` (one row per action and scenario), `e2e/AUTHORING.md` (how to add tests: seed parts, helpers, rules). A test marked `test.fixme` documents a known app bug; the reason is in a comment next to it.
+
+### Run the E2E tests locally
+
+You need Docker (for Postgres) and Node 22+.
+
+```bash
+# 1. Start Postgres (localhost:5433) and make the test database. Do this once.
+docker compose -f ../../infra/docker-compose.yml up -d postgres
+docker exec act-erp-ai-postgres-1 psql -U act -d postgres -c "CREATE DATABASE act_e2e"
+
+# 2. Install the test browser. Do this once.
+pnpm exec playwright install chromium
+
+# 3. Run the tests.
+pnpm e2e
+```
+
+The full suite takes about 25 minutes on the dev server. Run one area with e.g. `pnpm exec playwright test kiosk`. For a second run side by side set `E2E_PORT` and `DATABASE_URL` to another `act_e2e_N` database. `pnpm e2e` does everything else for you: it starts the app on port 3100,
+resets the `act_e2e` database (`prisma db push` + `e2e/seed.ts`), and runs
+`e2e/*.spec.ts`. Useful extras: `pnpm exec playwright test kiosk` (one file),
+`pnpm exec playwright test --ui` (watch mode), `pnpm e2e:report` (HTML report).
+
+**Test users and data** live in `e2e/seed.ts`; the names and IDs are in
+`e2e/support/test-data.ts`. Passwords, the kiosk PIN and the kiosk cookie are
+fake values in `.env.e2e` (committed on purpose, never real). The seed has an
+admin, an employee with a kiosk PIN, an ended employee, one job code, kiosks,
+one staffing agency with contract workers, and a payroll period.
+
+How the tests fake the outside world:
+
+- **Wrong network:** the kiosk network rule is `10.99.0.0/16` in `.env.e2e`.
+  Tests send an `X-Forwarded-For` header to be inside (`10.99.1.5`) or outside it.
+- **Server and network failures:** `failServerActions()` in
+  `e2e/support/helpers.ts` uses `page.route` to abort or break server-action
+  calls. Tests then check the UI shows a message and nothing was saved.
+- **Camera:** Chromium runs with fake-camera flags (see `playwright.config.ts`),
+  so punch photos are taken. Tests check the photo is sent to the server.
+  Uploads (receipts, documents, punch photos) go to an in-memory fake S3 (`e2e/support/fake-s3.ts`).
+- **Safety:** the seed and the tests refuse to run unless the database name
+  contains `e2e`, so they cannot wipe your dev database.
+
+### CI
+
+`.github/workflows/ci.yml` (in the repository root) runs on every push and pull
+request to `main`: install, `prisma generate`, typecheck, ESLint, vitest, then
+Playwright. The Playwright step is split in 5 shards, each with its own Postgres service container (about 5 to 10 minutes each). On failure each shard attaches its HTML report as the `playwright-report-shard-N` artifact. In CI the app is built
+and run in production mode. The workflow does not deploy anything.
+
 ## Feature flag: `AI_ENABLED`
 
 Off by default. When `false`:

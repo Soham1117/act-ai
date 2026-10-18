@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
+  AtSign,
   Mail,
   Phone,
   MapPin,
@@ -60,7 +61,7 @@ export default async function EmployeeDetailPage({
     .findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, role: true, mustChangePassword: true } },
+        user: { select: { id: true, role: true, mustChangePassword: true, username: true } },
         department: true,
         supervisor: true,
         primaryJobCode: true,
@@ -257,6 +258,9 @@ export default async function EmployeeDetailPage({
             <Separator className="my-1" />
             <div className="w-full space-y-1.5 text-left text-xs">
               <Row icon={<Mail className="h-3 w-3" />} value={employee.email} />
+              {employee.user.username && (
+                <Row icon={<AtSign className="h-3 w-3" />} value={`Username: ${employee.user.username}`} />
+              )}
               <Row
                 icon={<Phone className="h-3 w-3" />}
                 value={formatPhone(employee.phoneNumber)}

@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toastAction, toastCaught } from "@/lib/toast-action";
+import { formatBusinessDateTime } from "@/lib/format";
 import {
   addTrustedNetwork,
   removeTrustedNetwork,
@@ -117,10 +118,10 @@ export function TrustedNetworksCard({
                   {t.label ? <span className="ml-2">{t.label}</span> : null}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  Added {new Date(t.createdAt).toLocaleString()}
+                  Added {formatBusinessDateTime(t.createdAt)}
                   {t.addedByEmail ? ` by ${t.addedByEmail}` : ""}
                   {t.lastUsedAt
-                    ? ` · last used ${new Date(t.lastUsedAt).toLocaleString()}`
+                    ? ` · last used ${formatBusinessDateTime(t.lastUsedAt)}`
                     : " · never used"}
                 </p>
               </div>

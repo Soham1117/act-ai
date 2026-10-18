@@ -176,7 +176,7 @@ export async function reviewReimbursement(
         throw new Error(
           from === "PAID" || from === "REJECTED"
             ? `This claim is already ${from.toLowerCase()} and can't be changed.`
-            : `A ${from.replace("_", " ").toLowerCase()} claim can't be moved to ${data.status.replace("_", " ").toLowerCase()}. Refresh the page.`,
+            : `${/^[aeiou]/i.test(from) ? "An" : "A"} ${from.replace("_", " ").toLowerCase()} claim can't be moved to ${data.status.replace("_", " ").toLowerCase()}. Refresh the page.`,
         );
       }
 

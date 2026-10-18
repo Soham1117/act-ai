@@ -97,6 +97,14 @@ export function humanizeUnexpectedError(err: unknown): string | null {
 
   if (err instanceof Error) {
     if (isDigestErrorMessage(err.message)) return null;
+    // Browser network errors (Chrome / Firefox / Safari wording) and a page
+    // left open across a deploy: say what happened and what to do.
+    if (/failed to fetch|networkerror|load failed|network request failed/i.test(err.message)) {
+      return "Could not reach the server. Check the connection and try again.";
+    }
+    if (/failed to find server action/i.test(err.message)) {
+      return "This page is out of date. Reload the page and try again.";
+    }
     // Don't leak raw Prisma / DB internals if they slipped through.
     if (/prisma|invocation|postgres|econnrefused/i.test(err.message)) {
       return null;
