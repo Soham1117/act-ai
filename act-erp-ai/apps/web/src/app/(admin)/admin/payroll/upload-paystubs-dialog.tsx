@@ -179,18 +179,31 @@ export function UploadPaystubsDialog({
     let failed = 0;
     await mapWithConcurrency(readyRows, CONCURRENCY, async (row) => {
       updateRow(row.key, { status: "uploading" });
-      const bytes = await row.file.arrayBuffer();
-      const res = await uploadPayrollDocument(
-        {
-          employeeId: row.employeeId!,
-          title: `${category} — ${row.payPeriodEnd}`,
-          category,
-          payPeriodStart: row.payPeriodStart,
-          payPeriodEnd: row.payPeriodEnd,
-          overwrite: row.overwrite,
-        },
-        { name: row.file.name, type: row.file.type || "application/pdf", bytes },
-      );
+      let res: Awaited<ReturnType<typeof uploadPayrollDocument>>;
+      try {
+        const bytes = await row.file.arrayBuffer();
+        res = await uploadPayrollDocument(
+          {
+            employeeId: row.employeeId!,
+            title: `${category} — ${row.payPeriodEnd}`,
+            category,
+            payPeriodStart: row.payPeriodStart,
+            payPeriodEnd: row.payPeriodEnd,
+            overwrite: row.overwrite,
+          },
+          { name: row.file.name, type: row.file.type || "application/pdf", bytes },
+        );
+      } catch (err) {
+        // Dropped connection or server crash: mark the row and keep the dialog usable.
+        updateRow(row.key, {
+          status: "error",
+          errorMessage:
+            humanizeUnexpectedError(err) ??
+            "Could not reach the server. Check the connection and try again.",
+        });
+        failed++;
+        return;
+      }
       if (!res.ok) {
         updateRow(row.key, {
           status: "error",

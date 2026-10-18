@@ -52,7 +52,9 @@ function formatDisplay(key: string, value: string | null | undefined): string {
   if (!value?.trim()) return "—";
   if (key === "dateOfBirth" || key === "dateOfHire") {
     const d = new Date(value);
-    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString();
+    // Values are date-only ("1990-03-04" = UTC midnight). Format in UTC, or US
+    // time zones show the day before.
+    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString("en-US", { timeZone: "UTC" });
   }
   return value;
 }

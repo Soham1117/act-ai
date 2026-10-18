@@ -98,7 +98,7 @@ export function TimeEntriesList({ entries }: { entries: Entry[] }) {
             </div>
             {e.approvalStatus === "REJECTED" && (
               <p className="col-span-full rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                Rejected{e.approvalNotes ? `: ${e.approvalNotes}` : "."} Talk to an admin if a
+                Rejected{e.approvalNotes ? `: ${e.approvalNotes.trim().replace(/[.!?]?$/, ".")}` : "."} Talk to an admin if a
                 correction is needed.
               </p>
             )}

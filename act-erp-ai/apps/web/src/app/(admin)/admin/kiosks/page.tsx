@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { businessDateOnly, formatBusinessDateTime, formatDateOnly } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -100,9 +101,9 @@ export default async function KiosksPage() {
                       {used === 1 ? "" : "s"} recorded
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      Created {s.createdAt.toLocaleDateString()}
-                      {s.lastUsedAt ? ` · last used ${s.lastUsedAt.toLocaleString()}` : " · never used"}
-                      {!revoked && ` · expires ${s.expiresAt.toLocaleDateString()}`}
+                      Created {formatDateOnly(businessDateOnly(s.createdAt))}
+                      {s.lastUsedAt ? ` · last used ${formatBusinessDateTime(s.lastUsedAt)}` : " · never used"}
+                      {!revoked && ` · expires ${formatDateOnly(businessDateOnly(s.expiresAt))}`}
                     </p>
                     {!revoked && (
                       <p

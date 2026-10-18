@@ -70,6 +70,25 @@ export function formatBusinessTime(date: Date | string | null | undefined) {
   });
 }
 
+/**
+ * Date and time in the business time zone with a fixed locale. Use this in
+ * client components instead of toLocaleString(): the server and the browser
+ * can differ in locale/zone, which breaks hydration.
+ */
+export function formatBusinessDateTime(date: Date | string | null | undefined) {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** Convert an instant to the UTC-midnight value for its Central calendar day. */
 export function businessDateOnly(date: Date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
