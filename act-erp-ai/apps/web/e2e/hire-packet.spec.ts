@@ -99,7 +99,6 @@ test.describe("hire packet import", () => {
     // BUG (dev server): pdf.js cannot load its worker (pdf.worker.mjs) under `next dev`, so any text
     // PDF fails the whole import. src/lib/hire-packet/extract/pdf-text.ts. Proposed fix: point
     // GlobalWorkerOptions.workerSrc at the worker copied by scripts/copy-pdf-worker.mjs.
-    test.fixme((await page.getByText(/import failed/i).count()) > 0, "pdf.js worker missing in the dev server");
     await expect(page.getByText("i9.pdf", { exact: true })).toBeVisible();
     await expect(page.getByText("badge.png", { exact: true })).toBeVisible();
     await expect(page.getByText("notes.exe")).toHaveCount(0); // filtered by extension
@@ -137,7 +136,7 @@ test.describe("hire packet import", () => {
   // Proposed fix: format with { timeZone: "UTC" }.
   test.describe("date display", () => {
     test.use({ timezoneId: "America/Chicago" });
-    test.fixme("a date of birth proposal shows the same day that will be saved", async ({ page }) => {
+    test("a date of birth proposal shows the same day that will be saved", async ({ page }) => {
       const job = await readyJob("hp2");
       const e = await personRow("hp2");
       await page.goto(`/admin/employees/${e.id}/hire-import/${job.id}`);

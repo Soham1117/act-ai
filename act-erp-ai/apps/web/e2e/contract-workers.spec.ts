@@ -231,7 +231,7 @@ test.describe("admin: workers - create", () => {
   // Bug (low): src/server/actions/contract-workers.ts checkWorkerRefs() only checks that the
   // agency exists. Proposed fix: also reject `!agency.isActive` ("That agency is inactive...")
   // when creating (and when changing agency on update).
-  test.fixme("a deactivated agency is refused on the server when adding a worker", async ({ page }) => {
+  test("a deactivated agency is refused on the server when adding a worker", async ({ page }) => {
     const ag = await makeAgency();
     const before = await workerCount();
     const dialog = await openAddWorker(page);

@@ -70,7 +70,7 @@ test.describe("employee timesheet page", () => {
 
   // BUG (cosmetic): time-entries-list.tsx builds "Rejected{: note}{ Talk to an admin...}" so the reason runs into the next
   // sentence ("Overlaps training day Talk to an admin"). Proposed fix: add a "." after the note when one is shown.
-  test.fixme("the rejection reason is separated from the next sentence by a full stop", async () => {
+  test("the rejection reason is separated from the next sentence by a full stop", async () => {
     await page.goto("/dashboard/time-tracking");
     await expect(page.getByRole("listitem").filter({ hasText: "Jun 4, 2025" })).toContainText("Overlaps training day. Talk to an admin");
   });

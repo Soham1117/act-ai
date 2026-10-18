@@ -45,22 +45,9 @@ test.describe("job codes: what the kiosk stamps on a punch", () => {
     expect((await punchIn(browser)).jobCode).toBe("E2E100");
   });
 
-  test("with no usable job code at all, the punch is stamped with the literal ACT001 (documents current behaviour)", async ({
-    browser,
-  }) => {
-    await db.jobCode.updateMany({ data: { isActive: false } });
-    const entry = await punchIn(browser);
-    expect(entry.jobCode).toBe("ACT001");
-    expect(await db.jobCode.count({ where: { code: "ACT001" } })).toBe(0); // it does not exist
-  });
-
-  // BUG (app): src/server/time-core.ts resolveJobCode falls back to the literal "ACT001"
-  // (and contract-time-core.ts DEFAULT_JOB_CODE, plus the schema defaults on
-  // TimeEntry/ContractWorker.jobCode). When no active job code exists, the kiosk records a
-  // punch with a code that is not in the Job codes list, so payroll/reports show an unknown code.
-  // Proposed fix: when nothing resolves, refuse the punch with "No job code is set up. Ask an
-  // admin." (or store null), and drop the "ACT001" literals/defaults.
-  test.fixme("with no usable job code the punch is refused or uses a code that exists", async ({
+  // Regression: time-core.ts used to fall back to the made-up code "ACT001" when no
+  // active job code resolved. The punch must now be refused and nothing recorded.
+  test("with no usable job code the punch is refused and nothing is recorded", async ({
     browser,
   }) => {
     await db.jobCode.updateMany({ data: { isActive: false } });
@@ -69,8 +56,11 @@ test.describe("job codes: what the kiosk stamps on a punch", () => {
     await page.getByRole("button", { name: new RegExp(PEOPLE.jcB.name) }).first().click();
     await page.getByPlaceholder("••••").fill(CUSTOM_PIN);
     await page.getByRole("button", { name: /^clock in$/i }).click();
-    const entry = await db.timeEntry.findFirst({ where: { employeeId: emp.id, status: "ACTIVE" } });
-    if (entry) expect(await db.jobCode.count({ where: { code: entry.jobCode } })).toBe(1);
+    await expect(
+      page.locator("[data-sonner-toast]").filter({ hasText: /no active job code is set up/i }),
+    ).toBeVisible();
+    expect(await db.timeEntry.count({ where: { employeeId: emp.id, status: "ACTIVE" } })).toBe(0);
+    expect(await db.timeEntry.count({ where: { jobCode: "ACT001" } })).toBe(0);
     await page.context().close();
   });
 });

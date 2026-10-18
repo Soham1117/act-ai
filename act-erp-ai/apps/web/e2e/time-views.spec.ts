@@ -125,7 +125,7 @@ test.describe("admin time tracking: kiosk punch photos", () => {
 
   // BUG (minor): src/components/punch-photos.tsx attaches onError in React; when the 404 arrives before hydration the
   // error event is missed and a broken image stays on screen instead of "Photo expired". Proposed fix: after mount, check img.complete && naturalWidth === 0 in a ref callback.
-  test.fixme("a photo missing from storage falls back to 'Photo expired' instead of a broken image", async ({ page }) => {
+  test("a photo missing from storage falls back to 'Photo expired' instead of a broken image", async ({ page }) => {
     const { ymd } = await kioskEntry(5, 1, { in: "kiosk-photos/pt-kira-missing.jpg" });
     await page.goto(entriesUrl(PT.kira.name, ymd, businessYmd(0)));
     await expect(line(page, PT.kira.name).getByText("Photo expired (in)")).toBeVisible();

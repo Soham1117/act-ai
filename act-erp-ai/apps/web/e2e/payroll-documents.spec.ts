@@ -90,7 +90,7 @@ test.describe("admin payroll documents: upload", () => {
   });
 
   // BUG: previewPaystub/parsePaystub (src/lib/paystub-parser.ts) cannot read any PDF under the Turbopack dev server: pdfjs fake worker cannot find pdf.worker.mjs, so auto-match never works. Proposed fix: add "pdfjs-dist" to serverExternalPackages in next.config.ts (verified locally, reverted per coordinator).
-  test.fixme("a stub laid out like the payroll provider's is matched to the employee and dated automatically", async ({ page }) => {
+  test("a stub laid out like the payroll provider's is matched to the employee and dated automatically", async ({ page }) => {
     await db.employee.update({ where: { employeeId: PT.rex.employeeId }, data: { ssnLast4: "4417" } });
     const bytes = paystubPdf({ name: PT.rex.name, last4: "4417", start: "06/01/2025", end: "06/14/2025", payDate: "06/20/2025", tag: "auto1" });
     const dialog = await openUpload(page);
@@ -106,7 +106,7 @@ test.describe("admin payroll documents: upload", () => {
   });
 
   // BUG: same pdfjs worker problem, so the pre-upload duplicate flag (needs a parsed employee) never shows. Same fix as above.
-  test.fixme("dropping a file that is already on file flags it before upload; Replace swaps the old one", async ({ page }) => {
+  test("dropping a file that is already on file flags it before upload; Replace swaps the old one", async ({ page }) => {
     await db.employee.update({ where: { employeeId: PT.rex.employeeId }, data: { ssnLast4: "4417" } });
     const bytes = paystubPdf({ name: PT.rex.name, last4: "4417", start: "06/01/2025", end: "06/14/2025", payDate: "06/20/2025", tag: "dupe1" });
     let dialog = await openUpload(page);
@@ -274,7 +274,7 @@ test.describe("admin payroll documents: upload", () => {
   });
 
   // BUG: upload-paystubs-dialog.tsx onConfirm has no try/catch around uploadPayrollDocument; a network failure leaves uploading=true, Cancel and Confirm stay disabled forever. Proposed fix: wrap the call in try/catch, mark the row error with humanizeUnexpectedError, and always setUploading(false).
-  test.fixme("server failure while uploading shows an error, the row can be retried and nothing is stored", async ({ page }) => {
+  test("server failure while uploading shows an error, the row can be retried and nothing is stored", async ({ page }) => {
     const dialog = await openUpload(page);
     await drop(dialog, { name: "a.pdf", buffer: fakePdf("fail1") });
     await fill(page, dialog, { employee: PT.rex.name, start: "2025-06-01", end: "2025-06-14" });
@@ -292,7 +292,7 @@ test.describe("admin payroll documents: upload", () => {
   });
 
   // BUG: same stuck-dialog bug as the abort case (upload-paystubs-dialog.tsx onConfirm).
-  test.fixme("server 500 while uploading leaves the dialog usable and stores nothing", async ({ page }) => {
+  test("server 500 while uploading leaves the dialog usable and stores nothing", async ({ page }) => {
     const dialog = await openUpload(page);
     await drop(dialog, { name: "a.pdf", buffer: fakePdf("fail500") });
     await fill(page, dialog, { employee: PT.rex.name, start: "2025-06-01", end: "2025-06-14" });

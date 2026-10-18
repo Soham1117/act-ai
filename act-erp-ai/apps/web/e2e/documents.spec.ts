@@ -122,7 +122,7 @@ test.describe("documents: employee upload, download, delete", () => {
   // uploading, and a file over 15 MB crashes instead of showing "File is too large". Likely Next's default 10 MB
   // request-body buffering limit in the proxy layer (next.config.ts only raises serverActions.bodySizeLimit).
   // Proposed fix: raise the proxy client body-size limit in next.config.ts to match (>= 60mb) and/or check size in the form.
-  test.fixme("a file over 15 MB is refused; one at exactly 15 MB is accepted", async ({ page }) => {
+  test("a file over 15 MB is refused; one at exactly 15 MB is accepted", async ({ page }) => {
     const limit = 15 * 1024 * 1024;
     const d = await openUpload(page);
     const make = (n: number) => ({ name: "big.pdf", mimeType: "application/pdf", buffer: Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(n - 9, 0x20)]) });

@@ -270,7 +270,7 @@ test.describe("admin job codes: edit, default, active", () => {
   // company "default" can be a code nobody may use. src/server/actions/job-codes.ts.
   // Proposed fix: in updateJobCode (and toggleJobCodeActive) refuse, or clear isDefault,
   // when the code is not active.
-  test.fixme("an inactive code cannot be made the default", async ({ page }) => {
+  test("an inactive code cannot be made the default", async ({ page }) => {
     const dialog = await openEdit(page, NEW("A2B"));
     await dialog.getByRole("switch").first().click(); // default on
     await dialog.getByRole("button", { name: /^save$/i }).click();
@@ -280,7 +280,7 @@ test.describe("admin job codes: edit, default, active", () => {
 
   // BUG (app): deactivating the default code leaves isDefault=true on an inactive code.
   // Proposed fix: toggleJobCodeActive should clear isDefault when deactivating (or refuse).
-  test.fixme("deactivating the default code does not leave an inactive default", async ({ page }) => {
+  test("deactivating the default code does not leave an inactive default", async ({ page }) => {
     await openList(page);
     await rowMenu(page, JOB_CODE.code, /deactivate/i);
     await expect(toast(page, /deactivated/i)).toBeVisible();
@@ -414,7 +414,7 @@ test.describe("admin job codes: deactivate and delete", () => {
   // src/server/actions/job-codes.ts deleteJobCode; src/server/contract-time-core.ts.
   // Proposed fix: also count ContractWorker.jobCode (and ScheduleTemplate.jobCode) and
   // refuse with "N contract worker(s) use this code".
-  test.fixme("a code used by a contract worker cannot be deleted", async ({ page }) => {
+  test("a code used by a contract worker cannot be deleted", async ({ page }) => {
     const code = await db.jobCode.create({ data: { code: NEW("CW"), title: "Crew code" } });
     const agency = await db.staffingAgency.findFirstOrThrow();
     const admin = await db.user.findFirstOrThrow({ where: { role: "ADMIN" } });

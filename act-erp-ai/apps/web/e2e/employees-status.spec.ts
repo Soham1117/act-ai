@@ -279,7 +279,7 @@ test.describe("admin: bulk actions", () => {
   // User.tokenVersion, unlike setEmploymentStatus, so a bulk-terminated person's existing
   // sessions are not revoked. Fix: increment tokenVersion for the eligible users in the same
   // transaction as the status update.
-  test.fixme("bulk terminate revokes the sessions of the people it terminates", async ({ page }) => {
+  test("bulk terminate revokes the sessions of the people it terminates", async ({ page }) => {
     const before = (await personRow("bulkB")).user.tokenVersion;
     await db.employee.update({ where: { employeeId: PEOPLE.bulkB.employeeId }, data: { employmentStatus: "ACTIVE", terminationDate: null } });
     await page.goto("/admin/employees");

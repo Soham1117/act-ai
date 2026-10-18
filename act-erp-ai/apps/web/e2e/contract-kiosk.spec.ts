@@ -364,7 +364,7 @@ test.describe("kiosk contract crew: job code on the entry", () => {
   // ("ACT001"), a code that does not exist. Proposed fix: resolve like time-core.ts - the worker's
   // code if it is active, else the JobCode with isDefault && isActive, else return
   // fail("No job code is set for this worker and there is no default job code. See an admin.").
-  test.fixme("a worker with no job code never gets the made-up code ACT001", async ({ browser }) => {
+  test("a worker with no job code never gets the made-up code ACT001", async ({ browser }) => {
     const w = await makeWorker({ name: "Kj NoCode", jobCode: null });
     const page = await openCrewKiosk(browser, 24);
     await pickKioskWorker(page, w.name);
@@ -374,7 +374,7 @@ test.describe("kiosk contract crew: job code on the entry", () => {
   });
 
   // Same bug: a code that was retired after assignment is copied onto the new entry.
-  test.fixme("a worker whose job code was deactivated does not get the retired code", async ({ browser }) => {
+  test("a worker whose job code was deactivated does not get the retired code", async ({ browser }) => {
     const w = await makeWorker({ name: "Kj Retired", jobCode: CW_JOB.inactive.code });
     const page = await openCrewKiosk(browser, 25);
     await pickKioskWorker(page, w.name);
@@ -384,7 +384,7 @@ test.describe("kiosk contract crew: job code on the entry", () => {
   });
 
   // Same bug: a code that was deleted is copied onto the new entry.
-  test.fixme("a worker whose job code was deleted does not get a non-existent code", async ({ browser }) => {
+  test("a worker whose job code was deleted does not get a non-existent code", async ({ browser }) => {
     const w = await makeWorker({ name: "Kj Deleted", jobCode: "GONE-CODE-1" });
     const page = await openCrewKiosk(browser, 26);
     await pickKioskWorker(page, w.name);
