@@ -100,8 +100,8 @@ test.describe("hire packet import", () => {
     // PDF fails the whole import. src/lib/hire-packet/extract/pdf-text.ts. Proposed fix: point
     // GlobalWorkerOptions.workerSrc at the worker copied by scripts/copy-pdf-worker.mjs.
     test.fixme((await page.getByText(/import failed/i).count()) > 0, "pdf.js worker missing in the dev server");
-    await expect(page.getByText("i9.pdf")).toBeVisible();
-    await expect(page.getByText("badge.png")).toBeVisible();
+    await expect(page.getByText("i9.pdf", { exact: true })).toBeVisible();
+    await expect(page.getByText("badge.png", { exact: true })).toBeVisible();
     await expect(page.getByText("notes.exe")).toHaveCount(0); // filtered by extension
     const e = await personRow("hp1");
     expect(await db.document.count({ where: { employeeId: e.id, fileName: { contains: "/hire-import/" } } })).toBe(2);
