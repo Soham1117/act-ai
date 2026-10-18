@@ -970,14 +970,22 @@ export async function bulkTerminateEmployees(
       );
     }
 
-    await db.employee.updateMany({
-      where: { id: { in: eligible.map((e) => e.id) } },
-      data: {
-        employmentStatus: "TERMINATED",
-        terminationDate: c.date,
-        terminationReason: reason,
-      },
-    });
+    // Same as a single termination: the status change and session revocation
+    // are one atomic unit, so no pre-termination JWT stays usable.
+    await db.$transaction([
+      db.employee.updateMany({
+        where: { id: { in: eligible.map((e) => e.id) } },
+        data: {
+          employmentStatus: "TERMINATED",
+          terminationDate: c.date,
+          terminationReason: reason,
+        },
+      }),
+      db.user.updateMany({
+        where: { id: { in: eligible.map((e) => e.userId) } },
+        data: { tokenVersion: { increment: 1 } },
+      }),
+    ]);
     for (const e of eligible) {
       await audit({
         action: "employee.status_change",
