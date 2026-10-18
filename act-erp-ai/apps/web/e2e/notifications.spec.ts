@@ -63,6 +63,11 @@ test.describe("notifications: employee inbox", () => {
     const fire = () => page.evaluate(() => window.dispatchEvent(new Event("act:notifications-changed")));
     await fire();
     await expect.poll(() => calls).toBe(1);
+    // After the 401 the poller is stopped: more change events send no request.
+    await fire();
+    await fire();
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    expect(calls).toBe(1);
     await expectNoCrash(page);
     expect(errors).toEqual([]);
   });

@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toastAction, toastCaught } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { createDepartment, updateDepartment } from "@/server/actions/departments";
 
 export type DepartmentFormValues = {
@@ -54,17 +54,13 @@ export function DepartmentDialog({
     startTransition(async () => {
       const input = { name, code: code || null, description: description || null };
       if (existing) {
-        try {
-          const res = await updateDepartment(existing.id, input);
-          if (!toastAction(res)) return;
-          toast.success(`Saved ${name.trim()}`);
-          setOpen(false);
-        } catch (err) {
-          toastCaught(err);
-        }
+        const res = await runAction(() => updateDepartment(existing.id, input));
+        if (!toastAction(res)) return;
+        toast.success(`Saved ${name.trim()}`);
+        setOpen(false);
         return;
       }
-      const res = await createDepartment(input);
+      const res = await runAction(() => createDepartment(input));
       if (!toastAction(res)) return;
       toast.success(`Created ${name}`);
       setOpen(false);

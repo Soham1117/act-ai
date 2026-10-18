@@ -22,12 +22,14 @@ export function NotificationsRealtime({
     if (!employeeId) return;
     let active = true;
     const poll = async () => {
+      if (!active) return;
       try {
         const r = await fetch("/api/notifications/unread", { cache: "no-store" });
         if (r.status === 401) {
           // Session ended. Stop polling; the next page load sends the user to sign in.
           active = false;
           clearInterval(id);
+          window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, poll);
           return;
         }
         if (!r.ok) return;
