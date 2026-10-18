@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { markNotificationRead } from "@/server/actions/notifications";
 import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notification-events";
 
@@ -20,7 +20,7 @@ export function MarkReadButton({ id }: { id: string }) {
       aria-label="Mark as read"
       onClick={() =>
         startTransition(async () => {
-          const res = await markNotificationRead(id);
+          const res = await runAction(() => markNotificationRead(id));
           if (!toastAction(res)) return;
           window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
           router.refresh();

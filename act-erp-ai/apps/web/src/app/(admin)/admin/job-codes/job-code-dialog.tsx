@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createJobCode, updateJobCode } from "@/server/actions/job-codes";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 type DepartmentOption = { id: string; name: string };
 
@@ -90,11 +90,11 @@ export function JobCodeDialog({ departments, existing, open: controlledOpen, onO
         departmentId: departmentId === NONE ? null : departmentId,
       };
       if (editing && existing) {
-        const res = await updateJobCode(existing.id, payload);
+        const res = await runAction(() => updateJobCode(existing.id, payload));
         if (!toastAction(res)) return;
         toast.success(`Updated ${code.toUpperCase()}`);
       } else {
-        const res = await createJobCode(payload);
+        const res = await runAction(() => createJobCode(payload));
         if (!toastAction(res)) return;
         toast.success(`Created ${code.toUpperCase()}`);
         resetCreate();

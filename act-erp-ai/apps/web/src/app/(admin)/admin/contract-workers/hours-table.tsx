@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PunchPhotos } from "@/components/punch-photos";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
 import { dateToBusinessLocal } from "@/lib/time-rules";
 import {
@@ -45,7 +45,7 @@ export function DownloadHoursCsvButton({
   const [pending, startTransition] = useTransition();
   function download() {
     startTransition(async () => {
-      const res = await exportContractHoursCsv({ from, to, agencyId: agencyId || undefined });
+      const res = await runAction(() => exportContractHoursCsv({ from, to, agencyId: agencyId || undefined }));
       if (!toastAction(res)) return;
       const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -97,11 +97,11 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
   function approve(ids: string[]) {
     startTransition(async () => {
       if (ids.length === 1) {
-        const res = await reviewContractTimeEntry({ id: ids[0]!, decision: "APPROVED" });
+        const res = await runAction(() => reviewContractTimeEntry({ id: ids[0]!, decision: "APPROVED" }));
         if (!toastAction(res)) return;
         toast.success("Entry approved");
       } else {
-        const res = await bulkReviewContractTimeEntries({ ids, decision: "APPROVED" });
+        const res = await runAction(() => bulkReviewContractTimeEntries({ ids, decision: "APPROVED" }));
         if (!toastAction(res)) return;
         toast.success(
           res.skipped > 0
@@ -121,11 +121,11 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
     if (!notes) return toast.error("Enter a reason for rejecting.");
     startTransition(async () => {
       if (ids.length === 1) {
-        const res = await reviewContractTimeEntry({ id: ids[0]!, decision: "REJECTED", notes });
+        const res = await runAction(() => reviewContractTimeEntry({ id: ids[0]!, decision: "REJECTED", notes }));
         if (!toastAction(res)) return;
         toast.success("Entry rejected");
       } else {
-        const res = await bulkReviewContractTimeEntries({ ids, decision: "REJECTED", notes });
+        const res = await runAction(() => bulkReviewContractTimeEntries({ ids, decision: "REJECTED", notes }));
         if (!toastAction(res)) return;
         toast.success(
           res.skipped > 0
@@ -152,12 +152,12 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
     if (!clockIn || !clockOut) return toast.error("Enter both clock-in and clock-out.");
     if (reason.trim().length < 3) return toast.error("Enter a reason (at least 3 characters).");
     startTransition(async () => {
-      const res = await adminEditContractTimeEntry({
+      const res = await runAction(() => adminEditContractTimeEntry({
         id: editRow.id,
         clockIn,
         clockOut,
         reason: reason.trim(),
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Times updated. The entry is pending approval again.");
       setEditRow(null);

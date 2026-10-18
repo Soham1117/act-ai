@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { setMyKioskPin } from "@/server/actions/kiosk";
 
 export function KioskPinForm() {
@@ -20,7 +20,7 @@ export function KioskPinForm() {
     if (!/^\d{4,6}$/.test(pin)) return toast.error("PIN must be 4-6 digits");
     if (pin !== confirmPin) return toast.error("PINs do not match");
     startTransition(async () => {
-      const res = await setMyKioskPin(password, pin);
+      const res = await runAction(() => setMyKioskPin(password, pin));
       if (!toastAction(res)) return;
       toast.success("Kiosk PIN set");
       setPassword("");

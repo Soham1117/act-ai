@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { submitOnboarding, type OnboardingSubmit } from "@/server/actions/onboarding";
 
 const STEPS = [
@@ -163,7 +163,7 @@ export function OnboardingForm({
 
       const { confirmPassword, ...rest } = form;
       void confirmPassword;
-      const res = await submitOnboarding(
+      const res = await runAction(() => submitOnboarding(
         token,
         {
           ...rest,
@@ -172,7 +172,7 @@ export function OnboardingForm({
           personalEmail: rest.personalEmail.trim().toLowerCase(),
         },
         fileEntries,
-      );
+      ));
       if (!res.ok) {
         // Keep the (possibly long, per-file) message on screen, not just a toast.
         setSubmitError(res.error);

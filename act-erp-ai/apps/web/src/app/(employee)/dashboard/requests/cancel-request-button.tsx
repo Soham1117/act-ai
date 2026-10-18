@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { cancelRequest } from "@/server/actions/requests";
 
 export function CancelRequestButton({ id }: { id: string }) {
@@ -17,7 +17,7 @@ export function CancelRequestButton({ id }: { id: string }) {
       onClick={() => {
         if (!window.confirm("Withdraw this request?")) return;
         startTransition(async () => {
-          const res = await cancelRequest(id);
+          const res = await runAction(() => cancelRequest(id));
           if (!toastAction(res)) return;
           toast.success("Request withdrawn");
         });

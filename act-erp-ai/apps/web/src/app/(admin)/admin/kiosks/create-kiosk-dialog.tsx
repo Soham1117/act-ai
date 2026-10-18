@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createKiosk } from "@/server/actions/kiosk";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 function slugify(s: string) {
   return s
@@ -72,7 +72,7 @@ export function CreateKioskDialog() {
               return;
             }
             startTransition(async () => {
-              const res = await createKiosk({ slug: cleaned, label: label.trim() });
+              const res = await runAction(() => createKiosk({ slug: cleaned, label: label.trim() }));
               if (!toastAction(res)) return;
               toast.success("Kiosk created");
               setOpen(false);

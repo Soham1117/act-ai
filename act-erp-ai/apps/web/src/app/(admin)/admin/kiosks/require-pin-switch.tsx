@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { setKioskRequirePin } from "@/server/actions/kiosk";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 export function RequirePinSwitch({
   id,
@@ -32,7 +32,7 @@ export function RequirePinSwitch({
 
   function save(next: boolean) {
     startTransition(async () => {
-      const res = await setKioskRequirePin(id, next);
+      const res = await runAction(() => setKioskRequirePin(id, next));
       if (!toastAction(res)) return;
       toast.success(next ? "PIN is now required at this kiosk" : "PIN is no longer required");
       setConfirmOff(false);

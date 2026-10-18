@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { runAction } from "@/lib/toast-action";
 import { getMyScheduleEvents } from "@/server/actions/schedules";
 
 type RawEvent = {
@@ -80,7 +81,7 @@ export function EmployeeScheduleCalendar({ events: initialEvents }: { events: Ra
         const key = start + "|" + end;
         if (rangeRef.current === key) return;
         rangeRef.current = key;
-        void getMyScheduleEvents({ start, end }).then((res) => {
+        void runAction(() => getMyScheduleEvents({ start, end })).then((res) => {
           if (res.ok && rangeRef.current === key) setEvents(res.events);
         });
       },

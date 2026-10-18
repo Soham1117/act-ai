@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { createAgency, setAgencyActive, updateAgency } from "@/server/actions/contract-workers";
 import type { AgencyRow } from "./shared";
 
@@ -49,7 +49,7 @@ export function AgencyFormDialog({ agency }: { agency?: AgencyRow }) {
       notes: notes || null,
     };
     startTransition(async () => {
-      const res = agency ? await updateAgency(agency.id, input) : await createAgency(input);
+      const res = agency ? await runAction(() => updateAgency(agency.id, input)) : await runAction(() => createAgency(input));
       if (!toastAction(res)) return;
       toast.success(agency ? "Agency updated" : "Agency added");
       setOpen(false);
@@ -143,7 +143,7 @@ function ActiveToggle({ agency }: { agency: AgencyRow }) {
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          const res = await setAgencyActive(agency.id, !agency.isActive);
+          const res = await runAction(() => setAgencyActive(agency.id, !agency.isActive));
           if (!toastAction(res)) return;
           toast.success(agency.isActive ? "Agency deactivated" : "Agency activated");
           router.refresh();

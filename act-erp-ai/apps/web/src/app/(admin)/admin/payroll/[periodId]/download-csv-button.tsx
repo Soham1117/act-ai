@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { generatePayrollSlipCsv } from "./actions";
 
 export function DownloadCsvButton({
@@ -32,7 +32,7 @@ export function DownloadCsvButton({
 
   function download(reason?: string) {
     startTransition(async () => {
-      const res = await generatePayrollSlipCsv(periodId, reason);
+      const res = await runAction(() => generatePayrollSlipCsv(periodId, reason));
       if (!toastAction(res)) return;
       const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);

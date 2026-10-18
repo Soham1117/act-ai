@@ -14,7 +14,7 @@ import {
   type KioskContractWorker,
 } from "@/server/actions/kiosk-contract";
 import { BUSINESS_TIME_ZONE } from "@/lib/format";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { setKioskBusy } from "@/lib/kiosk-version";
 import { cn } from "@/lib/utils";
 import { PunchCameraPreview, type PunchCamera } from "./punch-camera";
@@ -97,7 +97,7 @@ export function ContractCrewPanel({
   );
 
   const load = useCallback(async () => {
-    const res = await kioskListContractWorkers(slug);
+    const res = await runAction(() => kioskListContractWorkers(slug));
     if (!res.ok) {
       toastAction(res);
       setLoading(false);
@@ -157,7 +157,7 @@ export function ContractCrewPanel({
     startTransition(async () => {
       // Best-effort photo; null never blocks the punch.
       const photo = (await camera.capture()) ?? undefined;
-      const res = await kioskContractAction({ slug, workerId: worker.id, action, photo });
+      const res = await runAction(() => kioskContractAction({ slug, workerId: worker.id, action, photo }));
       if (!toastAction(res)) return;
       const time = new Date().toLocaleTimeString([], {
         timeZone: BUSINESS_TIME_ZONE,

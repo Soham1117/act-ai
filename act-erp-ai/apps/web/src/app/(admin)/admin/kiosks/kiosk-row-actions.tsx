@@ -29,7 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { deleteKiosk, revokeKiosk } from "@/server/actions/kiosk";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 export function KioskRowActions({
   id,
@@ -76,7 +76,7 @@ export function KioskRowActions({
             <DropdownMenuItem
               onClick={() =>
                 startTransition(async () => {
-                  const res = await revokeKiosk(id);
+                  const res = await runAction(() => revokeKiosk(id));
                   if (!toastAction(res)) return;
                   toast.success("Kiosk revoked");
                 })
@@ -109,7 +109,7 @@ export function KioskRowActions({
               onClick={(e) => {
                 e.preventDefault();
                 startTransition(async () => {
-                  const res = await deleteKiosk(id);
+                  const res = await runAction(() => deleteKiosk(id));
                   if (!toastAction(res)) return;
                   toast.success("Kiosk deleted");
                   setConfirmDelete(false);

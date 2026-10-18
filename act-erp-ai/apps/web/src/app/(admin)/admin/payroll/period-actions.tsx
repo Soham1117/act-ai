@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { deletePayrollPeriod, updatePayrollPeriod } from "@/server/actions/payroll";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 export type EditablePeriod = {
   id: string;
@@ -51,14 +51,14 @@ export function PeriodActions({ period }: { period: EditablePeriod }) {
   function onSave(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await updatePayrollPeriod(period.id, {
+      const res = await runAction(() => updatePayrollPeriod(period.id, {
         title,
         payPeriodStart: start,
         payPeriodEnd: end,
         payDate,
         status,
         notes: notes || undefined,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Pay period updated");
       setOpen(false);
@@ -73,7 +73,7 @@ export function PeriodActions({ period }: { period: EditablePeriod }) {
     )
       return;
     startTransition(async () => {
-      const res = await deletePayrollPeriod(period.id);
+      const res = await runAction(() => deletePayrollPeriod(period.id));
       if (!toastAction(res)) return;
       toast.success("Pay period deleted");
     });

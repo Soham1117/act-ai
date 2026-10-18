@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
 import { copyText } from "@/lib/clipboard";
 import {
@@ -53,7 +53,7 @@ export function OnboardingActions({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const invite = await createOnboardingInvite({
+      const invite = await runAction(() => createOnboardingInvite({
         email: email.trim() || undefined,
         departmentId: departmentId === NONE ? null : departmentId,
         jobTitle: jobTitle.trim() || null,
@@ -61,7 +61,7 @@ export function OnboardingActions({
         compensationType,
         compensationValue: parseMoneyInput(compensationValue),
         dateOfHire: dateOfHire || null,
-      });
+      }));
       if (!toastAction(invite)) return;
       const url = `${window.location.origin}/onboard/${invite.token}`;
       setGeneratedUrl(url);
@@ -259,7 +259,7 @@ export function RowActions({ inviteId, token }: { inviteId: string; token: strin
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            const res = await revokeOnboardingInvite(inviteId);
+            const res = await runAction(() => revokeOnboardingInvite(inviteId));
             if (!toastAction(res)) return;
             toast.success("Invite revoked");
           })

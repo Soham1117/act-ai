@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { businessDateOnly } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
 import {
@@ -89,11 +89,11 @@ export function WorkerFormDialog({
     };
     startTransition(async () => {
       if (worker) {
-        const res = await updateContractWorker(worker.id, input);
+        const res = await runAction(() => updateContractWorker(worker.id, input));
         if (!toastAction(res)) return;
         toast.success("Worker updated");
       } else {
-        const res = await createContractWorker(input);
+        const res = await runAction(() => createContractWorker(input));
         if (!toastAction(res)) return;
         toast.success(`Added ${res.workerId}`);
       }
@@ -210,7 +210,7 @@ export function EndAssignmentButton({ worker }: { worker: WorkerRow }) {
 
   function confirm() {
     startTransition(async () => {
-      const res = await endContractWorker(worker.id, endDate || undefined);
+      const res = await runAction(() => endContractWorker(worker.id, endDate || undefined));
       if (!toastAction(res)) return;
       toast.success(
         res.closedOpenEntry
@@ -271,7 +271,7 @@ export function ReactivateButton({ worker }: { worker: WorkerRow }) {
 
   function confirm() {
     startTransition(async () => {
-      const res = await reactivateContractWorker(worker.id, endDate || undefined);
+      const res = await runAction(() => reactivateContractWorker(worker.id, endDate || undefined));
       if (!toastAction(res)) return;
       toast.success(`${worker.name} reactivated`);
       setOpen(false);
@@ -325,7 +325,7 @@ export function ClockOutButton({ workerId, name }: { workerId: string; name: str
 
   function confirm() {
     startTransition(async () => {
-      const res = await adminClockOutContractWorker(workerId);
+      const res = await runAction(() => adminClockOutContractWorker(workerId));
       if (!toastAction(res)) return;
       toast.success(`${name} clocked out. The entry needs approval.`);
       setOpen(false);

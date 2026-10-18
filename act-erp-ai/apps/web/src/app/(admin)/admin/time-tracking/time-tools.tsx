@@ -29,7 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
 import { dateToBusinessLocal, MAX_SHIFT_MS } from "@/lib/time-rules";
 import {
@@ -183,7 +183,7 @@ function EditEntryDialog({
     e.preventDefault();
     if (!requireReason()) return;
     startTransition(async () => {
-      const res = await adminUpdateTimeEntry({
+      const res = await runAction(() => adminUpdateTimeEntry({
         id: entry.id,
         clockIn,
         clockOut: openEntry ? null : clockOut,
@@ -191,7 +191,7 @@ function EditEntryDialog({
         notes: notes.trim() ? notes : null,
         breaks: openEntry ? undefined : breaks.map((b) => ({ id: b.id, start: b.start, end: b.end })),
         reason: reason.trim(),
-      });
+      }));
       if (!toastAction(res)) return;
       done(`${res.message} The employee was notified.`);
     });
@@ -200,7 +200,7 @@ function EditEntryDialog({
   function reopen() {
     if (!requireReason()) return;
     startTransition(async () => {
-      const res = await adminReopenTimeEntry({ id: entry.id, reason: reason.trim() });
+      const res = await runAction(() => adminReopenTimeEntry({ id: entry.id, reason: reason.trim() }));
       if (!toastAction(res)) return;
       done("Entry reopened. The employee is clocked in again.");
     });
@@ -212,7 +212,7 @@ function EditEntryDialog({
       return;
     }
     startTransition(async () => {
-      const res = await adminDeleteTimeEntry({ id: entry.id, reason: reason.trim() });
+      const res = await runAction(() => adminDeleteTimeEntry({ id: entry.id, reason: reason.trim() }));
       setConfirmDelete(false);
       if (!toastAction(res)) return;
       done("Entry deleted.");
@@ -360,7 +360,7 @@ function ForceClockOutDialog({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await adminForceClockOut({ id: entry.id, clockOut, reason: reason.trim() });
+      const res = await runAction(() => adminForceClockOut({ id: entry.id, clockOut, reason: reason.trim() }));
       if (!toastAction(res)) return;
       toast.success("Clocked out. The entry is now pending approval.");
       onOpenChange(false);
@@ -494,7 +494,7 @@ export function ManualEntryButton({
       return;
     }
     startTransition(async () => {
-      const res = await adminCreateManualTimeEntry({
+      const res = await runAction(() => adminCreateManualTimeEntry({
         employeeId,
         clockIn,
         clockOut,
@@ -503,7 +503,7 @@ export function ManualEntryButton({
         breaks: breaks.map((b) => ({ start: b.start, end: b.end })),
         reason: reason.trim(),
         approve,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success(approve ? "Manual entry added and approved." : "Manual entry added (pending approval).");
       setOpen(false);
@@ -655,7 +655,7 @@ function RowReview({ entry }: { entry: EntryRowData }) {
 
   function run(decision: "APPROVED" | "REJECTED", notes?: string) {
     startTransition(async () => {
-      const res = await reviewTimeEntry({ timeEntryId: entry.id, decision, notes });
+      const res = await runAction(() => reviewTimeEntry({ timeEntryId: entry.id, decision, notes }));
       if (!toastAction(res)) return;
       toast.success(decision === "APPROVED" ? "Approved" : "Rejected");
       setRejectOpen(false);
@@ -707,7 +707,7 @@ export function PendingQueue({
 
   function bulk(decision: "APPROVED" | "REJECTED", notes?: string) {
     startTransition(async () => {
-      const res = await bulkReviewTimeEntries({ ids: [...selected], decision, notes });
+      const res = await runAction(() => bulkReviewTimeEntries({ ids: [...selected], decision, notes }));
       if (!toastAction(res)) return;
       toast.success(
         `${res.updated} ${decision === "APPROVED" ? "approved" : "rejected"}` +

@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { submitLeaveRequest } from "@/server/actions/leave";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import {
   LEAVE_TYPES,
   fmtDays,
@@ -93,14 +93,14 @@ export function LeaveRequestDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await submitLeaveRequest({
+      const res = await runAction(() => submitLeaveRequest({
         leaveType: type,
         startDate,
         endDate,
         startHalfDay: startHalf,
         endHalfDay: single ? false : endHalf,
         description: description || undefined,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success(`Leave request submitted (${fmtDays(res.totalDays)})`);
       setOpen(false);

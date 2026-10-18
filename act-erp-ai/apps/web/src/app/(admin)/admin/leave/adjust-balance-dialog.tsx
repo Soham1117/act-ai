@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { adjustLeaveBalance } from "@/server/actions/leave";
 import { LEAVE_TYPES } from "@/lib/leave-balance";
 
@@ -49,13 +49,13 @@ export function AdjustBalanceDialog({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await adjustLeaveBalance({
+      const res = await runAction(() => adjustLeaveBalance({
         employeeId,
         leaveType: type,
         year,
         days: n,
         reason: reason.trim(),
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success("Balance adjusted");
       setOpen(false);

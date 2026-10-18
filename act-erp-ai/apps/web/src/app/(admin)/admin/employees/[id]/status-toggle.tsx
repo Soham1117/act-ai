@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { setEmploymentStatus } from "@/server/actions/employees";
 import { TERMINATION_GRACE_DAYS } from "@/lib/access";
 import { todayDateString } from "@/lib/employee-validation";
@@ -105,10 +105,10 @@ export function StatusToggle({
             disabled={pending || !date}
             onClick={() =>
               startTransition(async () => {
-                const res = await setEmploymentStatus(employeeId, "TERMINATED", {
+                const res = await runAction(() => setEmploymentStatus(employeeId, "TERMINATED", {
                   reason: reason || undefined,
                   terminationDate: date,
-                });
+                }));
                 if (!toastAction(res)) return;
                 toast.success(isTerminated ? "Termination updated" : "Employee terminated");
                 setOpen(false);
@@ -134,7 +134,7 @@ export function StatusToggle({
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            const res = await setEmploymentStatus(employeeId, "ACTIVE");
+            const res = await runAction(() => setEmploymentStatus(employeeId, "ACTIVE"));
             if (!toastAction(res)) return;
             toast.success("Employee reactivated");
           })

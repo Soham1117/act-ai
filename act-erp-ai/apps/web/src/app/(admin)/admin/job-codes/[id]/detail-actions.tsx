@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { JobCodeDialog } from "../job-code-dialog";
 import { assignJobCode, unassignJobCode } from "@/server/actions/job-codes";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 type Existing = {
   id: string;
@@ -60,7 +60,7 @@ export function JobCodeDetailActions({
     e.preventDefault();
     if (!employeeId) return;
     startTransition(async () => {
-      const res = await assignJobCode(jobCode.id, employeeId, isPrimary, rate || "NA");
+      const res = await runAction(() => assignJobCode(jobCode.id, employeeId, isPrimary, rate || "NA"));
       if (!toastAction(res)) return;
       toast.success("Assigned");
       setAssignOpen(false);
@@ -146,7 +146,7 @@ export function UnassignButton({ jobCodeId, employeeId }: { jobCodeId: string; e
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          const res = await unassignJobCode(jobCodeId, employeeId);
+          const res = await runAction(() => unassignJobCode(jobCodeId, employeeId));
           if (!toastAction(res)) return;
           toast.success("Unassigned");
         })

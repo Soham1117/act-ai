@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { getScheduleEvents, type ScheduleEvent } from "@/server/actions/schedules";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 type RawEvent = ScheduleEvent;
 
@@ -94,7 +94,7 @@ export function ScheduleCalendar({
     // first screen shows up straight away.
     const r = range ?? rangeRef.current ?? initialWindow();
     if (!r) return;
-    const res = await getScheduleEvents(r);
+    const res = await runAction(() => getScheduleEvents(r));
     if (!toastAction(res)) return;
     // Ignore stale responses if the admin has navigated on.
     if (rangeRef.current && (rangeRef.current.start !== r.start || rangeRef.current.end !== r.end)) return;

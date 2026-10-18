@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { setUserRole } from "@/server/actions/employees";
 
 /** Promote / demote an admin. Server refuses self-change and the last admin. */
@@ -108,7 +108,7 @@ export function AccessCard({
               disabled={pending}
               onClick={() =>
                 startTransition(async () => {
-                  const res = await setUserRole(employeeId, target);
+                  const res = await runAction(() => setUserRole(employeeId, target));
                   if (!toastAction(res)) return;
                   toast.success(target === "ADMIN" ? "Admin access granted" : "Admin access removed");
                   setOpen(false);

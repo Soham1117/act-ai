@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { retryKnowledgeDocument } from "@/server/actions/knowledge";
 import { Button } from "@/components/ui/button";
 
@@ -19,7 +19,7 @@ export function KnowledgeRetryButton({ documentId }: { documentId: string }) {
       onClick={async () => {
         setBusy(true);
         try {
-          const res = await retryKnowledgeDocument(documentId);
+          const res = await runAction(() => retryKnowledgeDocument(documentId));
           if (!toastAction(res)) return;
           toast.success("Retry queued");
           router.refresh();

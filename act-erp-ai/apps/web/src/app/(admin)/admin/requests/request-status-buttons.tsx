@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import type { ActionResult } from "@/lib/action-result";
 import { reopenRequest, updateRequestStatus } from "@/server/actions/requests";
 import { REQUEST_TRANSITIONS, type RequestStatusKey } from "@/lib/request-transitions";
@@ -53,8 +53,8 @@ export function RequestStatusButtons({
     startTransition(async () => {
       const res: ActionResult<Record<string, unknown>> =
         action === "REOPEN"
-          ? await reopenRequest({ requestId: id, note })
-          : await updateRequestStatus({ requestId: id, status: action, note: note.trim() || undefined });
+          ? await runAction(() => reopenRequest({ requestId: id, note }))
+          : await runAction(() => updateRequestStatus({ requestId: id, status: action, note: note.trim() || undefined }));
       if (!toastAction(res)) return;
       toast.success(action === "REOPEN" ? "Reopened" : action.toLowerCase());
       setAction(null);

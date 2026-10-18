@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import Link from "next/link";
 import { submitRequest } from "@/server/actions/requests";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 
 const TYPES = [
   "DOCUMENT_REQUEST", "DETAILS_CHANGE", "PAYROLL_INQUIRY", "SCHEDULE_CHANGE",
@@ -51,7 +51,7 @@ export function RequestDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await submitRequest({ type, title, description });
+      const res = await runAction(() => submitRequest({ type, title, description }));
       if (!toastAction(res)) return;
       toast.success("Request submitted");
       setOpen(false);

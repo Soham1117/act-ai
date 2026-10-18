@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { updateMyPersonalEmail } from "@/server/actions/employees";
 
 export function PersonalEmailForm({
@@ -23,7 +23,7 @@ export function PersonalEmailForm({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const res = await updateMyPersonalEmail(password, email);
+      const res = await runAction(() => updateMyPersonalEmail(password, email));
       if (!toastAction(res)) return;
       toast.success("Personal email updated");
       setPassword("");

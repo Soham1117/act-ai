@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { requestLoginChallenge, verifyLoginChallenge } from "@/server/actions/auth";
+import { runAction } from "@/lib/toast-action";
 
 /** Only same-site paths; never follow an external `next` URL. */
 function safeNext(next: string | undefined): string {
@@ -48,7 +49,7 @@ export function LoginForm({
   function onSubmitCreds(values: CredsValues) {
     setError(null);
     startTransition(async () => {
-      const res = await requestLoginChallenge(values.identifier, values.password);
+      const res = await runAction(() => requestLoginChallenge(values.identifier, values.password));
       if (!res.ok) {
         setError(res.error);
         return;
@@ -67,7 +68,7 @@ export function LoginForm({
     if (!challengeId) return;
     setError(null);
     startTransition(async () => {
-      const res = await verifyLoginChallenge(challengeId, code);
+      const res = await runAction(() => verifyLoginChallenge(challengeId, code));
       if (!res.ok) {
         setError(res.error);
         return;

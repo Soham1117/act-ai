@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { reopenReimbursement, reviewReimbursement } from "@/server/actions/reimbursements";
 import { allowedTransitions, canReopen, type ReimbursementStatus } from "@/lib/reimbursement";
 
@@ -53,12 +53,12 @@ export function ReimbursementStatusButtons({
 
   function review(status: "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "PAID") {
     startTransition(async () => {
-      const res = await reviewReimbursement({
+      const res = await runAction(() => reviewReimbursement({
         reimbursementId: id,
         status,
         note: note.trim() || undefined,
         paidAmount: status === "PAID" ? Number(paid) : undefined,
-      });
+      }));
       if (!toastAction(res)) return;
       toast.success(status.replace("_", " ").toLowerCase());
       closeDialog();
@@ -67,7 +67,7 @@ export function ReimbursementStatusButtons({
 
   function reopen() {
     startTransition(async () => {
-      const res = await reopenReimbursement({ reimbursementId: id, note: note.trim() || undefined });
+      const res = await runAction(() => reopenReimbursement({ reimbursementId: id, note: note.trim() || undefined }));
       if (!toastAction(res)) return;
       toast.success("Claim reopened");
       closeDialog();

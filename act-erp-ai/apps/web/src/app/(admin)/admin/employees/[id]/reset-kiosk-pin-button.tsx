@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { toastAction } from "@/lib/toast-action";
+import { runAction, toastAction } from "@/lib/toast-action";
 import { resetEmployeeKioskPin } from "@/server/actions/kiosk";
 
 export function ResetKioskPinButton({ employeeId }: { employeeId: string }) {
@@ -15,7 +15,7 @@ export function ResetKioskPinButton({ employeeId }: { employeeId: string }) {
       return;
     }
     startTransition(async () => {
-      const res = await resetEmployeeKioskPin(employeeId);
+      const res = await runAction(() => resetEmployeeKioskPin(employeeId));
       if (!toastAction(res)) return;
       toast.success("Kiosk PIN reset to 3214");
     });
