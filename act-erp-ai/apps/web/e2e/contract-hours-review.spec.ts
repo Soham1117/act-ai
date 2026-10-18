@@ -664,9 +664,9 @@ test.describe("admin hours: filters and totals", () => {
     const { agency, w } = await setup();
     await makeEntry(w.id, { daysAgo: 4 });
     await page.goto("/admin/contract-workers?tab=hours");
-    await page.locator("#cw-h-from").fill(businessYmd(5));
-    await page.locator("#cw-h-to").fill(businessYmd(3));
-    await page.locator("#cw-h-agency").selectOption(agency.id);
+    await page.locator("#cw-h-from").filter({ visible: true }).fill(businessYmd(5));
+    await page.locator("#cw-h-to").filter({ visible: true }).fill(businessYmd(3));
+    await page.locator("#cw-h-agency").filter({ visible: true }).selectOption(agency.id);
     await page.getByRole("button", { name: /^apply$/i }).click();
     await expect(page).toHaveURL(/hagency=/);
     await expect(row(page, w.name)).toBeVisible();
