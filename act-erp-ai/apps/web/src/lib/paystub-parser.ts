@@ -65,7 +65,9 @@ export async function parsePaystub(
 
   try {
     const doc = await getDocument({
-      data: new Uint8Array(bytes),
+      // pdf.js transfers (detaches) the buffer it is given; pass a copy so the
+      // caller can still hash the original bytes afterwards.
+      data: new Uint8Array(bytes.slice(0)),
       useWorkerFetch: false,
       isEvalSupported: false,
       disableFontFace: true,
