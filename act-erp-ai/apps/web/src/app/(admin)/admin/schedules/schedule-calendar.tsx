@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { getScheduleEvents, type ScheduleEvent } from "@/server/actions/schedules";
-import { storedTimeContent } from "@/lib/schedule-display";
+import { patchListTimes, storedTimeContent } from "@/lib/schedule-display";
 import { toast } from "sonner";
 
 const LOAD_ERROR = "Could not load shifts for this month. Check the connection and try again.";
@@ -251,6 +251,18 @@ export function ScheduleCalendar({
     calendar.events.set(sxEvents);
   }, [calendar, sxEvents]);
 
+  // The List view formats times from the moved instant; keep the stored ones on screen.
+  const calendarBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = calendarBoxRef.current;
+    if (!box) return;
+    const apply = () => patchListTimes(box, filteredEvents);
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(box, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [filteredEvents]);
+
   function openCreate() {
     setEdit(null);
     setInitialDate(undefined);
@@ -353,7 +365,7 @@ export function ScheduleCalendar({
         </div>
       )}
 
-      <div className="sx-react-calendar-wrapper" style={{ height: 640 }}>
+      <div ref={calendarBoxRef} className="sx-react-calendar-wrapper" style={{ height: 640 }}>
         <ScheduleXCalendar calendarApp={calendar} />
       </div>
 

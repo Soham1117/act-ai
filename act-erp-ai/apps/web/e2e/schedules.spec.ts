@@ -21,6 +21,18 @@ test.describe("admin schedules: DST gap", () => {
     await expect(calEvents(page, /^2:30 AM/).first()).toBeVisible();
     await expect(calEvents(page, /^3:30 AM/)).toHaveCount(0);
   });
+
+  test("the List view shows the stored 2:30 AM - 4:30 AM too", async ({ page }) => {
+    await page.goto("/admin/schedules");
+    await gotoMonth(page, "2026-03-08");
+    await page.getByRole("button", { name: "Select View" }).click();
+    await page.getByText("List", { exact: true }).first().click();
+    const row = page.locator(".sx__list-day[data-date='2026-03-08'] .sx__list-event").filter({ hasText: "E2E100" });
+    await expect(row.first()).toBeVisible();
+    await expect(row.filter({ hasText: "2:30 AM" })).toHaveCount(1);
+    await expect(row.filter({ hasText: "4:30 AM" })).toHaveCount(1);
+    await expect(row.filter({ hasText: "3:30 AM" })).toHaveCount(0);
+  });
 });
 
 test.describe("admin schedules: month navigation failures", () => {
