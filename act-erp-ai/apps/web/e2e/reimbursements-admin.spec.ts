@@ -271,9 +271,9 @@ test.describe("admin reimbursements: review", () => {
       })),
     });
     await page.goto("/admin/reimbursements?tab=all");
-    await expect(page.getByText(/Page 1 of \d+/)).toBeVisible();
+    await expect(page.getByText(/Page 1 of \d+/).filter({ visible: true })).toBeVisible();
     await page.getByRole("link", { name: "Next" }).click();
-    await expect(page.getByText(/Page 2 of \d+/)).toBeVisible();
+    await expect(page.getByText(/Page 2 of \d+/).filter({ visible: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Previous" })).toBeVisible();
   });
 });

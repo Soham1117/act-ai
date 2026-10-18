@@ -350,16 +350,16 @@ test.describe("reimbursements: what the employee sees", () => {
       })),
     });
     await page.goto("/dashboard/reimbursements");
-    await expect(page.getByText("Page 1 of 2")).toBeVisible();
+    await expect(page.getByText("Page 1 of 2").filter({ visible: true })).toBeVisible();
     await expect(page.getByText("Bulk claim 01")).toBeVisible();
     await expect(page.getByText("Bulk claim 26")).toHaveCount(0);
     await page.getByRole("link", { name: "Next" }).click();
-    await expect(page.getByText("Page 2 of 2")).toBeVisible();
+    await expect(page.getByText("Page 2 of 2").filter({ visible: true })).toBeVisible();
     await expect(page.getByText("Bulk claim 26")).toBeVisible();
     await expect(page.getByText("Bulk claim 27")).toBeVisible();
     await expect(page.getByText("Bulk claim 01")).toHaveCount(0);
     await page.getByRole("link", { name: "Previous" }).click();
-    await expect(page.getByText("Page 1 of 2")).toBeVisible();
+    await expect(page.getByText("Page 1 of 2").filter({ visible: true })).toBeVisible();
   });
 
   test("an employee cannot see another employee's claims or open their receipts", async ({ page, browser }) => {
