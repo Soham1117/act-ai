@@ -28,6 +28,7 @@ Specs: `kiosk-pin-flow`, `kiosk-pin-forced`, `kiosk-pin-lockout`, `kiosk-camera`
 | `kioskAction` | failure (abort/500/stale), double tap | covered | kiosk-pin-flow |
 | `kioskAction` | photo upload fails | not-testable | fake S3 cannot be told to fail (shared file) |
 | `kioskChangePin` | success, weak PINs, mismatch, wrong temp PIN, already changed, failures, double submit | covered | kiosk-pin-forced |
+| `kioskMyTimings` | past-30-days list, PIN check, empty state | planned | e2e spec not written |
 | `revokeKiosk` | happy path, failure | covered | kiosk-admin |
 | `deleteKiosk` | cancel, delete, failure-free path | covered | kiosk-admin |
 | `setMyKioskPin` | employee settings form | planned | needs an employee login in a spec; not written |
