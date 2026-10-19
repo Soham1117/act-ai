@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import {
+  CalendarDays,
   Coffee,
   LayoutGrid,
   List,
@@ -27,9 +28,18 @@ import {
   kioskChangePin,
   kioskListEmployees,
   kioskLookup,
+  kioskMyTimings,
   type KioskRosterEmployee,
+  type KioskTimingEntry,
 } from "@/server/actions/kiosk";
-import { BUSINESS_TIME_ZONE, formatBusinessTime, getAvatarUrl, plainSpaces } from "@/lib/format";
+import {
+  BUSINESS_TIME_ZONE,
+  formatBusinessTime,
+  formatDateOnly,
+  formatHours,
+  getAvatarUrl,
+  plainSpaces,
+} from "@/lib/format";
 import { toast } from "sonner";
 import { toastAction } from "@/lib/toast-action";
 import { setKioskBusy } from "@/lib/kiosk-version";
@@ -105,6 +115,10 @@ export function KioskScreen({
   const [pendingAction, setPendingAction] = useState<KioskActionName | null>(null);
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
+  const [timings, setTimings] = useState<{
+    entries: KioskTimingEntry[];
+    totalWorkMin: number;
+  } | null>(null);
   const [activity, setActivity] = useState(0);
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -165,6 +179,7 @@ export function KioskScreen({
     setPendingAction(null);
     setNewPin("");
     setConfirmPin("");
+    setTimings(null);
     stopCamera();
     setTimeout(() => searchRef.current?.focus(), 0);
   }, [stopCamera]);
@@ -229,6 +244,7 @@ export function KioskScreen({
       setPendingAction(null);
       setNewPin("");
       setConfirmPin("");
+      setTimings(null);
       setShowIdEntry(false);
       setInput("");
       // Warm the camera up while the person reads the card (or types their PIN).
@@ -310,6 +326,26 @@ export function KioskScreen({
     });
   }
 
+  function viewTimings() {
+    if (!match) return;
+    if (requirePin && !/^\d{4,6}$/.test(pin)) {
+      toast.error("Enter your 4-6 digit PIN");
+      return;
+    }
+    startTransition(async () => {
+      const res = await kioskMyTimings({
+        slug,
+        employeeId: match.employeeId,
+        pin: requirePin ? pin : undefined,
+      });
+      if (!toastAction(res)) {
+        setPin("");
+        return;
+      }
+      setTimings({ entries: res.entries, totalWorkMin: res.totalWorkMin });
+    });
+  }
+
   function submitNewPin(e: React.FormEvent) {
     e.preventDefault();
     if (!match || !pendingAction) return;
@@ -382,7 +418,7 @@ export function KioskScreen({
       </header>
 
       <div className="overflow-auto p-4 sm:p-6 lg:p-8">
-        <div className={cn("mx-auto w-full", match ? "max-w-md" : "max-w-5xl")}>
+        <div className={cn("mx-auto w-full", match ? (timings ? "max-w-xl" : "max-w-md") : "max-w-5xl")}>
           <AnimatePresence mode="wait">
             {!match && mode === "contract" ? (
               <motion.div
@@ -634,6 +670,50 @@ export function KioskScreen({
                       </Badge>
                     </div>
 
+                    {timings ? (
+                      <div className="space-y-3">
+                        <div className="flex items-baseline justify-between">
+                          <p className="text-sm font-medium">Past 30 days</p>
+                          <p className="font-mono text-sm tabular-nums">
+                            Total {formatHours(timings.totalWorkMin)}
+                          </p>
+                        </div>
+                        {timings.entries.length === 0 ? (
+                          <p className="py-6 text-center text-sm text-muted-foreground">
+                            No shifts in the past 30 days.
+                          </p>
+                        ) : (
+                          <ul className="max-h-[45vh] divide-y overflow-auto rounded-md border text-sm">
+                            {timings.entries.map((e) => (
+                              <li
+                                key={e.id}
+                                className="grid grid-cols-[88px_1fr_auto] items-center gap-2 px-3 py-2"
+                              >
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDateOnly(e.date)}
+                                </span>
+                                <span className="font-mono text-xs">
+                                  {formatBusinessTime(e.clockInIso)} →{" "}
+                                  {e.clockOutIso ? formatBusinessTime(e.clockOutIso) : "now"}
+                                </span>
+                                <span className="font-mono text-sm tabular-nums">
+                                  {e.clockOutIso ? formatHours(e.totalWorkMin) : "—"}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          className="h-10 w-full text-xs"
+                          onClick={() => setTimings(null)}
+                        >
+                          Back
+                        </Button>
+                      </div>
+                    ) : (
+                    <>
                     {match.staleShift && step === "pin" && (
                       <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-center text-xs text-amber-700 dark:text-amber-300">
                         Your last shift was never clocked out. Clocking in now will close it and
@@ -766,6 +846,17 @@ export function KioskScreen({
                           <Coffee className="mr-2 h-4 w-4" /> End break
                         </Button>
                       )}
+                      {!(requirePin && !match.hasPin) && (
+                        <Button
+                          variant="secondary"
+                          size="lg"
+                          className="col-span-2 h-10 text-xs"
+                          disabled={pending || (requirePin && pin.length < 4)}
+                          onClick={viewTimings}
+                        >
+                          <CalendarDays className="mr-1.5 h-3.5 w-3.5" /> My past month
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="lg"
@@ -776,6 +867,8 @@ export function KioskScreen({
                         <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
                       </Button>
                     </div>
+                    </>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

@@ -30,6 +30,7 @@ import {
 } from "@/lib/kiosk-rate-limit";
 import { clientIpFromHeaders, normalizeNetwork } from "@/lib/ip-network";
 import { isStaleShift } from "@/lib/time-rules";
+import { businessDateOnly } from "@/lib/format";
 import { storePunchPhoto } from "@/server/punch-photo-store";
 import { _clockIn, _clockOut, _startBreak, _endBreak } from "@/server/time-core";
 
@@ -758,6 +759,82 @@ export async function kioskAction(
       status: entryResult.status,
       autoClosed: entryResult.autoClosed ?? false,
     });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+export type KioskTimingEntry = {
+  id: string;
+  /** Central calendar day, YYYY-MM-DD. */
+  date: string;
+  clockInIso: string;
+  clockOutIso: string | null;
+  totalWorkMin: number;
+  totalBreakMin: number;
+  status: "ACTIVE" | "ON_BREAK" | "COMPLETED" | string;
+};
+
+const HISTORY_DAYS = 30;
+
+/**
+ * An employee's own time entries for the past 30 days, shown on the kiosk.
+ * Same gate as a punch: a PIN is checked only when the kiosk requires one.
+ */
+export async function kioskMyTimings(input: {
+  slug: string;
+  employeeId: string;
+  pin?: string;
+}): Promise<ActionResult<{ entries: KioskTimingEntry[]; totalWorkMin: number }>> {
+  try {
+    const session = await requireActiveKiosk(input.slug);
+    if (!session) return fail(NOT_ACTIVATED_MESSAGE);
+    if (rateLimited(`timings:${session.id}`, 30, 60_000)) {
+      return fail("Too many requests — wait a moment and try again.");
+    }
+
+    const employee = await db.employee.findFirst({
+      where: { employeeId: { equals: input.employeeId.trim(), mode: "insensitive" } },
+    });
+    if (!employee) return fail("Unknown employee ID. Check the ID and try again.");
+
+    if (kioskNeedsPin(session)) {
+      const pin = pinSchema.safeParse(input.pin);
+      if (!pin.success) return fail("Enter your 4-6 digit PIN");
+      const auth = await authenticateKioskPin(session.id, employee, pin.data, session.slug);
+      if (!auth.ok) return fail(auth.error);
+      if (await isDefaultPin(employee.kioskPinHash)) {
+        return fail("You must set a new PIN first. Clock in or out to choose one.");
+      }
+    } else if (employee.employmentStatus !== "ACTIVE") {
+      return fail(NOT_ACTIVE_MESSAGE);
+    }
+
+    const today = businessDateOnly();
+    const since = new Date(today.getTime() - (HISTORY_DAYS - 1) * DAY_MS);
+    const rows = await db.timeEntry.findMany({
+      where: { employeeId: employee.id, date: { gte: since } },
+      orderBy: { clockIn: "desc" },
+      select: {
+        id: true,
+        date: true,
+        clockIn: true,
+        clockOut: true,
+        totalWorkMin: true,
+        totalBreakMin: true,
+        status: true,
+      },
+    });
+    const entries = rows.map((r) => ({
+      id: r.id,
+      date: r.date.toISOString().slice(0, 10),
+      clockInIso: r.clockIn.toISOString(),
+      clockOutIso: r.clockOut?.toISOString() ?? null,
+      totalWorkMin: r.totalWorkMin,
+      totalBreakMin: r.totalBreakMin,
+      status: r.status,
+    }));
+    return ok({ entries, totalWorkMin: entries.reduce((s, e) => s + e.totalWorkMin, 0) });
   } catch (err) {
     return failFromUnknown(err);
   }
