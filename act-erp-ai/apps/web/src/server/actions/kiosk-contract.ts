@@ -10,7 +10,7 @@ import { businessDateOnly } from "@/lib/format";
 import { isContractWorkerEligible } from "@/lib/contract-workers";
 import { isStaleShift } from "@/lib/time-rules";
 import { storePunchPhoto } from "@/server/punch-photo-store";
-import { getActiveKioskSession } from "@/server/actions/kiosk";
+import { getActiveKioskSession, type KioskTimingEntry } from "@/server/actions/kiosk";
 import {
   _contractClockIn,
   _contractClockOut,
@@ -103,6 +103,55 @@ export async function kioskListContractWorkers(
         };
       });
     return ok({ workers });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+const HISTORY_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A contract worker's own shifts for the past 30 days. No PIN, same as punching. */
+export async function kioskContractTimings(input: {
+  slug: string;
+  workerId: string;
+}): Promise<ActionResult<{ entries: KioskTimingEntry[]; totalWorkMin: number }>> {
+  try {
+    const session = await requireKioskForContract(input.slug);
+    if (!session) return fail(NOT_ACTIVATED_MESSAGE);
+    if (rateLimited(`contract-timings:${session.id}`, 30, 60_000)) {
+      return fail("Too many requests — wait a moment and try again.");
+    }
+    const worker = await db.contractWorker.findUnique({
+      where: { id: input.workerId },
+      select: { id: true },
+    });
+    if (!worker) return fail("Unknown contract worker. Refresh the kiosk and try again.");
+
+    const since = new Date(businessDateOnly().getTime() - (HISTORY_DAYS - 1) * DAY_MS);
+    const rows = await db.contractTimeEntry.findMany({
+      where: { contractWorkerId: worker.id, date: { gte: since } },
+      orderBy: { clockIn: "desc" },
+      select: {
+        id: true,
+        date: true,
+        clockIn: true,
+        clockOut: true,
+        totalWorkMin: true,
+        totalBreakMin: true,
+        status: true,
+      },
+    });
+    const entries = rows.map((r) => ({
+      id: r.id,
+      date: r.date.toISOString().slice(0, 10),
+      clockInIso: r.clockIn.toISOString(),
+      clockOutIso: r.clockOut?.toISOString() ?? null,
+      totalWorkMin: r.totalWorkMin,
+      totalBreakMin: r.totalBreakMin,
+      status: r.status,
+    }));
+    return ok({ entries, totalWorkMin: entries.reduce((s, e) => s + e.totalWorkMin, 0) });
   } catch (err) {
     return failFromUnknown(err);
   }

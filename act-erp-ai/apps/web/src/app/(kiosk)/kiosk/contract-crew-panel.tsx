@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { Loader2, Play, Search, Square, X } from "lucide-react";
+import { CalendarDays, Loader2, Play, Search, Square, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   kioskContractAction,
+  kioskContractTimings,
   kioskListContractWorkers,
   type KioskContractWorker,
 } from "@/server/actions/kiosk-contract";
+import type { KioskTimingEntry } from "@/server/actions/kiosk";
+import { TimingsList } from "./timings-list";
 import { BUSINESS_TIME_ZONE } from "@/lib/format";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { setKioskBusy } from "@/lib/kiosk-version";
@@ -82,6 +85,10 @@ export function ContractCrewPanel({
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [timings, setTimings] = useState<{
+    entries: KioskTimingEntry[];
+    totalWorkMin: number;
+  } | null>(null);
   const [activity, setActivity] = useState(0);
   const [pending, startTransition] = useTransition();
 
@@ -121,6 +128,7 @@ export function ContractCrewPanel({
 
   const clearSelection = useCallback(() => {
     stopCamera();
+    setTimings(null);
     setSelectedId(null);
   }, [stopCamera]);
 
@@ -181,6 +189,14 @@ export function ContractCrewPanel({
     });
   }
 
+  function viewTimings(worker: KioskContractWorker) {
+    startTransition(async () => {
+      const res = await runAction(() => kioskContractTimings({ slug, workerId: worker.id }));
+      if (!toastAction(res)) return;
+      setTimings({ entries: res.entries, totalWorkMin: res.totalWorkMin });
+    });
+  }
+
   if (selected) {
     const detail = [selected.project, selected.jobCode].filter(Boolean).join(" · ");
     return (
@@ -188,7 +204,7 @@ export function ContractCrewPanel({
         key={selected.id}
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="mx-auto w-full max-w-md"
+        className={cn("mx-auto w-full", timings ? "max-w-xl" : "max-w-md")}
       >
         <Card
           className="shadow-sm"
@@ -215,6 +231,13 @@ export function ContractCrewPanel({
               </Badge>
             </div>
 
+            {timings ? (
+              <TimingsList
+                entries={timings.entries}
+                totalWorkMin={timings.totalWorkMin}
+                onBack={() => setTimings(null)}
+              />
+            ) : (
             <div className="grid grid-cols-2 gap-2">
               {selected.status === "OUT" && (
                 <Button
@@ -249,6 +272,15 @@ export function ContractCrewPanel({
                 </Button>
               )}
               <Button
+                variant="secondary"
+                size="lg"
+                className="col-span-2 h-12 text-sm"
+                disabled={pending}
+                onClick={() => viewTimings(selected)}
+              >
+                <CalendarDays className="mr-1.5 h-4 w-4" /> My past month
+              </Button>
+              <Button
                 variant="outline"
                 size="lg"
                 className="col-span-2 h-12 text-sm"
@@ -258,6 +290,7 @@ export function ContractCrewPanel({
                 <X className="mr-1.5 h-4 w-4" /> Cancel
               </Button>
             </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
