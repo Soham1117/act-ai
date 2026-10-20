@@ -606,7 +606,7 @@ export async function kioskLookup(
   }
 }
 
-const pinSchema = z.string().regex(/^\d{4,6}$/, "PIN must be 4-6 digits");
+const pinSchema = z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits");
 
 const actionSchema = z.object({
   slug: z.string(),
@@ -800,7 +800,7 @@ export async function kioskMyTimings(input: {
 
     if (kioskNeedsPin(session)) {
       const pin = pinSchema.safeParse(input.pin);
-      if (!pin.success) return fail("Enter your 4-6 digit PIN");
+      if (!pin.success) return fail("Enter your 4-digit PIN");
       const auth = await authenticateKioskPin(session.id, employee, pin.data, session.slug);
       if (!auth.ok) return fail(auth.error);
       if (await isDefaultPin(employee.kioskPinHash)) {

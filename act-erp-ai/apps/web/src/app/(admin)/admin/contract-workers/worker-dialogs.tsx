@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, LogOut, Pencil, Plus, RotateCcw, UserX } from "lucide-react";
+import { KeyRound, Loader2, LogOut, Pencil, Plus, RotateCcw, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import {
   createContractWorker,
   endContractWorker,
   reactivateContractWorker,
+  resetContractWorkerKioskPin,
   updateContractWorker,
 } from "@/server/actions/contract-workers";
 import { selectClass, type AgencyOption, type JobCodeOption, type WorkerRow } from "./shared";
@@ -359,5 +360,29 @@ export function ClockOutButton({ workerId, name }: { workerId: string; name: str
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+export function ResetPinButton({ workerId, name }: { workerId: string; name: string }) {
+  const [pending, startTransition] = useTransition();
+
+  function onClick() {
+    if (!confirm(`Reset ${name}'s kiosk PIN to the temporary default 3214?`)) return;
+    startTransition(async () => {
+      const res = await runAction(() => resetContractWorkerKioskPin(workerId));
+      if (!toastAction(res)) return;
+      toast.success("Kiosk PIN reset to 3214");
+    });
+  }
+
+  return (
+    <Button size="sm" variant="outline" onClick={onClick} disabled={pending}>
+      {pending ? (
+        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <KeyRound className="mr-1 h-3.5 w-3.5" />
+      )}
+      Reset PIN
+    </Button>
   );
 }

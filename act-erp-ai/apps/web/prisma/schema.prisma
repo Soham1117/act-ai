@@ -945,9 +945,9 @@ model KioskSession {
   lastUsedAt    DateTime?
   ip            String?
   userAgent     String?
-  /// When false (default) workers pick their name and punch without a PIN;
-  /// a photo is still taken. Admins can turn the PIN back on per kiosk.
-  requirePin    Boolean   @default(false)
+  /// When true (default) workers need their PIN to punch or view past shifts.
+  /// Admins can turn it off per kiosk.
+  requirePin    Boolean   @default(true)
   createdAt     DateTime  @default(now())
 
   @@index([revokedAt])
@@ -1504,6 +1504,9 @@ model ContractWorker {
   endDate     DateTime?            @db.Date
   status      ContractWorkerStatus @default(ACTIVE)
   notes       String?              @db.Text
+  /// bcrypt hash of the kiosk PIN. Null = still on the temporary default PIN
+  /// (must be changed on first kiosk use).
+  kioskPinHash String?
   /// Admin USER id (no relation on purpose).
   createdById String?              @db.Uuid
   timeEntries ContractTimeEntry[]

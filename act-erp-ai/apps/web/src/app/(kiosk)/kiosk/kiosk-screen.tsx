@@ -308,8 +308,8 @@ export function KioskScreen({
       });
       return;
     }
-    if (!/^\d{4,6}$/.test(pin)) {
-      toast.error("Enter your 4-6 digit PIN");
+    if (!/^\d{4}$/.test(pin)) {
+      toast.error("Enter your 4-digit PIN");
       return;
     }
     if (match.mustChangePin) {
@@ -327,8 +327,8 @@ export function KioskScreen({
 
   function viewTimings() {
     if (!match) return;
-    if (requirePin && !/^\d{4,6}$/.test(pin)) {
-      toast.error("Enter your 4-6 digit PIN");
+    if (requirePin && !/^\d{4}$/.test(pin)) {
+      toast.error("Enter your 4-digit PIN");
       return;
     }
     startTransition(async () => {
@@ -348,8 +348,8 @@ export function KioskScreen({
   function submitNewPin(e: React.FormEvent) {
     e.preventDefault();
     if (!match || !pendingAction) return;
-    if (!/^\d{4,6}$/.test(newPin)) {
-      toast.error("Your new PIN must be 4 to 6 digits.");
+    if (!/^\d{4}$/.test(newPin)) {
+      toast.error("Your new PIN must be exactly 4 digits.");
       return;
     }
     if (newPin !== confirmPin) {
@@ -688,7 +688,7 @@ export function KioskScreen({
                       <form onSubmit={submitNewPin} className="space-y-3">
                         <p className="text-center text-sm font-medium">Choose your new PIN</p>
                         <p className="text-center text-xs text-muted-foreground">
-                          You are using a temporary PIN. Pick 4 to 6 digits that are not easy to
+                          You are using a temporary PIN. Pick exactly 4 digits that are not easy to
                           guess (no 1234 or 0000), then your punch will go through.
                         </p>
                         <Input
@@ -696,9 +696,9 @@ export function KioskScreen({
                           type="password"
                           inputMode="numeric"
                           autoComplete="off"
-                          maxLength={6}
+                          maxLength={4}
                           value={newPin}
-                          onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                           disabled={pending}
                           placeholder="New PIN"
                           className="h-12 text-center font-mono text-xl tracking-[0.4em]"
@@ -707,10 +707,10 @@ export function KioskScreen({
                           type="password"
                           inputMode="numeric"
                           autoComplete="off"
-                          maxLength={6}
+                          maxLength={4}
                           value={confirmPin}
                           onChange={(e) =>
-                            setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 6))
+                            setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))
                           }
                           disabled={pending}
                           placeholder="Confirm PIN"
@@ -752,10 +752,10 @@ export function KioskScreen({
                           type="password"
                           inputMode="numeric"
                           autoComplete="off"
-                          maxLength={6}
+                          maxLength={4}
                           value={pin}
                           onChange={(e) =>
-                            setPin(e.target.value.replace(/\D/g, "").slice(0, 6))
+                            setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
                           }
                           disabled={pending}
                           placeholder="••••"

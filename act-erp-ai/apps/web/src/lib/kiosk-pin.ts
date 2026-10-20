@@ -19,7 +19,7 @@ export async function isDefaultPin(hash: string | null | undefined): Promise<boo
  * (1234 / 4321) and repeated patterns (1212, 123123).
  */
 export function validateNewPin(pin: string): string | null {
-  if (!/^\d{4,6}$/.test(pin)) return "PIN must be 4 to 6 digits.";
+  if (!/^\d{4}$/.test(pin)) return "PIN must be exactly 4 digits.";
   if (pin === DEFAULT_KIOSK_PIN) {
     return "Choose a PIN different from the temporary one.";
   }
@@ -30,9 +30,6 @@ export function validateNewPin(pin: string): string | null {
     return "That PIN is too easy to guess (simple sequence).";
   }
   if (pin.length % 2 === 0 && pin.slice(0, 2).repeat(pin.length / 2) === pin) {
-    return "That PIN is too easy to guess (repeating pattern).";
-  }
-  if (pin.length === 6 && pin.slice(0, 3) === pin.slice(3)) {
     return "That PIN is too easy to guess (repeating pattern).";
   }
   return null;

@@ -7,6 +7,7 @@ import {
   ClockOutButton,
   EndAssignmentButton,
   ReactivateButton,
+  ResetPinButton,
   WorkerFormDialog,
 } from "./worker-dialogs";
 import { LiveBadge, type AgencyOption, type JobCodeOption, type WorkerRow } from "./shared";
@@ -73,6 +74,7 @@ export function WorkersTable({
                 <div className="flex flex-wrap justify-end gap-1">
                   <WorkerFormDialog worker={w} agencies={agencies} jobCodes={jobCodes} trigger="edit" />
                   {w.liveStatus !== "OUT" && <ClockOutButton workerId={w.id} name={w.name} />}
+                  <ResetPinButton workerId={w.id} name={w.name} />
                   {w.status === "ACTIVE" ? <EndAssignmentButton worker={w} /> : <ReactivateButton worker={w} />}
                 </div>
               </td>

@@ -17,7 +17,7 @@ export function KioskPinForm() {
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!/^\d{4,6}$/.test(pin)) return toast.error("PIN must be 4-6 digits");
+    if (!/^\d{4}$/.test(pin)) return toast.error("PIN must be exactly 4 digits");
     if (pin !== confirmPin) return toast.error("PINs do not match");
     startTransition(async () => {
       const res = await runAction(() => setMyKioskPin(password, pin));
@@ -36,15 +36,15 @@ export function KioskPinForm() {
         <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">New PIN (4-6 digits)</Label>
+        <Label className="text-xs">New PIN (4 digits)</Label>
         <Input
           type="password"
           inputMode="numeric"
           value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
           required
           minLength={4}
-          maxLength={6}
+          maxLength={4}
         />
       </div>
       <div className="space-y-1.5">
@@ -53,10 +53,10 @@ export function KioskPinForm() {
           type="password"
           inputMode="numeric"
           value={confirmPin}
-          onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
           required
           minLength={4}
-          maxLength={6}
+          maxLength={4}
         />
       </div>
       <Button type="submit" disabled={pending || !pin || !password}>

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   kioskContractAction,
+  kioskContractChangePin,
   kioskContractTimings,
   kioskListContractWorkers,
   type KioskContractWorker,
@@ -90,6 +91,11 @@ export function ContractCrewPanel({
     totalWorkMin: number;
   } | null>(null);
   const [activity, setActivity] = useState(0);
+  const [pin, setPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [pendingAction, setPendingAction] = useState<ContractAction | null>(null);
+  const [choosingPin, setChoosingPin] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const busy = selectedId !== null || pending;
@@ -130,6 +136,11 @@ export function ContractCrewPanel({
     stopCamera();
     setTimings(null);
     setSelectedId(null);
+    setPin("");
+    setNewPin("");
+    setConfirmPin("");
+    setPendingAction(null);
+    setChoosingPin(false);
   }, [stopCamera]);
 
   // Camera runs only while the confirm card is open; also stop on tab switch/unmount.
@@ -162,11 +173,34 @@ export function ContractCrewPanel({
   }, [workers, query]);
 
   function act(worker: KioskContractWorker, action: ContractAction) {
+    if (!/^\d{4}$/.test(pin)) {
+      toast.error("Enter your 4-digit PIN");
+      return;
+    }
+    if (worker.mustChangePin) {
+      // Temporary PIN: choose a new one before the punch proceeds.
+      setPendingAction(action);
+      setNewPin("");
+      setConfirmPin("");
+      setChoosingPin(true);
+      return;
+    }
     startTransition(async () => {
+      await punch(worker, action, pin);
+    });
+  }
+
+  async function punch(worker: KioskContractWorker, action: ContractAction, pinValue: string) {
+    {
       // Best-effort photo; null never blocks the punch.
       const photo = (await camera.capture()) ?? undefined;
-      const res = await runAction(() => kioskContractAction({ slug, workerId: worker.id, action, photo }));
-      if (!toastAction(res)) return;
+      const res = await runAction(() =>
+        kioskContractAction({ slug, workerId: worker.id, action, pin: pinValue, photo }),
+      );
+      if (!toastAction(res)) {
+        setPin("");
+        return;
+      }
       const time = new Date().toLocaleTimeString([], {
         timeZone: BUSINESS_TIME_ZONE,
         hour: "numeric",
@@ -186,14 +220,50 @@ export function ContractCrewPanel({
       }
       clearSelection();
       await load();
-    });
+    }
   }
 
   function viewTimings(worker: KioskContractWorker) {
+    if (!/^\d{4}$/.test(pin)) {
+      toast.error("Enter your 4-digit PIN");
+      return;
+    }
     startTransition(async () => {
-      const res = await runAction(() => kioskContractTimings({ slug, workerId: worker.id }));
-      if (!toastAction(res)) return;
+      const res = await runAction(() => kioskContractTimings({ slug, workerId: worker.id, pin }));
+      if (!toastAction(res)) {
+        setPin("");
+        return;
+      }
       setTimings({ entries: res.entries, totalWorkMin: res.totalWorkMin });
+    });
+  }
+
+  function submitNewPin(e: React.FormEvent, worker: KioskContractWorker) {
+    e.preventDefault();
+    if (!pendingAction) return;
+    if (!/^\d{4}$/.test(newPin)) {
+      toast.error("Your new PIN must be exactly 4 digits.");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      toast.error("The two PINs do not match. Re-enter them.");
+      return;
+    }
+    startTransition(async () => {
+      const changed = await runAction(() =>
+        kioskContractChangePin({ slug, workerId: worker.id, currentPin: pin, newPin }),
+      );
+      if (!toastAction(changed)) {
+        if (/incorrect pin|too many/i.test(changed.error)) {
+          setChoosingPin(false);
+          setPin("");
+        }
+        return;
+      }
+      toast.success("PIN updated. Use your new PIN from now on.");
+      setWorkers((ws) => ws.map((w) => (w.id === worker.id ? { ...w, mustChangePin: false } : w)));
+      setChoosingPin(false);
+      await punch(worker, pendingAction, newPin);
     });
   }
 
@@ -237,14 +307,83 @@ export function ContractCrewPanel({
                 totalWorkMin={timings.totalWorkMin}
                 onBack={() => setTimings(null)}
               />
+            ) : choosingPin ? (
+              <form onSubmit={(e) => submitNewPin(e, selected)} className="space-y-3">
+                <p className="text-center text-sm font-medium">Choose your new PIN</p>
+                <p className="text-center text-xs text-muted-foreground">
+                  You are using a temporary PIN. Pick exactly 4 digits that are not easy to guess
+                  (no 1234 or 0000), then your punch will go through.
+                </p>
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  autoFocus
+                  maxLength={4}
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  disabled={pending}
+                  placeholder="New PIN"
+                  className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                />
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={4}
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  disabled={pending}
+                  placeholder="Confirm PIN"
+                  className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                />
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="h-12 w-full text-sm"
+                  disabled={pending || newPin.length < 4 || confirmPin.length < 4}
+                >
+                  {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save PIN and continue
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-10 w-full text-xs"
+                  disabled={pending}
+                  onClick={clearSelection}
+                >
+                  <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
+                </Button>
+              </form>
             ) : (
             <div className="grid grid-cols-2 gap-2">
+              <div className="col-span-2 space-y-1.5">
+                <label className="block text-center text-xs text-muted-foreground">
+                  {selected.mustChangePin
+                    ? "Enter the temporary PIN from your admin"
+                    : "Enter your PIN to confirm"}
+                </label>
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  autoFocus
+                  maxLength={4}
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  disabled={pending}
+                  placeholder="••••"
+                  className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                />
+              </div>
               {selected.status === "OUT" && (
                 <Button
                   size="lg"
                   variant="success"
                   className="col-span-2 h-16 text-base"
-                  disabled={pending}
+                  disabled={pending || pin.length < 4}
                   onClick={() => act(selected, "CLOCK_IN")}
                 >
                   {pending ? (
@@ -260,7 +399,7 @@ export function ContractCrewPanel({
                   size="lg"
                   variant="destructive"
                   className="col-span-2 h-16 text-base"
-                  disabled={pending}
+                  disabled={pending || pin.length < 4}
                   onClick={() => act(selected, "CLOCK_OUT")}
                 >
                   {pending ? (
@@ -275,7 +414,7 @@ export function ContractCrewPanel({
                 variant="secondary"
                 size="lg"
                 className="col-span-2 h-12 text-sm"
-                disabled={pending}
+                disabled={pending || pin.length < 4}
                 onClick={() => viewTimings(selected)}
               >
                 <CalendarDays className="mr-1.5 h-4 w-4" /> My past month

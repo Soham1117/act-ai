@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -9,6 +10,15 @@ import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-resul
 import { businessDateOnly } from "@/lib/format";
 import { isContractWorkerEligible } from "@/lib/contract-workers";
 import { isStaleShift } from "@/lib/time-rules";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { DEFAULT_KIOSK_PIN, validateNewPin } from "@/lib/kiosk-pin";
+import {
+  clearFailures,
+  isLocked,
+  minutesUntilUnlock,
+  recordFailure,
+} from "@/lib/kiosk-rate-limit";
+import { clientIpFromHeaders } from "@/lib/ip-network";
 import { storePunchPhoto } from "@/server/punch-photo-store";
 import { getActiveKioskSession, type KioskTimingEntry } from "@/server/actions/kiosk";
 import {
@@ -31,12 +41,61 @@ export type KioskContractWorker = {
   jobCode: string | null;
   project: string | null;
   status: "ACTIVE" | "ON_BREAK" | "OUT";
+  /** Still on the temporary PIN; must choose a new one before punching. */
+  mustChangePin: boolean;
 };
+
+const PIN_FAIL_WINDOW_MS = 5 * 60_000;
+const PIN_MAX_FAILS_PER_WORKER = 5;
+const PIN_MAX_FAILS_PER_IP = 20;
+const pinSchema = z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits");
+
+/**
+ * PIN gate for every contract-crew kiosk action. A null hash means the worker
+ * is still on the temporary default PIN. Only failed attempts count toward the
+ * lockout (per kiosk + worker, and per kiosk + IP).
+ */
+async function authenticateContractPin(
+  sessionId: string,
+  worker: { id: string; kioskPinHash: string | null },
+  pin: string | undefined,
+  slug: string | null,
+): Promise<{ ok: true; mustChangePin: boolean } | { ok: false; error: string }> {
+  const parsed = pinSchema.safeParse(pin);
+  if (!parsed.success) return { ok: false, error: "Enter your 4-digit PIN" };
+  const ip = clientIpFromHeaders(await headers()) ?? "unknown";
+  const workerKey = `cpin:${sessionId}:${worker.id}`;
+  const ipKey = `cpinip:${sessionId}:${ip}`;
+  if (isLocked(workerKey, PIN_MAX_FAILS_PER_WORKER) || isLocked(ipKey, PIN_MAX_FAILS_PER_IP)) {
+    const mins = Math.max(minutesUntilUnlock(workerKey), minutesUntilUnlock(ipKey), 1);
+    return {
+      ok: false,
+      error: `Too many incorrect PIN attempts. Try again in about ${mins} minute${mins === 1 ? "" : "s"}.`,
+    };
+  }
+  const good = worker.kioskPinHash
+    ? await verifyPassword(parsed.data, worker.kioskPinHash)
+    : parsed.data === DEFAULT_KIOSK_PIN;
+  if (!good) {
+    recordFailure(workerKey, PIN_FAIL_WINDOW_MS);
+    recordFailure(ipKey, PIN_FAIL_WINDOW_MS);
+    await audit({
+      action: "kiosk.contract.pin_failed",
+      resource: `ContractWorker:${worker.id}`,
+      diff: { kioskSlug: slug, ip },
+    });
+    return {
+      ok: false,
+      error: "Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.",
+    };
+  }
+  clearFailures(workerKey);
+  return { ok: true, mustChangePin: worker.kioskPinHash === null };
+}
 
 /**
  * Validate the kiosk device cookie (slug must match this device) and record
- * use. The device cookie is the only trust boundary: contract workers have no
- * PIN.
+ * use. Each worker's PIN is checked separately on every action.
  */
 async function requireKioskForContract(slug: string) {
   const session = await getActiveKioskSession(slug);
@@ -76,6 +135,7 @@ export async function kioskListContractWorkers(
         status: true,
         startDate: true,
         endDate: true,
+        kioskPinHash: true,
         agency: { select: { name: true } },
         timeEntries: {
           where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
@@ -100,6 +160,7 @@ export async function kioskListContractWorkers(
           jobCode: r.jobCode,
           project: r.project,
           status: (live?.status ?? "OUT") as KioskContractWorker["status"],
+          mustChangePin: r.kioskPinHash === null,
         };
       });
     return ok({ workers });
@@ -111,10 +172,11 @@ export async function kioskListContractWorkers(
 const HISTORY_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** A contract worker's own shifts for the past 30 days. No PIN, same as punching. */
+/** A contract worker's own shifts for the past 30 days. Needs their PIN. */
 export async function kioskContractTimings(input: {
   slug: string;
   workerId: string;
+  pin?: string;
 }): Promise<ActionResult<{ entries: KioskTimingEntry[]; totalWorkMin: number }>> {
   try {
     const session = await requireKioskForContract(input.slug);
@@ -124,9 +186,14 @@ export async function kioskContractTimings(input: {
     }
     const worker = await db.contractWorker.findUnique({
       where: { id: input.workerId },
-      select: { id: true },
+      select: { id: true, kioskPinHash: true },
     });
     if (!worker) return fail("Unknown contract worker. Refresh the kiosk and try again.");
+    const auth = await authenticateContractPin(session.id, worker, input.pin, session.slug);
+    if (!auth.ok) return fail(auth.error);
+    if (auth.mustChangePin) {
+      return fail("You must set a new PIN first. Clock in or out to choose one.");
+    }
 
     const since = new Date(businessDateOnly().getTime() - (HISTORY_DAYS - 1) * DAY_MS);
     const rows = await db.contractTimeEntry.findMany({
@@ -163,6 +230,8 @@ const actionSchema = z.object({
   workerId: z.string().min(1),
   /** Contract workers have no breaks. */
   action: z.enum(["CLOCK_IN", "CLOCK_OUT"]),
+  /** 4-digit kiosk PIN. */
+  pin: z.string().optional(),
   /** Optional JPEG data URL. Invalid photos are ignored. */
   photo: z.string().optional().catch(undefined),
 });
@@ -186,9 +255,18 @@ export async function kioskContractAction(
 
     const worker = await db.contractWorker.findUnique({
       where: { id: data.workerId },
-      select: { id: true, workerId: true, name: true, agency: { select: { name: true } } },
+      select: {
+        id: true,
+        workerId: true,
+        name: true,
+        kioskPinHash: true,
+        agency: { select: { name: true } },
+      },
     });
     if (!worker) return fail("Unknown contract worker. Refresh the kiosk and try again.");
+    const auth = await authenticateContractPin(session.id, worker, data.pin, session.slug);
+    if (!auth.ok) return fail(auth.error);
+    if (auth.mustChangePin) return fail("You must set a new PIN before you can clock in or out.");
 
     const meta = { kioskSlug: session.slug ?? data.slug, kioskLabel: session.label };
 
@@ -234,6 +312,42 @@ export async function kioskContractAction(
       status: result.status,
       autoClosed: result.autoClosed ?? false,
     });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+/** Forced PIN change at the kiosk, allowed only while on the temporary PIN. */
+export async function kioskContractChangePin(input: {
+  slug: string;
+  workerId: string;
+  currentPin: string;
+  newPin: string;
+}): Promise<ActionResult> {
+  try {
+    const session = await requireKioskForContract(input.slug);
+    if (!session) return fail(NOT_ACTIVATED_MESSAGE);
+    const worker = await db.contractWorker.findUnique({
+      where: { id: input.workerId },
+      select: { id: true, kioskPinHash: true },
+    });
+    if (!worker) return fail("Unknown contract worker. Refresh the kiosk and try again.");
+    const auth = await authenticateContractPin(session.id, worker, input.currentPin, session.slug);
+    if (!auth.ok) return fail(auth.error);
+    if (!auth.mustChangePin) return fail("Your PIN has already been changed.");
+    const weak = validateNewPin(input.newPin);
+    if (weak) return fail(weak);
+    await db.contractWorker.update({
+      where: { id: worker.id },
+      data: { kioskPinHash: await hashPassword(input.newPin) },
+    });
+    await audit({
+      action: "kiosk.contract.pin_changed",
+      resource: `ContractWorker:${worker.id}`,
+      actor: { id: null, email: `kiosk:${session.slug ?? input.slug}` },
+      diff: { forced: true, kioskSlug: session.slug },
+    });
+    return ok();
   } catch (err) {
     return failFromUnknown(err);
   }

@@ -89,8 +89,8 @@ export default async function SettingsPage() {
               <CardTitle className="text-base">Kiosk PIN</CardTitle>
               <CardDescription>
                 {onTemporaryPin
-                  ? `Your temporary PIN is ${DEFAULT_KIOSK_PIN}. Change it here to a private 4–6 digit PIN.`
-                  : "Change your kiosk PIN here. Use a private 4–6 digit PIN."}
+                  ? `Your temporary PIN is ${DEFAULT_KIOSK_PIN}. Change it here to a private 4-digit PIN.`
+                  : "Change your kiosk PIN here. Use a private 4-digit PIN."}
               </CardDescription>
             </CardHeader>
             <CardContent>

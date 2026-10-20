@@ -414,6 +414,27 @@ export async function reactivateContractWorker(
   }
 }
 
+/** Admin: put a worker back on the temporary kiosk PIN (they choose a new one next punch). */
+export async function resetContractWorkerKioskPin(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const worker = await db.contractWorker.update({
+      where: { id },
+      data: { kioskPinHash: null },
+      select: { workerId: true },
+    });
+    await audit({
+      action: "kiosk.contract.pin_reset",
+      resource: `ContractWorker:${id}`,
+      diff: { workerId: worker.workerId, resetToDefault: true },
+    });
+    revalidateAll();
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Hours
 // ──────────────────────────────────────────────────────────────────────

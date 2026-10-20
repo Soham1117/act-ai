@@ -6,7 +6,7 @@ import { clearFailures, isLocked, recordFailure } from "./kiosk-rate-limit";
 
 describe("validateNewPin", () => {
   it("accepts reasonable PINs", () => {
-    for (const p of ["4829", "730415", "9081"]) expect(validateNewPin(p)).toBeNull();
+    for (const p of ["4829", "7305", "9081"]) expect(validateNewPin(p)).toBeNull();
   });
   it("rejects default, repeats, runs and patterns", () => {
     for (const p of [DEFAULT_KIOSK_PIN, "0000", "1111", "1234", "4321", "123456", "1212", "123123", "12a4", "123"]) {

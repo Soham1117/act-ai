@@ -25,6 +25,8 @@ Specs: contract-agencies, contract-workers, contract-hours-review, contract-hour
 | `kioskContractAction` | clock in/out, already in/out, ended/future/past-end, clock-out after end, double-tap, concurrent, stale 16h shift, break actions rejected, crafted slug/worker, revoked kiosk, rate limit, photos, camera denied, failures | covered | contract-kiosk.spec.ts, kiosk-contract.spec.ts |
 | `kioskContractAction` | job code: null / retired / deleted must not use made-up "ACT001" | covered (3 fixme: app bug) | contract-kiosk.spec.ts |
 | `kioskContractTimings` | past-30-days list, empty state, unknown worker | planned | e2e spec not written |
+| `kioskContractChangePin` | forced first-use PIN change, weak PIN, wrong temp PIN, already changed | planned | e2e spec not written |
+| `resetContractWorkerKioskPin` | admin reset to 3214, non-admin refused | planned | e2e spec not written |
 | `_contractClockIn`, `_contractClockOut`, `closeOpenContractEntry`, `withContractWorkerLock`, `reportContractAutoClosed`, `revalidateContractPages` (contract-time-core.ts, not "use server") | exercised through kiosk and admin flows above | covered | contract-kiosk.spec.ts, contract-onsite.spec.ts |
 | `reportContractAutoClosed` | admin notification | not-testable | e2e admin has no Employee row, so notifyAdmins reaches nobody; audit entry is asserted instead |
 | Delete a time entry / worker | no such action exists | not-testable | contract-hours-review.spec.ts asserts no delete control |
