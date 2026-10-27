@@ -23,7 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { uploadDocument } from "@/server/actions/documents";
-import { runAction, toastAction } from "@/lib/toast-action";
+import { runAction } from "@/lib/toast-action";
+import { usePortalLanguage } from "@/components/portal-language";
 
 const TYPES = ["PERSONAL", "COMPANY", "ONBOARDING", "BENEFITS", "TRAINING"] as const;
 type DocType = (typeof TYPES)[number];
@@ -47,6 +48,7 @@ export function UploadDocumentDialog({
   allowedTypes?: readonly DocType[];
   defaultType?: DocType;
 }) {
+  const { t, enumLabel, toastAction } = usePortalLanguage();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [file, setFile] = useState<File | null>(null);
@@ -64,11 +66,11 @@ export function UploadDocumentDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) {
-      toast.error("Pick a file first");
+      toast.error(t("documentControls.upload.pickFile"));
       return;
     }
     if (title.trim().length < 2) {
-      toast.error("Title is required");
+      toast.error(t("documentControls.upload.titleRequired"));
       return;
     }
     startTransition(async () => {
@@ -83,7 +85,7 @@ export function UploadDocumentDialog({
         { name: file.name, type: file.type || "application/octet-stream", bytes },
       ));
       if (!toastAction(res)) return;
-      toast.success("Document uploaded");
+      toast.success(t("documentControls.upload.success"));
       setOpen(false);
       reset();
     });
@@ -101,20 +103,20 @@ export function UploadDocumentDialog({
         {trigger ?? (
           <Button size="sm">
             <Upload className="mr-1.5 h-3.5 w-3.5" />
-            Upload
+            {t("documentControls.upload.action")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload document</DialogTitle>
+          <DialogTitle>{t("documentControls.upload.title")}</DialogTitle>
           <DialogDescription>
-            PDF, image, or office file. Max ~10 MB recommended.
+            {t("documentControls.upload.description")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div>
-            <Label htmlFor="upload-file">File</Label>
+            <Label htmlFor="upload-file">{t("documentControls.upload.file")}</Label>
             <Input
               id="upload-file"
               type="file"
@@ -122,31 +124,31 @@ export function UploadDocumentDialog({
             />
           </div>
           <div>
-            <Label htmlFor="upload-title">Title</Label>
+            <Label htmlFor="upload-title">{t("documentControls.upload.documentTitle")}</Label>
             <Input
               id="upload-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Driver's license"
+              placeholder={t("documentControls.upload.titlePlaceholder")}
             />
           </div>
           <div>
-            <Label htmlFor="upload-type">Category</Label>
+            <Label htmlFor="upload-type">{t("documentControls.upload.category")}</Label>
             <Select value={docType} onValueChange={(v) => setDocType(v as DocType)}>
               <SelectTrigger id="upload-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {allowedTypes.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
+                {allowedTypes.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {enumLabel(type)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="upload-desc">Description (optional)</Label>
+            <Label htmlFor="upload-desc">{t("documentControls.upload.descriptionOptional")}</Label>
             <Input
               id="upload-desc"
               value={description}
@@ -155,11 +157,11 @@ export function UploadDocumentDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t("documentControls.cancel")}
             </Button>
             <Button type="submit" disabled={pending || !file}>
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              Upload
+              {t("documentControls.upload.action")}
             </Button>
           </DialogFooter>
         </form>

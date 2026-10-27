@@ -1,4 +1,5 @@
 "use client";
+import { usePortalLanguage, PortalLanguageSwitch } from "@/components/portal-language";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -19,12 +20,13 @@ export function AppTopbar({
   user: SessionUser;
   initialUnread?: number;
 }) {
+  const { t } = usePortalLanguage();
   const pathname = usePathname() ?? "";
   const isAdminUser = user.role === "ADMIN";
   const inAdminView = pathname.startsWith("/admin");
 
   const switcherHref = inAdminView ? "/dashboard" : "/admin";
-  const switcherLabel = inAdminView ? "Switch to employee view" : "Back to admin";
+  const switcherLabel = inAdminView ? "Switch to employee view" : t("common.backAdmin");
 
   return (
     <>
@@ -54,14 +56,14 @@ export function AppTopbar({
             }}
           >
             <Search className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Search</span>
+            <span className="hidden lg:inline"> {t("common.search")} </span>
             <CommandHint />
           </Button>
 
           <Button variant="ghost" size="icon" className="relative h-8 w-8" asChild>
             <Link
               href={inAdminView ? "/admin/notifications" : "/dashboard/notifications"}
-              aria-label="Notifications"
+              aria-label={t("common.notifications")}
             >
               <Bell className="h-4 w-4" />
               <span className="absolute -right-1 -top-1">
@@ -84,12 +86,13 @@ export function AppTopbar({
               <Link href={switcherHref}>
                 <ArrowLeftRight className="h-3.5 w-3.5" />
                 <span className="hidden lg:inline">
-                  {inAdminView ? "Employee view" : "Admin view"}
+                  {inAdminView ? "Employee view" : t("common.adminView")}
                 </span>
               </Link>
             </Button>
           )}
 
+          {!inAdminView && <PortalLanguageSwitch />}
           <ThemeToggle />
           <UserMenu
             name={user.name}

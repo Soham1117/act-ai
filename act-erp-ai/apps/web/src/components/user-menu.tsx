@@ -1,4 +1,5 @@
 "use client";
+import { usePortalLanguage } from "@/components/portal-language";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -24,6 +25,7 @@ export function UserMenu({
   email: string | null;
   profileImage: string | null;
 }) {
+  const { t } = usePortalLanguage();
   const avatarSrc = profileImage ?? getAvatarUrl(email);
   return (
     <DropdownMenu>
@@ -32,7 +34,7 @@ export function UserMenu({
           variant="ghost"
           size="icon"
           className="rounded-full"
-          aria-label="Account menu"
+          aria-label={t("common.accountMenu")}
         >
           <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-medium">
             <Image
@@ -51,19 +53,17 @@ export function UserMenu({
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-0.5">
             <p className="text-sm font-medium leading-none">{name}</p>
-            <p className="text-xs leading-none text-muted-foreground">{email ?? "No email on file"}</p>
+            <p className="text-xs leading-none text-muted-foreground">{email ?? t("common.noEmail")}</p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/dashboard/my-details">
-            <UserIcon className="mr-2 h-4 w-4" /> My details
-          </Link>
+            <UserIcon className="mr-2 h-4 w-4" /> {t("common.myDetails")} </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/dashboard/settings">
-            <Settings className="mr-2 h-4 w-4" /> Settings
-          </Link>
+            <Settings className="mr-2 h-4 w-4" /> {t("common.settings")} </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <form action={signOut}>
@@ -71,8 +71,7 @@ export function UserMenu({
             type="submit"
             className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground"
           >
-            <LogOut className="h-4 w-4" /> Sign out
-          </button>
+            <LogOut className="h-4 w-4" /> {t("common.signOut")} </button>
         </form>
       </DropdownMenuContent>
     </DropdownMenu>

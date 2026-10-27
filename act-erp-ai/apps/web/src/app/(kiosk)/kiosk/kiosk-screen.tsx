@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import Image from "next/image";
 import {
   CalendarDays,
   Coffee,
@@ -29,6 +28,7 @@ import {
   kioskListEmployees,
   kioskLookup,
   kioskMyTimings,
+  kioskUpdateProfilePhoto,
   type KioskRosterEmployee,
   type KioskTimingEntry,
 } from "@/server/actions/kiosk";
@@ -39,13 +39,15 @@ import {
   plainSpaces,
 } from "@/lib/format";
 import { toast } from "sonner";
-import { toastAction } from "@/lib/toast-action";
+import { KioskLanguageSwitch, useKioskLanguage } from "./kiosk-language";
 import { setKioskBusy } from "@/lib/kiosk-version";
 import type { ActionOk } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
 import { ContractCrewPanel, KioskModeSwitch } from "./contract-crew-panel";
 import { PunchCameraPreview, usePunchCamera } from "./punch-camera";
 import { TimingsList } from "./timings-list";
+import { KioskPersonPhoto } from "./kiosk-person-photo";
+import { KioskProfilePhotoEditor } from "./kiosk-profile-photo-editor";
 
 type LookupMatch = ActionOk<{
   id: string;
@@ -53,6 +55,7 @@ type LookupMatch = ActionOk<{
   name: string;
   email: string | null;
   profilePic: string | null;
+  capturedPhotoUrl: string | null;
   jobTitle: string | null;
   hasPin: boolean;
   mustChangePin: boolean;
@@ -69,11 +72,6 @@ const ROSTER_REFRESH_MS = 60_000;
 const IDLE_CANCEL_MS = 30_000;
 
 type ViewMode = "grid" | "list";
-
-/** A dropped connection or an old page: say so, keep the kiosk usable. */
-function connectionProblem() {
-  toast.error("Could not reach the server. Check the connection and try again.");
-}
 
 function statusLabel(status: KioskRosterEmployee["status"]) {
   if (status === "ACTIVE") return "On shift";
@@ -98,6 +96,10 @@ export function KioskScreen({
   label: string;
   requirePin: boolean;
 }) {
+  const { t, locale, toastAction } = useKioskLanguage();
+  const connectionProblem = useCallback(() => {
+    toast.error(t("Could not reach the server. Check the connection and try again."));
+  }, [t]);
   // Null until mounted: a clock rendered on the server never matches the client
   // (time and locale differ), which breaks hydration.
   const [now, setNow] = useState<Date | null>(null);
@@ -112,6 +114,8 @@ export function KioskScreen({
   const [pin, setPin] = useState("");
   const [step, setStep] = useState<"pin" | "newpin">("pin");
   const [pendingAction, setPendingAction] = useState<KioskActionName | null>(null);
+  const [editingPhoto, setEditingPhoto] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [timings, setTimings] = useState<{
@@ -127,7 +131,7 @@ export function KioskScreen({
   const camera = usePunchCamera();
 
   // Tell the version watcher not to reload mid-punch.
-  const busy = !!match || pending;
+  const busy = !!match || pending || profileSaving;
   useEffect(() => {
     setKioskBusy("screen", busy);
     return () => setKioskBusy("screen", false);
@@ -148,7 +152,7 @@ export function KioskScreen({
       connectionProblem();
     }
     setRosterLoading(false);
-  }, [slug]);
+  }, [slug, toastAction, connectionProblem]);
 
   useEffect(() => {
     const tick = () => setNow(new Date());
@@ -179,6 +183,8 @@ export function KioskScreen({
     setNewPin("");
     setConfirmPin("");
     setTimings(null);
+    setEditingPhoto(false);
+    setProfileSaving(false);
     stopCamera();
     setTimeout(() => searchRef.current?.focus(), 0);
   }, [stopCamera]);
@@ -201,10 +207,10 @@ export function KioskScreen({
   // roster), restarts on every keypress/tap (activity), and is paused while
   // a request is in flight.
   useEffect(() => {
-    if (!match || pending) return;
+    if (!match || pending || profileSaving) return;
     const id = setTimeout(resetSelection, IDLE_CANCEL_MS);
     return () => clearTimeout(id);
-  }, [match, pending, activity, resetSelection]);
+  }, [match, pending, profileSaving, activity, resetSelection]);
 
   useEffect(() => {
     if (match) (step === "newpin" ? newPinRef : pinRef).current?.focus();
@@ -234,7 +240,9 @@ export function KioskScreen({
       if (!toastAction(r)) return;
       if (r.requirePin !== requirePin) {
         // The kiosk PIN setting changed since this page loaded; trust the server.
-        toast.error("This kiosk was updated. Reload the page and try again.", { duration: 10_000 });
+        toast.error(t("This kiosk was updated. Reload the page and try again."), {
+          duration: 10_000,
+        });
         return;
       }
       setMatch(r);
@@ -244,6 +252,7 @@ export function KioskScreen({
       setNewPin("");
       setConfirmPin("");
       setTimings(null);
+      setEditingPhoto(false);
       setShowIdEntry(false);
       setInput("");
       // Warm the camera up while the person reads the card (or types their PIN).
@@ -288,14 +297,17 @@ export function KioskScreen({
       START_BREAK: "Break started",
       END_BREAK: "Break ended",
     };
-    toast.success(`${labels[action]} · ${m.name}`);
+    toast.success(`${t(labels[action])} · ${m.name}`);
     if (res.autoClosed) {
       toast.warning(
-        "Your previous shift was left open more than 16 hours. It was closed automatically and flagged for an admin to review.",
+        t(
+          "Your previous shift was left open more than 16 hours. It was closed automatically and flagged for an admin to review.",
+        ),
         { duration: 10_000 },
       );
     }
     resetSelection();
+    setQuery("");
     void loadRoster();
     return true;
   }
@@ -309,7 +321,7 @@ export function KioskScreen({
       return;
     }
     if (!/^\d{4}$/.test(pin)) {
-      toast.error("Enter your 4-digit PIN");
+      toast.error(t("Enter your 4-digit PIN"));
       return;
     }
     if (match.mustChangePin) {
@@ -328,7 +340,7 @@ export function KioskScreen({
   function viewTimings() {
     if (!match) return;
     if (requirePin && !/^\d{4}$/.test(pin)) {
-      toast.error("Enter your 4-digit PIN");
+      toast.error(t("Enter your 4-digit PIN"));
       return;
     }
     startTransition(async () => {
@@ -349,11 +361,11 @@ export function KioskScreen({
     e.preventDefault();
     if (!match || !pendingAction) return;
     if (!/^\d{4}$/.test(newPin)) {
-      toast.error("Your new PIN must be exactly 4 digits.");
+      toast.error(t("Your new PIN must be exactly 4 digits."));
       return;
     }
     if (newPin !== confirmPin) {
-      toast.error("The two PINs do not match. Re-enter them.");
+      toast.error(t("The two PINs do not match. Re-enter them."));
       return;
     }
     startTransition(async () => {
@@ -377,7 +389,7 @@ export function KioskScreen({
         }
         return;
       }
-      toast.success("PIN updated. Use your new PIN from now on.");
+      toast.success(t("PIN updated. Use your new PIN from now on."));
       // The PIN is saved. If the punch below fails, the card must not ask for the
       // temporary PIN again.
       setMatch({ ...match, mustChangePin: false });
@@ -387,16 +399,21 @@ export function KioskScreen({
   }
 
   return (
-    <div className="grid min-h-screen grid-rows-[auto_1fr_auto] bg-muted/30 text-foreground">
-      <header className="flex items-center justify-between border-b bg-background px-6 py-4 sm:px-8">
+    <div
+      lang={locale}
+      className="grid min-h-screen grid-rows-[auto_1fr_auto] bg-muted/30 text-foreground"
+    >
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-background px-6 py-4 sm:px-8">
         <div className="flex items-center gap-3">
           <Logo className="h-8" />
           <div className="hidden sm:block">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Kiosk · {label}
+              {" "}
+              {t("Kiosk ·")} {label}
             </p>
           </div>
         </div>
+        <KioskLanguageSwitch />
         <div className="text-right">
           <p className="font-mono text-2xl font-semibold tabular-nums">
             {now ? formatBusinessTime(now) : " "}
@@ -404,7 +421,7 @@ export function KioskScreen({
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {now
               ? plainSpaces(
-                  now.toLocaleDateString("en-US", {
+                  now.toLocaleDateString(locale, {
                     timeZone: BUSINESS_TIME_ZONE,
                     weekday: "long",
                     month: "long",
@@ -417,7 +434,12 @@ export function KioskScreen({
       </header>
 
       <div className="overflow-auto p-4 sm:p-6 lg:p-8">
-        <div className={cn("mx-auto w-full", match ? (timings ? "max-w-xl" : "max-w-md") : "max-w-5xl")}>
+        <div
+          className={cn(
+            "mx-auto w-full",
+            match ? (timings ? "max-w-xl" : "max-w-md") : "max-w-5xl",
+          )}
+        >
           <AnimatePresence mode="wait">
             {!match && mode === "contract" ? (
               <motion.div
@@ -446,7 +468,7 @@ export function KioskScreen({
                       ref={searchRef}
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search by name or employee ID"
+                      placeholder={t("Search by name or employee ID")}
                       className="h-12 pl-9 text-base"
                       autoFocus
                     />
@@ -459,7 +481,7 @@ export function KioskScreen({
                       className="h-10 px-3"
                       onClick={() => setView("grid")}
                     >
-                      <LayoutGrid className="mr-1.5 h-4 w-4" /> Grid
+                      <LayoutGrid className="mr-1.5 h-4 w-4" /> {t("Grid")}{" "}
                     </Button>
                     <Button
                       type="button"
@@ -468,21 +490,22 @@ export function KioskScreen({
                       className="h-10 px-3"
                       onClick={() => setView("list")}
                     >
-                      <List className="mr-1.5 h-4 w-4" /> List
+                      <List className="mr-1.5 h-4 w-4" /> {t("List")}{" "}
                     </Button>
                   </div>
                 </div>
 
                 {rosterLoading ? (
                   <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading employees…
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                    {t("Loading employees…")}{" "}
                   </div>
                 ) : filtered.length === 0 ? (
                   <Card>
                     <CardContent className="py-12 text-center text-sm text-muted-foreground">
                       {query.trim()
-                        ? "No employees match that search."
-                        : "No active employees found."}
+                        ? t("No employees match that search.")
+                        : t("No active employees found.")}
                     </CardContent>
                   </Card>
                 ) : view === "grid" ? (
@@ -495,17 +518,15 @@ export function KioskScreen({
                         onClick={() => selectByEmployeeId(emp.employeeId)}
                         className="flex flex-col items-center gap-3 rounded-xl border bg-background p-4 text-center shadow-sm transition hover:border-primary/50 hover:bg-muted/40 active:scale-[0.98] disabled:opacity-60"
                       >
-                        <span className="relative h-16 w-16 overflow-hidden rounded-full ring-2 ring-border">
-                          <Image
-                            src={emp.profilePic ?? getAvatarUrl(emp.employeeId)}
-                            alt={emp.name}
-                            fill
-                            sizes="64px"
-                            className="object-cover"
-                            unoptimized
-                          />
-                        </span>
-                        <div className="min-w-0 w-full space-y-1">
+                        <KioskPersonPhoto
+                          photoUrl={emp.capturedPhotoUrl}
+                          fallbackUrl={emp.profilePic ?? getAvatarUrl(emp.employeeId)}
+                          name={emp.name}
+                          className="h-[108px] w-[108px] max-w-full"
+                          fallbackClassName="h-12 w-12 ring-2 ring-border"
+                          sizes="108px"
+                        />
+                        <div className="w-full min-w-0 space-y-1">
                           <p className="truncate text-sm font-semibold">{emp.name}</p>
                           {emp.jobTitle && (
                             <p className="truncate text-[11px] text-muted-foreground">
@@ -516,7 +537,7 @@ export function KioskScreen({
                             variant={statusVariant(emp.status)}
                             className="text-[10px]"
                           >
-                            {statusLabel(emp.status)}
+                            {t(statusLabel(emp.status))}
                           </Badge>
                         </div>
                       </button>
@@ -533,16 +554,14 @@ export function KioskScreen({
                             onClick={() => selectByEmployeeId(emp.employeeId)}
                             className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-muted/40 active:bg-muted/60 disabled:opacity-60"
                           >
-                            <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full ring-1 ring-border">
-                              <Image
-                                src={emp.profilePic ?? getAvatarUrl(emp.employeeId)}
-                                alt={emp.name}
-                                fill
-                                sizes="44px"
-                                className="object-cover"
-                                unoptimized
-                              />
-                            </span>
+                            <KioskPersonPhoto
+                              photoUrl={emp.capturedPhotoUrl}
+                              fallbackUrl={emp.profilePic ?? getAvatarUrl(emp.employeeId)}
+                              name={emp.name}
+                              className="h-[60px] w-[60px]"
+                              fallbackClassName="h-[33px] w-[33px] ring-1 ring-border"
+                              sizes="60px"
+                            />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">{emp.name}</p>
                               <p className="truncate text-xs text-muted-foreground">
@@ -553,7 +572,7 @@ export function KioskScreen({
                               variant={statusVariant(emp.status)}
                               className="shrink-0 text-[10px]"
                             >
-                              {statusLabel(emp.status)}
+                              {t(statusLabel(emp.status))}
                             </Badge>
                           </button>
                         </li>
@@ -571,14 +590,14 @@ export function KioskScreen({
                       className="text-xs text-muted-foreground"
                       onClick={() => setShowIdEntry(true)}
                     >
-                      <ScanLine className="mr-1.5 h-3.5 w-3.5" />
-                      Enter ID / scan badge
+                      <ScanLine className="mr-1.5 h-3.5 w-3.5" />{" "}
+                      {t("Enter ID / scan badge")}{" "}
                     </Button>
                   ) : (
                     <Card className="mx-auto max-w-md shadow-sm">
                       <CardContent className="space-y-3 p-5">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium">Enter Employee ID</p>
+                          <p className="text-sm font-medium">{t("Enter Employee ID")}</p>
                           <Button
                             type="button"
                             variant="ghost"
@@ -612,7 +631,7 @@ export function KioskScreen({
                               setInput(e.target.value.toUpperCase().slice(0, 24))
                             }
                             disabled={pending}
-                            placeholder="Full ID or last digits"
+                            placeholder={t("Full ID or last digits")}
                             className="h-14 text-center font-mono text-xl tabular-nums tracking-[0.18em]"
                           />
                           <Button
@@ -621,8 +640,8 @@ export function KioskScreen({
                             className="h-11 w-full text-sm"
                             disabled={pending || input.trim().length === 0}
                           >
-                            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Continue
+                            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{" "}
+                            {t("Continue")}{" "}
                           </Button>
                         </form>
                       </CardContent>
@@ -643,18 +662,54 @@ export function KioskScreen({
                   onPointerDownCapture={() => setActivity((n) => n + 1)}
                 >
                   <CardContent className="space-y-5 p-6">
-                    <PunchCameraPreview status={camera.status} setVideo={camera.setVideo} />
+                    {editingPhoto ? (
+                      <KioskProfilePhotoEditor
+                        punchCamera={camera}
+                        onSave={(pinValue, photo) =>
+                          kioskUpdateProfilePhoto({
+                            slug,
+                            employeeId: match.employeeId,
+                            pin: pinValue,
+                            photo,
+                          })
+                        }
+                        onSaved={(url) => {
+                          toast.success(t("Photo saved."));
+                          setMatch((current) =>
+                            current ? { ...current, capturedPhotoUrl: url } : current,
+                          );
+                          setPin("");
+                          setEditingPhoto(false);
+                          setRoster((current) =>
+                            current.map((employee) =>
+                              employee.employeeId === match.employeeId
+                                ? { ...employee, capturedPhotoUrl: url }
+                                : employee,
+                            ),
+                          );
+                          void loadRoster();
+                        }}
+                        onClose={() => {
+                          setEditingPhoto(false);
+                          setPin("");
+                        }}
+                        onBusyChange={setProfileSaving}
+                      />
+                    ) : (
+                      <PunchCameraPreview
+                        status={camera.status}
+                        setVideo={camera.setVideo}
+                      />
+                    )}
                     <div className="flex items-center gap-4">
-                      <span className="relative h-14 w-14 overflow-hidden rounded-full ring-2 ring-border">
-                        <Image
-                          src={match.profilePic ?? getAvatarUrl(match.email)}
-                          alt={match.name}
-                          fill
-                          sizes="56px"
-                          className="object-cover"
-                          unoptimized
-                        />
-                      </span>
+                      <KioskPersonPhoto
+                        photoUrl={match.capturedPhotoUrl}
+                        fallbackUrl={match.profilePic ?? getAvatarUrl(match.email)}
+                        name={match.name}
+                        className="h-[60px] w-[60px]"
+                        fallbackClassName="h-[42px] w-[42px] ring-2 ring-border"
+                        sizes="60px"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-base font-semibold">{match.name}</p>
                         <p className="truncate text-xs text-muted-foreground">
@@ -665,172 +720,235 @@ export function KioskScreen({
                         variant={statusVariant(match.status)}
                         className="text-[10px]"
                       >
-                        {statusLabel(match.status)}
+                        {t(statusLabel(match.status))}
                       </Badge>
                     </div>
 
-                    {timings ? (
+                    {!editingPhoto && !timings && step === "pin" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        disabled={pending || profileSaving}
+                        onClick={() => {
+                          setPin("");
+                          startCamera();
+                          setEditingPhoto(true);
+                        }}
+                      >
+                        {t("Change photo")}
+                      </Button>
+                    )}
+
+                    {editingPhoto ? null : timings ? (
                       <TimingsList
                         entries={timings.entries}
                         totalWorkMin={timings.totalWorkMin}
                         onBack={() => setTimings(null)}
                       />
                     ) : (
-                    <>
-                    {match.staleShift && step === "pin" && (
-                      <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-center text-xs text-amber-700 dark:text-amber-300">
-                        Your last shift was never clocked out. Clocking in now will close it and
-                        flag it for an admin to review.
-                      </p>
-                    )}
+                      <>
+                        {match.staleShift && step === "pin" && (
+                          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-center text-xs text-amber-700 dark:text-amber-300">
+                            {" "}
+                            {t(
+                              "Your last shift was never clocked out. Clocking in now will close it and flag it for an admin to review.",
+                            )}{" "}
+                          </p>
+                        )}
 
-                    {step === "newpin" ? (
-                      <form onSubmit={submitNewPin} className="space-y-3">
-                        <p className="text-center text-sm font-medium">Choose your new PIN</p>
-                        <p className="text-center text-xs text-muted-foreground">
-                          You are using a temporary PIN. Pick exactly 4 digits that are not easy to
-                          guess (no 1234 or 0000), then your punch will go through.
-                        </p>
-                        <Input
-                          ref={newPinRef}
-                          type="password"
-                          inputMode="numeric"
-                          autoComplete="off"
-                          maxLength={4}
-                          value={newPin}
-                          onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                          disabled={pending}
-                          placeholder="New PIN"
-                          className="h-12 text-center font-mono text-xl tracking-[0.4em]"
-                        />
-                        <Input
-                          type="password"
-                          inputMode="numeric"
-                          autoComplete="off"
-                          maxLength={4}
-                          value={confirmPin}
-                          onChange={(e) =>
-                            setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-                          }
-                          disabled={pending}
-                          placeholder="Confirm PIN"
-                          className="h-12 text-center font-mono text-xl tracking-[0.4em]"
-                        />
-                        <Button
-                          type="submit"
-                          size="lg"
-                          className="h-12 w-full text-sm"
-                          disabled={pending || newPin.length < 4 || confirmPin.length < 4}
-                        >
-                          {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Save PIN and continue
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="lg"
-                          className="h-10 w-full text-xs"
-                          disabled={pending}
-                          onClick={resetSelection}
-                        >
-                          <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
-                        </Button>
-                      </form>
-                    ) : !requirePin ? null : !match.hasPin ? (
-                      <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-center text-xs text-destructive">
-                        No kiosk PIN set for this account. Ask an admin to reset your PIN.
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <label className="block text-center text-xs text-muted-foreground">
-                          {match.mustChangePin
-                            ? "Enter the temporary PIN from your admin"
-                            : "Enter your PIN to confirm"}
-                        </label>
-                        <Input
-                          ref={pinRef}
-                          type="password"
-                          inputMode="numeric"
-                          autoComplete="off"
-                          maxLength={4}
-                          value={pin}
-                          onChange={(e) =>
-                            setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-                          }
-                          disabled={pending}
-                          placeholder="••••"
-                          className="h-12 text-center font-mono text-xl tracking-[0.4em]"
-                        />
-                      </div>
-                    )}
+                        {step === "newpin" ? (
+                          <form onSubmit={submitNewPin} className="space-y-3">
+                            <p className="text-center text-sm font-medium">
+                              {t("Choose your new PIN")}
+                            </p>
+                            <p className="text-center text-xs text-muted-foreground">
+                              {" "}
+                              {t(
+                                "You are using a temporary PIN. Pick exactly 4 digits that are not easy to guess (no 1234 or 0000), then your punch will go through.",
+                              )}{" "}
+                            </p>
+                            <Input
+                              ref={newPinRef}
+                              type="password"
+                              inputMode="numeric"
+                              autoComplete="off"
+                              maxLength={4}
+                              value={newPin}
+                              onChange={(e) =>
+                                setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                              }
+                              disabled={pending}
+                              placeholder={t("New PIN")}
+                              className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                            />
+                            <Input
+                              type="password"
+                              inputMode="numeric"
+                              autoComplete="off"
+                              maxLength={4}
+                              value={confirmPin}
+                              onChange={(e) =>
+                                setConfirmPin(
+                                  e.target.value.replace(/\D/g, "").slice(0, 4),
+                                )
+                              }
+                              disabled={pending}
+                              placeholder={t("Confirm PIN")}
+                              className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                            />
+                            <Button
+                              type="submit"
+                              size="lg"
+                              className="h-12 w-full text-sm"
+                              disabled={
+                                pending || newPin.length < 4 || confirmPin.length < 4
+                              }
+                            >
+                              {pending && (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              )}{" "}
+                              {t("Save PIN and continue")}{" "}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="lg"
+                              className="h-10 w-full text-xs"
+                              disabled={pending}
+                              onClick={resetSelection}
+                            >
+                              <X className="mr-1.5 h-3.5 w-3.5" /> {t("Cancel")}{" "}
+                            </Button>
+                          </form>
+                        ) : !requirePin ? null : !match.hasPin ? (
+                          <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-center text-xs text-destructive">
+                            {" "}
+                            {t(
+                              "No kiosk PIN set for this account. Ask an admin to reset your PIN.",
+                            )}{" "}
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <label className="block text-center text-xs text-muted-foreground">
+                              {match.mustChangePin
+                                ? t("Enter the temporary PIN from your admin")
+                                : t("Enter your PIN to confirm")}
+                            </label>
+                            <Input
+                              ref={pinRef}
+                              type="password"
+                              inputMode="numeric"
+                              autoComplete="off"
+                              maxLength={4}
+                              value={pin}
+                              onChange={(e) =>
+                                setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter" || pending) return;
+                                e.preventDefault();
+                                act(
+                                  match.status === "OUT"
+                                    ? "CLOCK_IN"
+                                    : match.status === "ACTIVE"
+                                      ? "START_BREAK"
+                                      : "END_BREAK",
+                                );
+                              }}
+                              disabled={pending}
+                              placeholder={"\u2022\u2022\u2022\u2022"}
+                              className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                            />
+                          </div>
+                        )}
 
-                    <div className={cn("grid grid-cols-2 gap-2", step === "newpin" && "hidden")}>
-                      {match.status === "OUT" && (
-                        <Button
-                          size="lg"
-                          variant="success"
-                          className="col-span-2 h-12 text-sm"
-                          disabled={pending || (requirePin && (!match.hasPin || pin.length < 4))}
-                          onClick={() => act("CLOCK_IN")}
+                        <div
+                          className={cn(
+                            "grid grid-cols-2 gap-2",
+                            step === "newpin" && "hidden",
+                          )}
                         >
-                          <Play className="mr-2 h-4 w-4" /> Clock in
-                        </Button>
-                      )}
-                      {match.status === "ACTIVE" && (
-                        <>
+                          {match.status === "OUT" && (
+                            <Button
+                              size="lg"
+                              variant="success"
+                              className="col-span-2 h-12 text-sm"
+                              disabled={
+                                pending ||
+                                (requirePin && (!match.hasPin || pin.length < 4))
+                              }
+                              onClick={() => act("CLOCK_IN")}
+                            >
+                              <Play className="mr-2 h-4 w-4" /> {t("Clock in")}{" "}
+                            </Button>
+                          )}
+                          {match.status === "ACTIVE" && (
+                            <>
+                              <Button
+                                size="lg"
+                                variant="warning"
+                                className="h-12 text-sm"
+                                disabled={
+                                  pending ||
+                                  (requirePin && (!match.hasPin || pin.length < 4))
+                                }
+                                onClick={() => act("START_BREAK")}
+                              >
+                                <Pause className="mr-2 h-4 w-4" /> {t("Break")}{" "}
+                              </Button>
+                              <Button
+                                size="lg"
+                                variant="destructive"
+                                className="h-12 text-sm"
+                                disabled={
+                                  pending ||
+                                  (requirePin && (!match.hasPin || pin.length < 4))
+                                }
+                                onClick={() => act("CLOCK_OUT")}
+                              >
+                                <Square className="mr-2 h-4 w-4" /> {t("Clock out")}{" "}
+                              </Button>
+                            </>
+                          )}
+                          {match.status === "ON_BREAK" && (
+                            <Button
+                              size="lg"
+                              variant="success"
+                              className="col-span-2 h-12 text-sm"
+                              disabled={
+                                pending ||
+                                (requirePin && (!match.hasPin || pin.length < 4))
+                              }
+                              onClick={() => act("END_BREAK")}
+                            >
+                              <Coffee className="mr-2 h-4 w-4" /> {t("End break")}{" "}
+                            </Button>
+                          )}
+                          {!(requirePin && !match.hasPin) && (
+                            <Button
+                              variant="secondary"
+                              size="lg"
+                              className="col-span-2 h-10 text-xs"
+                              disabled={pending || (requirePin && pin.length < 4)}
+                              onClick={viewTimings}
+                            >
+                              <CalendarDays className="mr-1.5 h-3.5 w-3.5" />{" "}
+                              {t("My past month")}{" "}
+                            </Button>
+                          )}
                           <Button
+                            variant="outline"
                             size="lg"
-                            variant="warning"
-                            className="h-12 text-sm"
-                            disabled={pending || (requirePin && (!match.hasPin || pin.length < 4))}
-                            onClick={() => act("START_BREAK")}
+                            className="col-span-2 h-10 text-xs"
+                            disabled={pending}
+                            onClick={resetSelection}
                           >
-                            <Pause className="mr-2 h-4 w-4" /> Break
+                            <X className="mr-1.5 h-3.5 w-3.5" /> {t("Cancel")}{" "}
                           </Button>
-                          <Button
-                            size="lg"
-                            variant="destructive"
-                            className="h-12 text-sm"
-                            disabled={pending || (requirePin && (!match.hasPin || pin.length < 4))}
-                            onClick={() => act("CLOCK_OUT")}
-                          >
-                            <Square className="mr-2 h-4 w-4" /> Clock out
-                          </Button>
-                        </>
-                      )}
-                      {match.status === "ON_BREAK" && (
-                        <Button
-                          size="lg"
-                          variant="success"
-                          className="col-span-2 h-12 text-sm"
-                          disabled={pending || (requirePin && (!match.hasPin || pin.length < 4))}
-                          onClick={() => act("END_BREAK")}
-                        >
-                          <Coffee className="mr-2 h-4 w-4" /> End break
-                        </Button>
-                      )}
-                      {!(requirePin && !match.hasPin) && (
-                        <Button
-                          variant="secondary"
-                          size="lg"
-                          className="col-span-2 h-10 text-xs"
-                          disabled={pending || (requirePin && pin.length < 4)}
-                          onClick={viewTimings}
-                        >
-                          <CalendarDays className="mr-1.5 h-3.5 w-3.5" /> My past month
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        className="col-span-2 h-10 text-xs"
-                        disabled={pending}
-                        onClick={resetSelection}
-                      >
-                        <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
-                      </Button>
-                    </div>
-                    </>
+                        </div>
+                      </>
                     )}
                   </CardContent>
                 </Card>
@@ -840,9 +958,10 @@ export function KioskScreen({
         </div>
       </div>
 
-      <footer className="flex items-center justify-between border-t bg-background px-6 py-3 sm:px-8">
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t bg-background px-6 py-3 sm:px-8">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          /kiosk/{slug} · A photo is taken when you clock in or out.
+          {" "}
+          /kiosk/{slug} {t("· A photo is taken when you clock in or out.")}{" "}
         </p>
         <form action={endKioskSession.bind(null, slug)}>
           <Button
@@ -851,7 +970,7 @@ export function KioskScreen({
             size="sm"
             className="text-[11px] text-muted-foreground"
           >
-            <LogOut className="mr-1.5 h-3 w-3" /> End kiosk session
+            <LogOut className="mr-1.5 h-3 w-3" /> {t("End kiosk session")}{" "}
           </Button>
         </form>
       </footer>

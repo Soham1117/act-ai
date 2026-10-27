@@ -15,7 +15,8 @@ export function MarkSeenOnView() {
     void (async () => {
       try {
         const res = await markAllNotificationsRead();
-        if (!cancelled && res.ok) window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+        if (!cancelled && res.ok)
+          window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
       } catch {
         /* best effort */
       }

@@ -1,4 +1,5 @@
 "use client";
+import { usePortalLanguage } from "@/components/portal-language";
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -64,6 +65,7 @@ const ITEMS: Item[] = [
 ];
 
 export function CommandPalette({ role }: { role: "ADMIN" | "EMPLOYEE" }) {
+  const { t } = usePortalLanguage();
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
 
@@ -84,13 +86,13 @@ export function CommandPalette({ role }: { role: "ADMIN" | "EMPLOYEE" }) {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search pages, employees, actions..." />
+      <CommandInput placeholder={t("common.searchPlaceholder")} />
       <CommandList>
-        <CommandEmpty>No results.</CommandEmpty>
+        <CommandEmpty> {t("common.noResults")} </CommandEmpty>
         {groups.map((group, i) => (
           <React.Fragment key={group}>
             {i > 0 && <CommandSeparator />}
-            <CommandGroup heading={group}>
+            <CommandGroup heading={role === "ADMIN" ? group : t("nav." + group.toLowerCase().replace(/ /g, "_"))}>
               {items
                 .filter((it) => it.group === group)
                 .map((it) => (
@@ -102,7 +104,7 @@ export function CommandPalette({ role }: { role: "ADMIN" | "EMPLOYEE" }) {
                     }}
                   >
                     <it.icon className="mr-2 h-4 w-4 text-muted-foreground" />
-                    {it.label}
+                    {role === "ADMIN" ? it.label : t("nav." + it.label.toLowerCase().replace(/ /g, "_"))}
                   </CommandItem>
                 ))}
             </CommandGroup>

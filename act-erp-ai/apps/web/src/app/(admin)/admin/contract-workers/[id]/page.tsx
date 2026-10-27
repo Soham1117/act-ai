@@ -46,7 +46,7 @@ export default async function ContractWorkerDetailPage({
             {live?.liveStatus === "ACTIVE" && <Badge variant="success">On site</Badge>}
             {live?.liveStatus === "ON_BREAK" && <Badge variant="warning">On break</Badge>}
             <Badge variant={worker.status === "ACTIVE" ? "success" : "secondary"}>
-              {worker.status === "ACTIVE" ? "Active" : "Ended"}
+              {worker.status === "ACTIVE" ? "Active" : worker.status === "INACTIVE" ? "Inactive" : "Ended"}
             </Badge>
             {live?.endingSoon && <Badge variant="warning">Ending soon</Badge>}
           </>
@@ -68,7 +68,7 @@ export default async function ContractWorkerDetailPage({
               <Row label="Notes" value={worker.notes ?? "—"} />
             </dl>
             <p className="mt-4 text-[11px] text-muted-foreground">
-              Edit, end, or reactivate from the <Link className="underline" href="/admin/contract-workers">workers list</Link>.
+              Edit, make inactive, end, or reactivate from the <Link className="underline" href="/admin/contract-workers">workers list</Link>.
             </p>
           </CardContent>
         </Card>

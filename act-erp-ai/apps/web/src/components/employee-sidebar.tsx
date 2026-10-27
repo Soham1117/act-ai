@@ -1,4 +1,5 @@
 "use client";
+import { usePortalLanguage } from "@/components/portal-language";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -34,7 +35,11 @@ import {
 
 const NAV: Array<{
   group: string;
-  items: Array<{ href: string; label: string; icon: React.ComponentType<{ className?: string }> }>;
+  items: Array<{
+    href: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }>;
 }> = [
   {
     group: "Overview",
@@ -76,6 +81,7 @@ const NAV: Array<{
 const AI_ONLY_HREFS = new Set(["/dashboard/chat"]);
 
 export function EmployeeSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
+  const { t } = usePortalLanguage();
   const pathname = usePathname();
   const nav = aiEnabled
     ? NAV
@@ -87,13 +93,16 @@ export function EmployeeSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) 
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="px-2 py-1.5 text-xs font-medium tracking-wide text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
-          My workspace
+          {" "}
+          {t("common.workspace")}{" "}
         </div>
       </SidebarHeader>
       <SidebarContent>
         {nav.map((section) => (
           <SidebarGroup key={section.group}>
-            <SidebarGroupLabel>{section.group}</SidebarGroupLabel>
+            <SidebarGroupLabel>
+              {t("nav." + section.group.toLowerCase().replace(/ /g, "_"))}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {section.items.map((item) => {
@@ -104,10 +113,16 @@ export function EmployeeSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) 
                     (item.href !== "/dashboard" && pathname.startsWith(item.href));
                   return (
                     <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={active}
+                        tooltip={t("nav." + item.label.toLowerCase().replace(/ /g, "_"))}
+                      >
                         <Link href={item.href}>
                           <item.icon className="h-4 w-4" />
-                          <span>{item.label}</span>
+                          <span>
+                            {t("nav." + item.label.toLowerCase().replace(/ /g, "_"))}
+                          </span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

@@ -207,7 +207,7 @@ function userFromPrisma(row: {
   role: "ADMIN" | "EMPLOYEE";
   employee: {
     personalEmail: string | null;
-    employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW";
+    employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW" | "INACTIVE";
     terminationDate: Date | null;
     updatedAt: Date;
   } | null;

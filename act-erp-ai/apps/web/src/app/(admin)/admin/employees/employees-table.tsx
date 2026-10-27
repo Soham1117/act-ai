@@ -46,7 +46,7 @@ export type Row = {
   jobTitle: string | null;
   departmentName: string | null;
   employmentType: "FULL_PART_TIME" | "CONTRACT_HOURLY";
-  employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW";
+  employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW" | "INACTIVE";
   /** Admin accounts can't be bulk-selected (server also refuses). */
   isAdmin: boolean;
   dateOfHire: string | null;
@@ -66,11 +66,11 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
   }, [showInactive, globalFilter]);
 
   const visibleRows = React.useMemo(
-    () => (showInactive ? rows : rows.filter((r) => r.employmentStatus !== "TERMINATED")),
+    () => (showInactive ? rows : rows.filter((r) => r.employmentStatus !== "TERMINATED" && r.employmentStatus !== "INACTIVE")),
     [rows, showInactive],
   );
   const inactiveCount = React.useMemo(
-    () => rows.filter((r) => r.employmentStatus === "TERMINATED").length,
+    () => rows.filter((r) => r.employmentStatus === "TERMINATED" || r.employmentStatus === "INACTIVE").length,
     [rows],
   );
 
@@ -168,6 +168,8 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
           const variant =
             v === "ACTIVE"
               ? "success"
+              : v === "INACTIVE"
+                ? "secondary"
               : v === "ON_LEAVE" || v === "PENDING_REVIEW"
                 ? "warning"
                 : "destructive";

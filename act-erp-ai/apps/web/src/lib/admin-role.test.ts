@@ -96,6 +96,7 @@ describe("atomic administrator role invariant", () => {
     await expect(setUserRole("employee-target", "EMPLOYEE")).resolves.toEqual({
       ok: false,
       error: "You can't change your own role. Ask another admin.",
+      errorCode: "errors.employees.youCantChangeYourOwnRole_373f4",
     });
     expect(dbMock.$transaction).not.toHaveBeenCalled();
   });
@@ -108,6 +109,7 @@ describe("atomic administrator role invariant", () => {
     await expect(setUserRole("employee-target", "ADMIN")).resolves.toEqual({
       ok: false,
       error: "Only active employees can be made admins.",
+      errorCode: "errors.employees.onlyActiveEmployeesCanBeMade_ddbe6",
     });
     expect(dbMock.$transaction).not.toHaveBeenCalled();
   });

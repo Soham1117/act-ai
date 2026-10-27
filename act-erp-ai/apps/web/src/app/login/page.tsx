@@ -5,8 +5,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/logo";
 import { env } from "@/lib/env";
 import { LoginForm } from "./login-form";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
-export const metadata = { title: "Sign in" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("auth.login.title") };
+}
 
 type SearchParams = Promise<{ next?: string; error?: string }>;
 
@@ -15,6 +19,7 @@ export default async function LoginPage({
 }: {
   searchParams: SearchParams;
 }) {
+  const { t } = await getPortalLanguage();
   const user = await getSessionUser();
   if (user) {
     redirect(user.role === "ADMIN" ? "/admin" : "/dashboard");
@@ -31,19 +36,19 @@ export default async function LoginPage({
           <div className="flex flex-col items-center gap-4">
             <Logo priority width={180} height={72} className="h-12" />
             <div className="space-y-1 text-center">
-              <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
+              <h1 className="text-2xl font-bold tracking-tight">{t("auth.login.welcome")}</h1>
               <p className="text-sm text-muted-foreground">
                 {env.LOGIN_2FA_ENABLED === "true"
-                  ? "Sign in, then verify with the code we email you."
-                  : "Sign in with your work email or username and password."}
+                  ? t("auth.login.twoFactorDescription")
+                  : t("auth.login.description")}
               </p>
             </div>
           </div>
           <LoginForm next={next} initialError={error} />
           <p className="text-center text-xs text-muted-foreground">
-            New hire?{" "}
+            {t("auth.login.newHire")} {" "}
             <Link href="/onboard" className="text-primary hover:underline">
-              Onboarding link sent by your admin
+              {t("auth.login.onboardingLink")}
             </Link>
             .
           </p>
@@ -52,7 +57,7 @@ export default async function LoginPage({
       <footer className="space-y-1 p-6 text-center text-[11px] text-muted-foreground">
         <p>
           <Link href="/privacy" className="hover:underline">
-            Privacy notice
+            {t("auth.login.privacyNotice")}
           </Link>
         </p>
         <p>© {new Date().getFullYear()} American Completion Tools</p>

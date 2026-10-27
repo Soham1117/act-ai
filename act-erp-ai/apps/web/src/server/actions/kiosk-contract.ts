@@ -19,6 +19,11 @@ import {
   recordFailure,
 } from "@/lib/kiosk-rate-limit";
 import { clientIpFromHeaders } from "@/lib/ip-network";
+import {
+  kioskProfilePhotoUrl,
+  saveKioskProfilePhoto,
+} from "@/server/kiosk-profile-photo-store";
+import { latestKioskPhotoUrls } from "@/server/kiosk-roster-photos";
 import { storePunchPhoto } from "@/server/punch-photo-store";
 import { getActiveKioskSession, type KioskTimingEntry } from "@/server/actions/kiosk";
 import {
@@ -38,6 +43,7 @@ export type KioskContractWorker = {
   workerId: string;
   name: string;
   agencyName: string;
+  capturedPhotoUrl: string | null;
   jobCode: string | null;
   project: string | null;
   status: "ACTIVE" | "ON_BREAK" | "OUT";
@@ -66,7 +72,10 @@ async function authenticateContractPin(
   const ip = clientIpFromHeaders(await headers()) ?? "unknown";
   const workerKey = `cpin:${sessionId}:${worker.id}`;
   const ipKey = `cpinip:${sessionId}:${ip}`;
-  if (isLocked(workerKey, PIN_MAX_FAILS_PER_WORKER) || isLocked(ipKey, PIN_MAX_FAILS_PER_IP)) {
+  if (
+    isLocked(workerKey, PIN_MAX_FAILS_PER_WORKER) ||
+    isLocked(ipKey, PIN_MAX_FAILS_PER_IP)
+  ) {
     const mins = Math.max(minutesUntilUnlock(workerKey), minutesUntilUnlock(ipKey), 1);
     return {
       ok: false,
@@ -86,7 +95,8 @@ async function authenticateContractPin(
     });
     return {
       ok: false,
-      error: "Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.",
+      error:
+        "Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.",
     };
   }
   clearFailures(workerKey);
@@ -136,6 +146,7 @@ export async function kioskListContractWorkers(
         startDate: true,
         endDate: true,
         kioskPinHash: true,
+        kioskProfilePhotoKey: true,
         agency: { select: { name: true } },
         timeEntries: {
           where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
@@ -146,23 +157,35 @@ export async function kioskListContractWorkers(
       },
     });
 
-    const workers: KioskContractWorker[] = rows
-      .filter((r) => isContractWorkerEligible(r, today))
-      .map((r) => {
-        const open = r.timeEntries[0];
-        // A stale open entry counts as "out": clock-in will close it for review.
-        const live = open && !isStaleShift(open.clockIn) ? open : undefined;
-        return {
-          id: r.id,
-          workerId: r.workerId,
-          name: r.name,
-          agencyName: r.agency.name,
-          jobCode: r.jobCode,
-          project: r.project,
-          status: (live?.status ?? "OUT") as KioskContractWorker["status"],
-          mustChangePin: r.kioskPinHash === null,
-        };
-      });
+    const eligible = rows.filter((r) => isContractWorkerEligible(r, today));
+    const photos = await latestKioskPhotoUrls(
+      slug,
+      "contract",
+      eligible.map((row) => row.id),
+    );
+    const workers: KioskContractWorker[] = eligible.map((r) => {
+      const open = r.timeEntries[0];
+      // A stale open entry counts as "out": clock-in will close it for review.
+      const live = open && !isStaleShift(open.clockIn) ? open : undefined;
+      return {
+        id: r.id,
+        workerId: r.workerId,
+        name: r.name,
+        agencyName: r.agency.name,
+        capturedPhotoUrl: r.kioskProfilePhotoKey
+          ? kioskProfilePhotoUrl(
+              slug,
+              "contract",
+              r.id,
+              r.kioskProfilePhotoKey.split("/").pop()!,
+            )
+          : (photos.get(r.id) ?? null),
+        jobCode: r.jobCode,
+        project: r.project,
+        status: (live?.status ?? "OUT") as KioskContractWorker["status"],
+        mustChangePin: r.kioskPinHash === null,
+      };
+    });
     return ok({ workers });
   } catch (err) {
     return failFromUnknown(err);
@@ -189,7 +212,12 @@ export async function kioskContractTimings(input: {
       select: { id: true, kioskPinHash: true },
     });
     if (!worker) return fail("Unknown contract worker. Refresh the kiosk and try again.");
-    const auth = await authenticateContractPin(session.id, worker, input.pin, session.slug);
+    const auth = await authenticateContractPin(
+      session.id,
+      worker,
+      input.pin,
+      session.slug,
+    );
     if (!auth.ok) return fail(auth.error);
     if (auth.mustChangePin) {
       return fail("You must set a new PIN first. Clock in or out to choose one.");
@@ -244,7 +272,9 @@ export type KioskContractActionInput = z.infer<typeof actionSchema>;
  */
 export async function kioskContractAction(
   input: KioskContractActionInput,
-): Promise<ActionResult<{ id: string | null; status: string | null; autoClosed?: boolean }>> {
+): Promise<
+  ActionResult<{ id: string | null; status: string | null; autoClosed?: boolean }>
+> {
   try {
     const data = actionSchema.parse(input);
     const session = await requireKioskForContract(data.slug);
@@ -264,9 +294,15 @@ export async function kioskContractAction(
       },
     });
     if (!worker) return fail("Unknown contract worker. Refresh the kiosk and try again.");
-    const auth = await authenticateContractPin(session.id, worker, data.pin, session.slug);
+    const auth = await authenticateContractPin(
+      session.id,
+      worker,
+      data.pin,
+      session.slug,
+    );
     if (!auth.ok) return fail(auth.error);
-    if (auth.mustChangePin) return fail("You must set a new PIN before you can clock in or out.");
+    if (auth.mustChangePin)
+      return fail("You must set a new PIN before you can clock in or out.");
 
     const meta = { kioskSlug: session.slug ?? data.slug, kioskLabel: session.label };
 
@@ -332,7 +368,12 @@ export async function kioskContractChangePin(input: {
       select: { id: true, kioskPinHash: true },
     });
     if (!worker) return fail("Unknown contract worker. Refresh the kiosk and try again.");
-    const auth = await authenticateContractPin(session.id, worker, input.currentPin, session.slug);
+    const auth = await authenticateContractPin(
+      session.id,
+      worker,
+      input.currentPin,
+      session.slug,
+    );
     if (!auth.ok) return fail(auth.error);
     if (!auth.mustChangePin) return fail("Your PIN has already been changed.");
     const weak = validateNewPin(input.newPin);
@@ -350,5 +391,46 @@ export async function kioskContractChangePin(input: {
     return ok();
   } catch (err) {
     return failFromUnknown(err);
+  }
+}
+
+/** Portrait updates require a current contract and the worker's non-temporary PIN. */
+export async function kioskContractUpdateProfilePhoto(input: {
+  slug: string;
+  workerId: string;
+  pin: string;
+  photo: string;
+}): Promise<ActionResult<{ url: string }>> {
+  try {
+    const session = await requireKioskForContract(input.slug);
+    if (!session) return fail(NOT_ACTIVATED_MESSAGE);
+    if (rateLimited(`contract-profile-photo:${session.id}`, 20, 60_000))
+      return fail("Too many requests � wait a moment and try again.");
+    const worker = await db.contractWorker.findUnique({ where: { id: input.workerId } });
+    if (!worker || !isContractWorkerEligible(worker, businessDateOnly()))
+      return fail("Unknown contract worker. Refresh the kiosk and try again.");
+    const auth = await authenticateContractPin(
+      session.id,
+      worker,
+      input.pin,
+      session.slug,
+    );
+    if (!auth.ok) return fail(auth.error);
+    if (auth.mustChangePin)
+      return fail("You must set a new PIN first. Clock in or out to choose one.");
+    const key = await saveKioskProfilePhoto("contract", worker.id, input.photo);
+    if (!key) return fail("Take a new photo and try again.");
+    await audit({
+      action: "kiosk.contract.profile_photo_update",
+      resource: `ContractWorker:${worker.id}`,
+      actor: { id: null, email: `kiosk:${session.slug}` },
+      diff: { kioskSlug: session.slug },
+    });
+    revalidatePath(`/kiosk/${input.slug}`);
+    return ok({
+      url: kioskProfilePhotoUrl(input.slug, "contract", worker.id, key.split("/").pop()!),
+    });
+  } catch (err) {
+    return failFromUnknown(err, "Could not save your photo. Try again.");
   }
 }

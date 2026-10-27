@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useKioskLanguage } from "./kiosk-language";
 import { toast } from "sonner";
 import {
   IDLE_RECHECK_MS,
@@ -43,6 +44,7 @@ function guardedReload(): boolean {
  * Renders nothing.
  */
 export function VersionWatcher() {
+  const { t } = useKioskLanguage();
   useEffect(() => {
     let lastActivity = Date.now();
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -51,7 +53,13 @@ export function VersionWatcher() {
     const onActivity = () => {
       lastActivity = Date.now();
     };
-    const events = ["pointerdown", "pointermove", "keydown", "touchstart", "wheel"] as const;
+    const events = [
+      "pointerdown",
+      "pointermove",
+      "keydown",
+      "touchstart",
+      "wheel",
+    ] as const;
     for (const e of events) window.addEventListener(e, onActivity, { passive: true });
 
     const waitForIdleThenReload = () => {
@@ -87,7 +95,7 @@ export function VersionWatcher() {
     const onStale = (err: unknown) => {
       if (staleHandled || !isStaleActionError(err)) return;
       staleHandled = true;
-      toast.error("The kiosk was updated. Reloading…");
+      toast.error(t("The kiosk was updated. Reloading…"));
       setTimeout(() => {
         // If the guard blocks the reload, allow a new attempt later.
         if (!guardedReload()) staleHandled = false;
@@ -106,7 +114,7 @@ export function VersionWatcher() {
       clearInterval(poll);
       if (idleTimer) clearTimeout(idleTimer);
     };
-  }, []);
+  }, [t]);
 
   return null;
 }

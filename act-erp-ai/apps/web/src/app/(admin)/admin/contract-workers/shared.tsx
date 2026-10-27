@@ -19,7 +19,7 @@ export type WorkerRow = {
   project: string | null;
   startDate: string; // YYYY-MM-DD
   endDate: string | null;
-  status: "ACTIVE" | "ENDED";
+  status: "ACTIVE" | "ENDED" | "INACTIVE";
   notes: string | null;
   liveStatus: LiveStatus;
   endingSoon: boolean;

@@ -61,7 +61,7 @@ export default async function DepartmentDetailPage({
                   <p className="truncate text-sm font-medium">{e.name}</p>
                   <p className="truncate text-[11px] text-muted-foreground">{e.jobTitle ?? "—"}</p>
                 </div>
-                <Badge variant={e.employmentStatus === "ACTIVE" ? "success" : e.employmentStatus === "ON_LEAVE" ? "warning" : "destructive"} className="text-[10px]">
+                <Badge variant={e.employmentStatus === "ACTIVE" ? "success" : e.employmentStatus === "INACTIVE" ? "secondary" : e.employmentStatus === "ON_LEAVE" ? "warning" : "destructive"} className="text-[10px]">
                   {e.employmentStatus.replace("_", " ")}
                 </Badge>
               </Link>

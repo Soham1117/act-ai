@@ -137,9 +137,11 @@ const parseDay = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const validDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(parseDay(s).getTime());
 
 /** In-app notice; never throws, never blocks the admin action. */
-function notifyBenefits(employeeIds: string[], title: string, message: string) {
+function notifyBenefits(employeeIds: string[], title: string, message: string, localization: { key: string; params: Record<string, string | number> }) {
   return notifyEmployees(employeeIds, {
     type: "BENEFITS",
+    translationKey: localization.key,
+    translationParams: localization.params,
     title,
     message,
     link: "/dashboard/benefits",
@@ -281,10 +283,10 @@ export async function upsertBenefitPlan(
   try {
     const data = planWithTiersSchema.parse(input);
     if (!validDay(data.planYearStart) || !validDay(data.planYearEnd)) {
-      return fail("Enter a valid plan year start and end date.");
+      return fail("Enter a valid plan year start and end date.", "errors.benefits.enterAValidPlanYearStart_a9f16");
     }
     if (data.planYearEnd <= data.planYearStart) {
-      return fail("The plan year must end after it starts.");
+      return fail("The plan year must end after it starts.", "errors.benefits.thePlanYearMustEndAfter_5a916");
     }
     const seen = new Set<string>();
     for (const t of data.tiers ?? []) {
@@ -409,13 +411,13 @@ export async function upsertEnrollment(
       ? await db.benefitEnrollment.findUnique({ where: { id: data.id } })
       : null;
     if (data.id && !existing) {
-      return fail("That enrollment no longer exists. Refresh the page and try again.");
+      return fail("That enrollment no longer exists. Refresh the page and try again.", "errors.benefits.thatEnrollmentNoLongerExistsRefresh_a21bc");
     }
     if (existing && (existing.employeeId !== data.employeeId || existing.planId !== data.planId)) {
-      return fail("An existing enrollment's employee and plan can't be changed. End it and create a new one.");
+      return fail("An existing enrollment's employee and plan can't be changed. End it and create a new one.", "errors.benefits.anExistingEnrollmentsEmployeeAndPlan_9e934");
     }
     if (!existing && !validDay(data.effectiveDate)) {
-      return fail("Enter a valid effective date.");
+      return fail("Enter a valid effective date.", "errors.benefits.enterAValidEffectiveDate_05361");
     }
     // On update the stored row dates are authoritative (the form may not even
     // carry them); on create the open-ended new span is what gets checked.
@@ -430,13 +432,13 @@ export async function upsertEnrollment(
       }),
     ]);
     if (!employee) {
-      return fail("That employee no longer exists. Refresh the page and pick another employee.");
+      return fail("That employee no longer exists. Refresh the page and pick another employee.", "errors.benefits.thatEmployeeNoLongerExistsRefresh_77839");
     }
     if (!plan) {
-      return fail("That benefit plan no longer exists. Refresh the page and pick another plan.");
+      return fail("That benefit plan no longer exists. Refresh the page and pick another plan.", "errors.benefits.thatBenefitPlanNoLongerExists_90dc3");
     }
     if (plan.type === "RETIREMENT_401K") {
-      return fail("Use the 401(k) election form for retirement plans.");
+      return fail("Use the 401(k) election form for retirement plans.", "errors.benefits.useThe401kElectionFormFor_59cc5");
     }
     if (data.tier && plan.tiers.length > 0 && !plan.tiers.some((t) => t.tier === data.tier)) {
       return fail(`${plan.name} has no price for the ${tierLabel(data.tier)} tier. Add it to the plan first.`);
@@ -495,6 +497,7 @@ export async function upsertEnrollment(
       data.status === "WAIVED"
         ? `Your waiver of ${plan.name} was recorded.`
         : `Your ${plan.name} enrollment was ${existing ? "updated" : "entered"} (${data.status === "PENDING" ? "pending confirmation" : "enrolled"}).`,
+      { key: data.status === "WAIVED" ? "notificationTemplates.benefitsWaived" : "notificationTemplates.benefitsEnrollment", params: { plan: plan.name, change: existing ? "updated" : "entered", status: data.status } },
     );
     revalidateBenefits();
     return ok({ id: row.id });
@@ -511,12 +514,12 @@ export async function confirmEnrollment(id: string): Promise<ActionResult<{ id: 
       where: { id },
       include: { plan: { select: { name: true } } },
     });
-    if (!row) return fail("That enrollment no longer exists. Refresh the page and try again.");
+    if (!row) return fail("That enrollment no longer exists. Refresh the page and try again.", "errors.benefits.thatEnrollmentNoLongerExistsRefresh_a21bc");
     if (row.status !== "PENDING") {
-      return fail("Only a pending enrollment can be confirmed. Refresh the page.");
+      return fail("Only a pending enrollment can be confirmed. Refresh the page.", "errors.benefits.onlyAPendingEnrollmentCanBe_50281");
     }
     if (row.endDate && row.endDate <= utcToday()) {
-      return fail("That enrollment has already ended; there is nothing to confirm.");
+      return fail("That enrollment has already ended; there is nothing to confirm.", "errors.benefits.thatEnrollmentHasAlreadyEndedThere_881a9");
     }
     await db.benefitEnrollment.update({
       where: { id },
@@ -531,6 +534,7 @@ export async function confirmEnrollment(id: string): Promise<ActionResult<{ id: 
       [row.employeeId],
       "Enrollment confirmed",
       `Your ${row.plan.name} enrollment is confirmed, effective ${dayKey(row.effectiveDate)}.`,
+      { key: "notificationTemplates.benefitsConfirmed", params: { plan: row.plan.name, effectiveDate: dayKey(row.effectiveDate) } },
     );
     revalidateBenefits();
     return ok({ id });
@@ -558,7 +562,7 @@ export async function changeEnrollmentTier(
   const admin = await requireAdmin();
   try {
     const data = changeTierSchema.parse(input);
-    if (!validDay(data.effectiveDate)) return fail("Enter a valid effective date.");
+    if (!validDay(data.effectiveDate)) return fail("Enter a valid effective date.", "errors.benefits.enterAValidEffectiveDate_05361");
     const newEffectiveDate = parseDay(data.effectiveDate);
 
     const old = await db.benefitEnrollment.findUnique({
@@ -566,17 +570,17 @@ export async function changeEnrollmentTier(
       include: { plan: { select: { type: true, name: true, tiers: { select: { tier: true } } } } },
     });
     if (!old) {
-      return fail("That enrollment no longer exists. Refresh the page and try again.");
+      return fail("That enrollment no longer exists. Refresh the page and try again.", "errors.benefits.thatEnrollmentNoLongerExistsRefresh_a21bc");
     }
     if (old.endDate) {
-      return fail("That enrollment has already ended, so its tier can't be changed. Enroll the employee again instead.");
+      return fail("That enrollment has already ended, so its tier can't be changed. Enroll the employee again instead.", "errors.benefits.thatEnrollmentHasAlreadyEndedSo_3b307");
     }
     if (old.status === "WAIVED") {
-      return fail("A waived benefit has no tier to change. Create a new enrollment instead.");
+      return fail("A waived benefit has no tier to change. Create a new enrollment instead.", "errors.benefits.aWaivedBenefitHasNoTier_726ab");
     }
     if (newEffectiveDate <= old.effectiveDate) {
       return fail(
-        "The new tier's effective date must be after the current enrollment's effective date. Pick a later date and try again.",
+        "The new tier's effective date must be after the current enrollment's effective date. Pick a later date and try again.", "errors.benefits.theNewTiersEffectiveDateMust_d959b",
       );
     }
     if (old.plan.tiers.length > 0 && !old.plan.tiers.some((t) => t.tier === data.newTier)) {
@@ -588,7 +592,7 @@ export async function changeEnrollmentTier(
       select: { ssnLast4: true },
     });
     if (!employee) {
-      return fail("That employee no longer exists. Refresh the page and try again.");
+      return fail("That employee no longer exists. Refresh the page and try again.", "errors.benefits.thatEmployeeNoLongerExistsRefresh_dd3a1");
     }
     const memberId = data.memberId ?? old.memberId ?? undefined;
     const memberFail = failBadMemberId(memberId, employee.ssnLast4);
@@ -631,6 +635,7 @@ export async function changeEnrollmentTier(
       [old.employeeId],
       "Benefits tier changed",
       `Your ${old.plan.name} coverage changes to ${tierLabel(data.newTier)} effective ${data.effectiveDate}.`,
+      { key: "notificationTemplates.benefitsTier", params: { plan: old.plan.name, tier: data.newTier, effectiveDate: data.effectiveDate } },
     );
     revalidateBenefits();
     return ok({ id: created.id });
@@ -651,13 +656,13 @@ export async function endEnrollment(
   await requireAdmin();
   try {
     const data = endEnrollmentSchema.parse(input);
-    if (!validDay(data.endDate)) return fail("Enter a valid end date.");
+    if (!validDay(data.endDate)) return fail("Enter a valid end date.", "errors.benefits.enterAValidEndDate_14fae");
     const endDate = parseDay(data.endDate);
     const existing = await db.benefitEnrollment.findUnique({
       where: { id: data.enrollmentId },
       include: { plan: { select: { name: true } } },
     });
-    if (!existing) return fail("That enrollment no longer exists. Refresh the page and try again.");
+    if (!existing) return fail("That enrollment no longer exists. Refresh the page and try again.", "errors.benefits.thatEnrollmentNoLongerExistsRefresh_a21bc");
     if (existing.endDate) {
       return fail(`That enrollment already ended on ${dayKey(existing.endDate)}. Refresh the page.`);
     }
@@ -681,6 +686,7 @@ export async function endEnrollment(
       [existing.employeeId],
       "Benefits coverage ending",
       `Your ${existing.plan.name} coverage ends ${data.endDate}.`,
+      { key: "notificationTemplates.benefitsEnding", params: { plan: existing.plan.name, endDate: data.endDate } },
     );
     revalidateBenefits();
     return ok({ id: row.id });
@@ -730,12 +736,12 @@ export async function upsertRetirementElection(
       ? await db.retirementElection.findUnique({ where: { id: data.id } })
       : null;
     if (data.id && !existing) {
-      return fail("That election no longer exists. Refresh the page and try again.");
+      return fail("That election no longer exists. Refresh the page and try again.", "errors.benefits.thatElectionNoLongerExistsRefresh_a8c23");
     }
     if (existing && (existing.employeeId !== data.employeeId || existing.planId !== data.planId)) {
-      return fail("An existing election's employee and plan can't be changed. End it and create a new one.");
+      return fail("An existing election's employee and plan can't be changed. End it and create a new one.", "errors.benefits.anExistingElectionsEmployeeAndPlan_2087d");
     }
-    if (!existing && !validDay(data.effectiveDate)) return fail("Enter a valid effective date.");
+    if (!existing && !validDay(data.effectiveDate)) return fail("Enter a valid effective date.", "errors.benefits.enterAValidEffectiveDate_05361");
     const effectiveDate = existing ? existing.effectiveDate : parseDay(data.effectiveDate);
     const endDate = existing ? existing.endDate : null;
 
@@ -743,9 +749,9 @@ export async function upsertRetirementElection(
       db.employee.findUnique({ where: { id: data.employeeId }, select: { id: true } }),
       db.benefitPlan.findUnique({ where: { id: data.planId }, select: { type: true, name: true } }),
     ]);
-    if (!employee) return fail("That employee no longer exists. Refresh the page and try again.");
+    if (!employee) return fail("That employee no longer exists. Refresh the page and try again.", "errors.benefits.thatEmployeeNoLongerExistsRefresh_dd3a1");
     if (!plan || plan.type !== "RETIREMENT_401K") {
-      return fail("Pick a 401(k) plan for a retirement election.");
+      return fail("Pick a 401(k) plan for a retirement election.", "errors.benefits.pickA401kPlanForA_5677f");
     }
 
     const row = await db.$transaction(async (tx) => {
@@ -795,6 +801,7 @@ export async function upsertRetirementElection(
       [data.employeeId],
       "Benefits updated",
       `Your ${plan.name} 401(k) election was ${existing ? "updated" : "entered"}.`,
+      { key: "notificationTemplates.retirementChanged", params: { plan: plan.name, change: existing ? "updated" : "entered" } },
     );
     revalidateBenefits();
     return ok({ id: row.id });
@@ -811,10 +818,10 @@ export async function confirmRetirementElection(id: string): Promise<ActionResul
       where: { id },
       include: { plan: { select: { name: true } } },
     });
-    if (!row) return fail("That election no longer exists. Refresh the page and try again.");
-    if (row.status !== "PENDING") return fail("Only a pending election can be confirmed. Refresh the page.");
+    if (!row) return fail("That election no longer exists. Refresh the page and try again.", "errors.benefits.thatElectionNoLongerExistsRefresh_a8c23");
+    if (row.status !== "PENDING") return fail("Only a pending election can be confirmed. Refresh the page.", "errors.benefits.onlyAPendingElectionCanBe_08d94");
     if (row.endDate && row.endDate <= utcToday()) {
-      return fail("That election has already ended; there is nothing to confirm.");
+      return fail("That election has already ended; there is nothing to confirm.", "errors.benefits.thatElectionHasAlreadyEndedThere_510a7");
     }
     await db.retirementElection.update({
       where: { id },
@@ -829,6 +836,7 @@ export async function confirmRetirementElection(id: string): Promise<ActionResul
       [row.employeeId],
       "401(k) election confirmed",
       `Your ${row.plan.name} 401(k) election is confirmed.`,
+      { key: "notificationTemplates.retirementConfirmed", params: { plan: row.plan.name, effectiveDate: dayKey(row.effectiveDate) } },
     );
     revalidateBenefits();
     return ok({ id });
@@ -849,13 +857,13 @@ export async function endRetirementElection(
   await requireAdmin();
   try {
     const data = endElectionSchema.parse(input);
-    if (!validDay(data.endDate)) return fail("Enter a valid end date.");
+    if (!validDay(data.endDate)) return fail("Enter a valid end date.", "errors.benefits.enterAValidEndDate_14fae");
     const endDate = parseDay(data.endDate);
     const existing = await db.retirementElection.findUnique({
       where: { id: data.electionId },
       include: { plan: { select: { name: true } } },
     });
-    if (!existing) return fail("That election no longer exists. Refresh the page and try again.");
+    if (!existing) return fail("That election no longer exists. Refresh the page and try again.", "errors.benefits.thatElectionNoLongerExistsRefresh_a8c23");
     if (existing.endDate) {
       return fail(`That election already ended on ${dayKey(existing.endDate)}. Refresh the page.`);
     }
@@ -879,6 +887,7 @@ export async function endRetirementElection(
       [existing.employeeId],
       "401(k) election ended",
       `Your ${existing.plan.name} 401(k) deferral stops ${data.endDate}.`,
+      { key: "notificationTemplates.retirementEnding", params: { plan: existing.plan.name, endDate: data.endDate } },
     );
     revalidateBenefits();
     return ok({ id: row.id });
@@ -913,11 +922,11 @@ export async function rollForwardPlanYear(
   try {
     const data = rollForwardSchema.parse(input);
     if (!validDay(data.planYearStart) || !validDay(data.planYearEnd)) {
-      return fail("Enter a valid start and end date for the new plan year.");
+      return fail("Enter a valid start and end date for the new plan year.", "errors.benefits.enterAValidStartAndEnd_eceb1");
     }
     const newStart = parseDay(data.planYearStart);
     const newEnd = parseDay(data.planYearEnd);
-    if (newEnd <= newStart) return fail("The new plan year must end after it starts.");
+    if (newEnd <= newStart) return fail("The new plan year must end after it starts.", "errors.benefits.theNewPlanYearMustEnd_1ce63");
 
     const result = await db.$transaction(async (tx) => {
       const oldPlan = await tx.benefitPlan.findUnique({
@@ -1057,12 +1066,13 @@ export async function rollForwardPlanYear(
       result.employeeIds,
       "Benefits renewed",
       `Your ${result.planName} coverage was renewed for the plan year starting ${data.planYearStart}.`,
+      { key: "notificationTemplates.benefitsRenewed", params: { plan: result.planName, startDate: data.planYearStart } },
     );
     revalidateBenefits();
     return ok({ id: result.planId, migratedCount: result.employeeIds.length });
   } catch (err) {
     if ((err as { code?: string } | null)?.code === "P2002") {
-      return fail("This plan was already rolled forward. Refresh the page.");
+      return fail("This plan was already rolled forward. Refresh the page.", "errors.benefits.thisPlanWasAlreadyRolledForward_4e1c3");
     }
     return failFromUnknown(err);
   }

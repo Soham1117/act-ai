@@ -2,6 +2,7 @@
 // notificationPageCount() below, which is not allowed on client-module exports.
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
 export function notificationPage(value: string | undefined): number {
   const parsed = Number.parseInt(value ?? "1", 10);
@@ -16,7 +17,7 @@ export function notificationPageHref(page: number): string {
   return page <= 1 ? "/dashboard/notifications" : `/dashboard/notifications?page=${page}`;
 }
 
-export function NotificationPagination({
+export async function NotificationPagination({
   page,
   totalPages,
 }: {
@@ -24,18 +25,26 @@ export function NotificationPagination({
   totalPages: number;
 }) {
   if (totalPages <= 1) return null;
+  const { t } = await getPortalLanguage();
   return (
-    <nav className="mt-3 flex items-center justify-between text-xs text-muted-foreground" aria-label="Notification pages">
-      <span>Page {page} of {totalPages}</span>
+    <nav
+      className="mt-3 flex items-center justify-between text-xs text-muted-foreground"
+      aria-label={t("notifications.pagination.label")}
+    >
+      <span>{t("notifications.pagination.page", { page, totalPages })}</span>
       <div className="flex gap-2">
         {page > 1 && (
           <Button asChild size="sm" variant="outline">
-            <Link href={notificationPageHref(page - 1)}>Previous</Link>
+            <Link href={notificationPageHref(page - 1)}>
+              {t("notifications.pagination.previous")}
+            </Link>
           </Button>
         )}
         {page < totalPages && (
           <Button asChild size="sm" variant="outline">
-            <Link href={notificationPageHref(page + 1)}>Next</Link>
+            <Link href={notificationPageHref(page + 1)}>
+              {t("notifications.pagination.next")}
+            </Link>
           </Button>
         )}
       </div>

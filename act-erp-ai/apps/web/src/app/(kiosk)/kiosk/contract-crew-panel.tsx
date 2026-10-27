@@ -13,15 +13,19 @@ import {
   kioskContractChangePin,
   kioskContractTimings,
   kioskListContractWorkers,
+  kioskContractUpdateProfilePhoto,
   type KioskContractWorker,
 } from "@/server/actions/kiosk-contract";
 import type { KioskTimingEntry } from "@/server/actions/kiosk";
 import { TimingsList } from "./timings-list";
 import { BUSINESS_TIME_ZONE } from "@/lib/format";
-import { runAction, toastAction } from "@/lib/toast-action";
+import { runAction } from "@/lib/toast-action";
 import { setKioskBusy } from "@/lib/kiosk-version";
 import { cn } from "@/lib/utils";
 import { PunchCameraPreview, type PunchCamera } from "./punch-camera";
+import { useKioskLanguage } from "./kiosk-language";
+import { KioskPersonPhoto } from "./kiosk-person-photo";
+import { KioskProfilePhotoEditor } from "./kiosk-profile-photo-editor";
 
 type ContractAction = "CLOCK_IN" | "CLOCK_OUT";
 
@@ -30,10 +34,13 @@ const ROSTER_REFRESH_MS = 60_000;
 /** Auto-cancel a worker selection after this long without a tap. */
 const IDLE_CANCEL_MS = 30_000;
 
-function statusLabel(status: KioskContractWorker["status"]) {
-  if (status === "ACTIVE") return "In";
-  if (status === "ON_BREAK") return "On break";
-  return "Out";
+function statusLabel(
+  status: KioskContractWorker["status"],
+  t: (english: string) => string,
+) {
+  if (status === "ACTIVE") return t("In");
+  if (status === "ON_BREAK") return t("On break");
+  return t("Out");
 }
 
 function statusVariant(
@@ -52,6 +59,7 @@ export function KioskModeSwitch({
   mode: "employees" | "contract";
   onChange: (mode: "employees" | "contract") => void;
 }) {
+  const { t } = useKioskLanguage();
   return (
     <div className="mx-auto flex w-full max-w-md gap-1 rounded-md border bg-background p-1">
       <Button
@@ -60,7 +68,7 @@ export function KioskModeSwitch({
         className="h-12 flex-1 text-sm"
         onClick={() => onChange("employees")}
       >
-        Employees
+        {t("Employees")}
       </Button>
       <Button
         type="button"
@@ -68,7 +76,7 @@ export function KioskModeSwitch({
         className="h-12 flex-1 text-sm"
         onClick={() => onChange("contract")}
       >
-        Contract crew
+        {t("Contract crew")}
       </Button>
     </div>
   );
@@ -81,10 +89,12 @@ export function ContractCrewPanel({
   slug: string;
   camera: PunchCamera;
 }) {
+  const { t, toastAction } = useKioskLanguage();
   const { start: startCamera, stop: stopCamera } = camera;
   const [workers, setWorkers] = useState<KioskContractWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [agencyFilter, setAgencyFilter] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [timings, setTimings] = useState<{
     entries: KioskTimingEntry[];
@@ -97,8 +107,10 @@ export function ContractCrewPanel({
   const [pendingAction, setPendingAction] = useState<ContractAction | null>(null);
   const [choosingPin, setChoosingPin] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [editingPhoto, setEditingPhoto] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
 
-  const busy = selectedId !== null || pending;
+  const busy = selectedId !== null || pending || profileSaving;
   useEffect(() => {
     setKioskBusy("crew", busy);
     return () => setKioskBusy("crew", false);
@@ -118,7 +130,7 @@ export function ContractCrewPanel({
     }
     setWorkers(res.workers);
     setLoading(false);
-  }, [slug]);
+  }, [slug, toastAction]);
 
   useEffect(() => {
     // Deferred one tick so state is only set from a callback, not the effect body.
@@ -141,6 +153,8 @@ export function ContractCrewPanel({
     setConfirmPin("");
     setPendingAction(null);
     setChoosingPin(false);
+    setEditingPhoto(false);
+    setProfileSaving(false);
   }, [stopCamera]);
 
   // Camera runs only while the confirm card is open; also stop on tab switch/unmount.
@@ -148,21 +162,29 @@ export function ContractCrewPanel({
 
   // Idle auto-cancel, same rule as the employee flow.
   useEffect(() => {
-    if (!selected || pending) return;
+    if (!selected || pending || profileSaving) return;
     const id = setTimeout(clearSelection, IDLE_CANCEL_MS);
     return () => clearTimeout(id);
-  }, [selected, pending, activity, clearSelection]);
+  }, [selected, pending, profileSaving, activity, clearSelection]);
+
+  const agencies = useMemo(
+    () => [...new Set(workers.map((w) => w.agencyName))].sort((a, b) => a.localeCompare(b)),
+    [workers],
+  );
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const byAgency = agencyFilter
+      ? workers.filter((w) => w.agencyName === agencyFilter)
+      : workers;
     const list = q
-      ? workers.filter(
+      ? byAgency.filter(
           (w) =>
             w.name.toLowerCase().includes(q) ||
             w.workerId.toLowerCase().includes(q) ||
             w.agencyName.toLowerCase().includes(q),
         )
-      : workers;
+      : byAgency;
     const map = new Map<string, KioskContractWorker[]>();
     for (const w of list) {
       const arr = map.get(w.agencyName) ?? [];
@@ -170,11 +192,11 @@ export function ContractCrewPanel({
       map.set(w.agencyName, arr);
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [workers, query]);
+  }, [workers, query, agencyFilter]);
 
   function act(worker: KioskContractWorker, action: ContractAction) {
     if (!/^\d{4}$/.test(pin)) {
-      toast.error("Enter your 4-digit PIN");
+      toast.error(t("Enter your 4-digit PIN"));
       return;
     }
     if (worker.mustChangePin) {
@@ -190,7 +212,11 @@ export function ContractCrewPanel({
     });
   }
 
-  async function punch(worker: KioskContractWorker, action: ContractAction, pinValue: string) {
+  async function punch(
+    worker: KioskContractWorker,
+    action: ContractAction,
+    pinValue: string,
+  ) {
     {
       // Best-effort photo; null never blocks the punch.
       const photo = (await camera.capture()) ?? undefined;
@@ -208,28 +234,34 @@ export function ContractCrewPanel({
         hour12: true,
       });
       const labels: Record<ContractAction, string> = {
-        CLOCK_IN: "Clocked in",
-        CLOCK_OUT: "Clocked out",
+        CLOCK_IN: t("Clocked in"),
+        CLOCK_OUT: t("Clocked out"),
       };
-      toast.success(`${labels[action]} at ${time} · ${worker.name}`);
+      toast.success(`${labels[action]} · ${time} · ${worker.name}`);
       if (res.autoClosed) {
         toast.warning(
-          "Your previous shift was left open more than 16 hours. It was closed automatically and flagged for an admin to review.",
+          t(
+            "Your previous shift was left open more than 16 hours. It was closed automatically and flagged for an admin to review.",
+          ),
           { duration: 10_000 },
         );
       }
       clearSelection();
+      setQuery("");
+      setAgencyFilter(null);
       await load();
     }
   }
 
   function viewTimings(worker: KioskContractWorker) {
     if (!/^\d{4}$/.test(pin)) {
-      toast.error("Enter your 4-digit PIN");
+      toast.error(t("Enter your 4-digit PIN"));
       return;
     }
     startTransition(async () => {
-      const res = await runAction(() => kioskContractTimings({ slug, workerId: worker.id, pin }));
+      const res = await runAction(() =>
+        kioskContractTimings({ slug, workerId: worker.id, pin }),
+      );
       if (!toastAction(res)) {
         setPin("");
         return;
@@ -242,11 +274,11 @@ export function ContractCrewPanel({
     e.preventDefault();
     if (!pendingAction) return;
     if (!/^\d{4}$/.test(newPin)) {
-      toast.error("Your new PIN must be exactly 4 digits.");
+      toast.error(t("Your new PIN must be exactly 4 digits."));
       return;
     }
     if (newPin !== confirmPin) {
-      toast.error("The two PINs do not match. Re-enter them.");
+      toast.error(t("The two PINs do not match. Re-enter them."));
       return;
     }
     startTransition(async () => {
@@ -260,8 +292,10 @@ export function ContractCrewPanel({
         }
         return;
       }
-      toast.success("PIN updated. Use your new PIN from now on.");
-      setWorkers((ws) => ws.map((w) => (w.id === worker.id ? { ...w, mustChangePin: false } : w)));
+      toast.success(t("PIN updated. Use your new PIN from now on."));
+      setWorkers((ws) =>
+        ws.map((w) => (w.id === worker.id ? { ...w, mustChangePin: false } : w)),
+      );
       setChoosingPin(false);
       await punch(worker, pendingAction, newPin);
     });
@@ -282,11 +316,51 @@ export function ContractCrewPanel({
           onPointerDownCapture={() => setActivity((n) => n + 1)}
         >
           <CardContent className="space-y-5 p-6">
-            <PunchCameraPreview status={camera.status} setVideo={camera.setVideo} />
+            {editingPhoto ? (
+              <KioskProfilePhotoEditor
+                punchCamera={camera}
+                onSave={(pinValue, photo) =>
+                  kioskContractUpdateProfilePhoto({
+                    slug,
+                    workerId: selected.id,
+                    pin: pinValue,
+                    photo,
+                  })
+                }
+                onSaved={(url) => {
+                  toast.success(t("Photo saved."));
+                  setWorkers((current) =>
+                    current.map((worker) =>
+                      worker.id === selected.id
+                        ? { ...worker, capturedPhotoUrl: url }
+                        : worker,
+                    ),
+                  );
+                  setPin("");
+                  setEditingPhoto(false);
+                  void load();
+                }}
+                onClose={() => {
+                  setEditingPhoto(false);
+                  setPin("");
+                }}
+                onBusyChange={setProfileSaving}
+              />
+            ) : (
+              <PunchCameraPreview status={camera.status} setVideo={camera.setVideo} />
+            )}
             <div className="flex items-center gap-4">
+              {selected.capturedPhotoUrl && (
+                <KioskPersonPhoto
+                  photoUrl={selected.capturedPhotoUrl}
+                  name={selected.name}
+                  className="h-[60px] w-[60px]"
+                  sizes="60px"
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Agency staff
+                  {t("Agency staff")}
                 </p>
                 <p className="truncate text-lg font-semibold">{selected.name}</p>
                 <p className="truncate text-xs text-muted-foreground">
@@ -297,11 +371,28 @@ export function ContractCrewPanel({
                 )}
               </div>
               <Badge variant={statusVariant(selected.status)} className="text-[10px]">
-                {statusLabel(selected.status)}
+                {statusLabel(selected.status, t)}
               </Badge>
             </div>
 
-            {timings ? (
+            {!editingPhoto && !timings && !choosingPin && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={pending || profileSaving}
+                onClick={() => {
+                  setPin("");
+                  startCamera();
+                  setEditingPhoto(true);
+                }}
+              >
+                {t("Change photo")}
+              </Button>
+            )}
+
+            {editingPhoto ? null : timings ? (
               <TimingsList
                 entries={timings.entries}
                 totalWorkMin={timings.totalWorkMin}
@@ -309,10 +400,13 @@ export function ContractCrewPanel({
               />
             ) : choosingPin ? (
               <form onSubmit={(e) => submitNewPin(e, selected)} className="space-y-3">
-                <p className="text-center text-sm font-medium">Choose your new PIN</p>
+                <p className="text-center text-sm font-medium">
+                  {t("Choose your new PIN")}
+                </p>
                 <p className="text-center text-xs text-muted-foreground">
-                  You are using a temporary PIN. Pick exactly 4 digits that are not easy to guess
-                  (no 1234 or 0000), then your punch will go through.
+                  {t(
+                    "You are using a temporary PIN. Pick exactly 4 digits that are not easy to guess (no 1234 or 0000), then your punch will go through.",
+                  )}
                 </p>
                 <Input
                   type="password"
@@ -321,9 +415,11 @@ export function ContractCrewPanel({
                   autoFocus
                   maxLength={4}
                   value={newPin}
-                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  onChange={(e) =>
+                    setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
                   disabled={pending}
-                  placeholder="New PIN"
+                  placeholder={t("New PIN")}
                   className="h-12 text-center font-mono text-xl tracking-[0.4em]"
                 />
                 <Input
@@ -332,9 +428,11 @@ export function ContractCrewPanel({
                   autoComplete="off"
                   maxLength={4}
                   value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  onChange={(e) =>
+                    setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
                   disabled={pending}
-                  placeholder="Confirm PIN"
+                  placeholder={t("Confirm PIN")}
                   className="h-12 text-center font-mono text-xl tracking-[0.4em]"
                 />
                 <Button
@@ -344,7 +442,7 @@ export function ContractCrewPanel({
                   disabled={pending || newPin.length < 4 || confirmPin.length < 4}
                 >
                   {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save PIN and continue
+                  {t("Save PIN and continue")}
                 </Button>
                 <Button
                   type="button"
@@ -354,81 +452,88 @@ export function ContractCrewPanel({
                   disabled={pending}
                   onClick={clearSelection}
                 >
-                  <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
+                  <X className="mr-1.5 h-3.5 w-3.5" /> {t("Cancel")}
                 </Button>
               </form>
             ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <div className="col-span-2 space-y-1.5">
-                <label className="block text-center text-xs text-muted-foreground">
-                  {selected.mustChangePin
-                    ? "Enter the temporary PIN from your admin"
-                    : "Enter your PIN to confirm"}
-                </label>
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  autoFocus
-                  maxLength={4}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="col-span-2 space-y-1.5">
+                  <label className="block text-center text-xs text-muted-foreground">
+                    {selected.mustChangePin
+                      ? t("Enter the temporary PIN from your admin")
+                      : t("Enter your PIN to confirm")}
+                  </label>
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    autoFocus
+                    maxLength={4}
+                    value={pin}
+                    onChange={(e) =>
+                      setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" || pending) return;
+                      e.preventDefault();
+                      act(selected, selected.status === "OUT" ? "CLOCK_IN" : "CLOCK_OUT");
+                    }}
+                    disabled={pending}
+                    placeholder="••••"
+                    className="h-12 text-center font-mono text-xl tracking-[0.4em]"
+                  />
+                </div>
+                {selected.status === "OUT" && (
+                  <Button
+                    size="lg"
+                    variant="success"
+                    className="col-span-2 h-16 text-base"
+                    disabled={pending || pin.length < 4}
+                    onClick={() => act(selected, "CLOCK_IN")}
+                  >
+                    {pending ? (
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                      <Play className="mr-2 h-5 w-5" />
+                    )}
+                    {t("Clock in")}
+                  </Button>
+                )}
+                {(selected.status === "ACTIVE" || selected.status === "ON_BREAK") && (
+                  <Button
+                    size="lg"
+                    variant="destructive"
+                    className="col-span-2 h-16 text-base"
+                    disabled={pending || pin.length < 4}
+                    onClick={() => act(selected, "CLOCK_OUT")}
+                  >
+                    {pending ? (
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                      <Square className="mr-2 h-5 w-5" />
+                    )}
+                    {t("Clock out")}
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="col-span-2 h-12 text-sm"
+                  disabled={pending || pin.length < 4}
+                  onClick={() => viewTimings(selected)}
+                >
+                  <CalendarDays className="mr-1.5 h-4 w-4" /> {t("My past month")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="col-span-2 h-12 text-sm"
                   disabled={pending}
-                  placeholder="••••"
-                  className="h-12 text-center font-mono text-xl tracking-[0.4em]"
-                />
+                  onClick={clearSelection}
+                >
+                  <X className="mr-1.5 h-4 w-4" /> {t("Cancel")}
+                </Button>
               </div>
-              {selected.status === "OUT" && (
-                <Button
-                  size="lg"
-                  variant="success"
-                  className="col-span-2 h-16 text-base"
-                  disabled={pending || pin.length < 4}
-                  onClick={() => act(selected, "CLOCK_IN")}
-                >
-                  {pending ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  ) : (
-                    <Play className="mr-2 h-5 w-5" />
-                  )}
-                  Clock in
-                </Button>
-              )}
-              {(selected.status === "ACTIVE" || selected.status === "ON_BREAK") && (
-                <Button
-                  size="lg"
-                  variant="destructive"
-                  className="col-span-2 h-16 text-base"
-                  disabled={pending || pin.length < 4}
-                  onClick={() => act(selected, "CLOCK_OUT")}
-                >
-                  {pending ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  ) : (
-                    <Square className="mr-2 h-5 w-5" />
-                  )}
-                  Clock out
-                </Button>
-              )}
-              <Button
-                variant="secondary"
-                size="lg"
-                className="col-span-2 h-12 text-sm"
-                disabled={pending || pin.length < 4}
-                onClick={() => viewTimings(selected)}
-              >
-                <CalendarDays className="mr-1.5 h-4 w-4" /> My past month
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                className="col-span-2 h-12 text-sm"
-                disabled={pending}
-                onClick={clearSelection}
-              >
-                <X className="mr-1.5 h-4 w-4" /> Cancel
-              </Button>
-            </div>
             )}
           </CardContent>
         </Card>
@@ -443,25 +548,41 @@ export function ContractCrewPanel({
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name or CW ID"
+          placeholder={t("Search by name or CW ID")}
           className="h-12 pl-9 text-base"
         />
       </div>
 
+      {agencies.length > 1 && (
+        <div className="mx-auto flex max-w-3xl flex-wrap justify-center gap-2">
+          {agencies.map((agency) => (
+            <Button
+              key={agency}
+              type="button"
+              variant={agencyFilter === agency ? "secondary" : "outline"}
+              className="h-12 px-4 text-sm"
+              onClick={() => setAgencyFilter(agencyFilter === agency ? null : agency)}
+            >
+              {agency}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <p className="text-center text-[10px] uppercase tracking-wider text-muted-foreground">
-        Agency staff · contract crew only
+        {t("Agency staff · contract crew only")}
       </p>
 
       {loading ? (
         <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading contract crew…
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("Loading contract crew…")}
         </div>
       ) : grouped.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             {query.trim()
-              ? "No contract workers match that search."
-              : "No contract workers are scheduled for today. Ask your supervisor."}
+              ? t("No contract workers match that search.")
+              : t("No contract workers are scheduled for today. Ask your supervisor.")}
           </CardContent>
         </Card>
       ) : (
@@ -486,6 +607,14 @@ export function ContractCrewPanel({
                           "flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-muted/40 active:bg-muted/60 disabled:opacity-60",
                         )}
                       >
+                        {w.capturedPhotoUrl && (
+                          <KioskPersonPhoto
+                            photoUrl={w.capturedPhotoUrl}
+                            name={w.name}
+                            className="h-[60px] w-[60px]"
+                            sizes="60px"
+                          />
+                        )}
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{w.name}</p>
                           <p className="truncate text-xs text-muted-foreground">
@@ -496,7 +625,7 @@ export function ContractCrewPanel({
                           variant={statusVariant(w.status)}
                           className="shrink-0 text-[10px]"
                         >
-                          {statusLabel(w.status)}
+                          {statusLabel(w.status, t)}
                         </Badge>
                       </button>
                     </li>

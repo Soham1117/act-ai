@@ -1,7 +1,9 @@
+'use client';
+
 import { Badge } from "@/components/ui/badge";
-import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
 import { Globe, MonitorSmartphone, Sparkles, PenLine } from "lucide-react";
 import type { TimeEntrySource } from "@prisma/client";
+import { usePortalLanguage } from "@/components/portal-language";
 
 type Entry = {
   id: string;
@@ -22,32 +24,26 @@ type Entry = {
   autoClosed: boolean;
 };
 
-function fmtTime(iso: string | null) {
-  return formatBusinessTime(iso);
-}
-
-function fmtDate(iso: string) {
-  return formatDateOnly(iso);
-}
-
 function SourceBadge({
   source,
   kioskLabel,
+  t,
 }: {
   source: TimeEntrySource;
   kioskLabel?: string | null;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const cfg: Record<TimeEntrySource, { label: string; icon: React.ReactNode }> = {
-    KIOSK: { label: "Kiosk", icon: <MonitorSmartphone className="h-3 w-3" /> },
-    WEB: { label: "Web", icon: <Globe className="h-3 w-3" /> },
-    AUTO: { label: "Auto", icon: <Sparkles className="h-3 w-3" /> },
-    MANUAL: { label: "Manual", icon: <PenLine className="h-3 w-3" /> },
+    KIOSK: { label: t("timesheet.kiosk"), icon: <MonitorSmartphone className="h-3 w-3" /> },
+    WEB: { label: t("timesheet.web"), icon: <Globe className="h-3 w-3" /> },
+    AUTO: { label: t("timesheet.auto"), icon: <Sparkles className="h-3 w-3" /> },
+    MANUAL: { label: t("timesheet.manual"), icon: <PenLine className="h-3 w-3" /> },
   };
   const { label, icon } = cfg[source];
   const display = source === "KIOSK" && kioskLabel ? kioskLabel : label;
   return (
     <span
-      title={source === "KIOSK" && kioskLabel ? `Kiosk: ${kioskLabel}` : undefined}
+      title={source === "KIOSK" && kioskLabel ? t("timesheet.kioskTitle", { name: kioskLabel }) : undefined}
       className="inline-flex max-w-[140px] items-center gap-1 truncate rounded border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground"
     >
       {icon}
@@ -57,9 +53,18 @@ function SourceBadge({
 }
 
 export function TimeEntriesList({ entries }: { entries: Entry[] }) {
+  const { t, formatTime, formatDateOnly, enumLabel } = usePortalLanguage();
+  const formatTrackedHours = (minutes: number | null | undefined) =>
+    minutes === null || minutes === undefined
+      ? "—"
+      : t("timesheet.hoursFormat", {
+          hours: Math.floor(minutes / 60),
+          minutes: (minutes % 60).toString().padStart(2, "0"),
+        });
+
   if (entries.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">No entries yet.</p>
+      <p className="py-8 text-center text-sm text-muted-foreground">{t("timesheet.noEntries")}</p>
     );
   }
 
@@ -77,12 +82,12 @@ export function TimeEntriesList({ entries }: { entries: Entry[] }) {
             key={e.id}
             className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 py-2.5"
           >
-            <span className="text-xs text-muted-foreground">{fmtDate(e.date)}</span>
+            <span className="text-xs text-muted-foreground">{formatDateOnly(e.date)}</span>
             <span className="font-mono text-xs">
-              {fmtTime(e.clockInIso)} → {fmtTime(e.clockOutIso)}
+              {formatTime(e.clockInIso)} → {formatTime(e.clockOutIso)}
             </span>
             <span className="font-mono text-xs text-muted-foreground">{e.jobCode}</span>
-            <SourceBadge source={e.source} kioskLabel={e.kioskLabel} />
+            <SourceBadge source={e.source} kioskLabel={e.kioskLabel} t={t} />
             <div className="flex items-center gap-2">
               <span
                 className={
@@ -90,26 +95,35 @@ export function TimeEntriesList({ entries }: { entries: Entry[] }) {
                   (e.approvalStatus === "REJECTED" ? " text-muted-foreground line-through" : "")
                 }
               >
-                {formatHours(e.totalWorkMin)}
+                {formatTrackedHours(e.totalWorkMin)}
               </span>
               <Badge variant={variant} className="text-[10px]">
-                {e.approvalStatus}
+                {e.approvalStatus === "APPROVED"
+                  ? t("timesheet.approval.approved")
+                  : e.approvalStatus === "REJECTED"
+                    ? t("timesheet.approval.rejected")
+                    : e.approvalStatus === "PENDING"
+                      ? t("timesheet.approval.pending")
+                      : enumLabel(e.approvalStatus)}
               </Badge>
             </div>
             {e.approvalStatus === "REJECTED" && (
               <p className="col-span-full rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                Rejected{e.approvalNotes ? `: ${e.approvalNotes.trim().replace(/[.!?]?$/, ".")}` : "."} Talk to an admin if a
-                correction is needed.
+                {t("timesheet.rejectedHelp", {
+                  notes: e.approvalNotes
+                    ? `: ${e.approvalNotes.trim().replace(/[.!?]?$/, ".")}`
+                    : ".",
+                })}
               </p>
             )}
             {e.approvalStatus !== "REJECTED" && e.approvalNotes && (
               <p className="col-span-full text-xs text-muted-foreground">
-                Admin note: {e.approvalNotes}
+                {t("timesheet.adminNote", { note: e.approvalNotes })}
               </p>
             )}
             {(e.edited || e.autoClosed) && e.editReason && (
               <p className="col-span-full text-xs text-muted-foreground">
-                {e.autoClosed ? "Auto-closed (pending admin review). " : "Edited by an admin. "}
+                {e.autoClosed ? t("timesheet.autoClosedReview") : t("timesheet.editedByAdmin")}{" "}
                 {e.editReason}
               </p>
             )}

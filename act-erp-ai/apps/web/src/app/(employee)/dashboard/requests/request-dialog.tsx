@@ -24,12 +24,23 @@ import {
 } from "@/components/ui/select";
 import Link from "next/link";
 import { submitRequest } from "@/server/actions/requests";
-import { runAction, toastAction } from "@/lib/toast-action";
+import { runAction } from "@/lib/toast-action";
+import { usePortalLanguage } from "@/components/portal-language";
 
 const TYPES = [
-  "DOCUMENT_REQUEST", "DETAILS_CHANGE", "PAYROLL_INQUIRY", "SCHEDULE_CHANGE",
-  "ACCESS_REQUEST", "TRAINING_REQUEST", "EQUIPMENT_REQUEST", "LOCATION_CHANGE",
-  "TEAM_REQUEST", "PROJECT_REQUEST", "LEAVE_REQUEST", "BENEFITS_INQUIRY", "OTHER",
+  "DOCUMENT_REQUEST",
+  "DETAILS_CHANGE",
+  "PAYROLL_INQUIRY",
+  "SCHEDULE_CHANGE",
+  "ACCESS_REQUEST",
+  "TRAINING_REQUEST",
+  "EQUIPMENT_REQUEST",
+  "LOCATION_CHANGE",
+  "TEAM_REQUEST",
+  "PROJECT_REQUEST",
+  "LEAVE_REQUEST",
+  "BENEFITS_INQUIRY",
+  "OTHER",
 ] as const;
 
 export function RequestDialog({
@@ -39,12 +50,15 @@ export function RequestDialog({
    * "Something look wrong?" link from the Benefits page. */
   initialType?: (typeof TYPES)[number];
 }) {
+  const { t, enumLabel, toastAction } = usePortalLanguage();
   // Both initialized straight from the prop — it's only ever set once, from
   // the searchParams-derived value the server passed in on this page load,
   // so there's no need for an effect to sync it after mount.
   const [open, setOpen] = useState(!!initialType);
   const [pending, startTransition] = useTransition();
-  const [type, setType] = useState<(typeof TYPES)[number]>(initialType ?? "DOCUMENT_REQUEST");
+  const [type, setType] = useState<(typeof TYPES)[number]>(
+    initialType ?? "DOCUMENT_REQUEST",
+  );
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
@@ -53,51 +67,91 @@ export function RequestDialog({
     startTransition(async () => {
       const res = await runAction(() => submitRequest({ type, title, description }));
       if (!toastAction(res)) return;
-      toast.success("Request submitted");
+      toast.success(t("workspace.requests.submittedToast"));
       setOpen(false);
-      setTitle(""); setDescription("");
+      setTitle("");
+      setDescription("");
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> New request</Button>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" /> {t("workspace.requests.new")}
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New request</DialogTitle>
+          <DialogTitle>{t("workspace.requests.new")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Type</Label>
-            <Select value={type} onValueChange={(v) => setType(v as (typeof TYPES)[number])}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Label className="text-xs">{t("workspace.requests.type")}</Label>
+            <Select
+              value={type}
+              onValueChange={(v) => setType(v as (typeof TYPES)[number])}
+            >
+              <SelectTrigger aria-label={t("workspace.requests.type")}>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {TYPES.map((t) => <SelectItem key={t} value={t}>{t.replace(/_/g, " ")}</SelectItem>)}
+                {TYPES.map((requestType) => (
+                  <SelectItem key={requestType} value={requestType}>
+                    {requestType === "OTHER"
+                      ? t("workspace.other")
+                      : enumLabel(requestType)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           {type === "LEAVE_REQUEST" && (
             <p className="rounded-md border bg-muted/50 p-3 text-xs">
-              Time off is requested on the{" "}
-              <Link href="/dashboard/leave" className="font-medium underline">Leave page</Link>, where your
-              balance and dates are checked automatically. This form can&apos;t create a leave request.
+              {t("workspace.requests.leaveHelpBefore")}{" "}
+              <Link href="/dashboard/leave" className="font-medium underline">
+                {t("workspace.requests.leavePage")}
+              </Link>
+              {t("workspace.requests.leaveHelpAfter")}
             </p>
           )}
           <div className="space-y-1.5">
-            <Label className="text-xs">Subject</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} />
+            <Label className="text-xs">{t("workspace.requests.subject")}</Label>
+            <Input
+              aria-label={t("workspace.requests.subject")}
+              placeholder={t("workspace.requests.subjectPlaceholder")}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              maxLength={120}
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Details</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} required />
+            <Label className="text-xs">{t("workspace.requests.details")}</Label>
+            <Textarea
+              aria-label={t("workspace.requests.details")}
+              placeholder={t("workspace.requests.detailsPlaceholder")}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              required
+            />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={pending || type === "LEAVE_REQUEST" || title.length < 2 || description.length < 2}>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              {t("workspace.cancel")}
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                pending ||
+                type === "LEAVE_REQUEST" ||
+                title.length < 2 ||
+                description.length < 2
+              }
+            >
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Submit
+              {t("workspace.submit")}
             </Button>
           </DialogFooter>
         </form>

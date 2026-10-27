@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { UserMinus, UserCheck, Loader2, Pencil } from "lucide-react";
+import { UserMinus, UserCheck, Loader2, Pencil, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { runAction, toastAction } from "@/lib/toast-action";
-import { setEmploymentStatus } from "@/server/actions/employees";
+import { setEmployeeActive, setEmploymentStatus } from "@/server/actions/employees";
 import { TERMINATION_GRACE_DAYS } from "@/lib/access";
 import { todayDateString } from "@/lib/employee-validation";
 
@@ -28,7 +28,7 @@ export function StatusToggle({
   terminationReason,
 }: {
   employeeId: string;
-  status: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW";
+  status: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW" | "INACTIVE";
   /** Admin accounts must be demoted before they can be terminated. */
   isAdmin: boolean;
   /** ISO timestamp of the current termination date (TERMINATED only). */
@@ -36,7 +36,9 @@ export function StatusToggle({
   terminationReason: string | null;
 }) {
   const isTerminated = status === "TERMINATED";
+  const isInactive = status === "INACTIVE";
   const [open, setOpen] = useState(false);
+  const [inactiveOpen, setInactiveOpen] = useState(false);
   const [date, setDate] = useState(
     terminationDate ? terminationDate.slice(0, 10) : todayDateString(),
   );
@@ -123,18 +125,46 @@ export function StatusToggle({
     </Dialog>
   );
 
-  if (!isTerminated) return terminateDialog;
-
   return (
     <>
       {terminateDialog}
-      <Button
+      {!isTerminated && !isInactive && (
+        <Dialog open={inactiveOpen} onOpenChange={setInactiveOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" disabled={isAdmin || pending} title={isAdmin ? "Remove their admin role first" : undefined}>
+              <Pause className="mr-2 h-3.5 w-3.5" /> Make inactive
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Make employee inactive?</DialogTitle>
+              <DialogDescription>
+                Employment does not end. Records and documents are kept, and portal access becomes read-only.
+                The employee cannot clock in. Any open shift is clocked out for approval. You can reactivate at any time.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" disabled={pending} onClick={() => setInactiveOpen(false)}>Cancel</Button>
+              <Button disabled={pending} onClick={() => startTransition(async () => {
+                const res = await runAction(() => setEmployeeActive(employeeId, false));
+                if (!toastAction(res)) return;
+                toast.success(res.closedOpenEntries ? "Employee made inactive. Open shifts closed for approval." : "Employee made inactive");
+                setInactiveOpen(false);
+              })}>
+                {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Make inactive
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+      {(isTerminated || isInactive) && <Button
         variant="outline"
         size="sm"
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            const res = await runAction(() => setEmploymentStatus(employeeId, "ACTIVE"));
+            const res = await runAction(() => isInactive ? setEmployeeActive(employeeId, true) : setEmploymentStatus(employeeId, "ACTIVE"));
             if (!toastAction(res)) return;
             toast.success("Employee reactivated");
           })
@@ -146,7 +176,7 @@ export function StatusToggle({
           <UserCheck className="mr-2 h-3.5 w-3.5" />
         )}
         Reactivate
-      </Button>
+      </Button>}
     </>
   );
 }

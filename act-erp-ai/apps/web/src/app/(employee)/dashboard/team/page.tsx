@@ -6,8 +6,12 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getAvatarUrl } from "@/lib/format";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
-export const metadata = { title: "My team" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("records.team.title") };
+}
 
 const PEERS_PAGE_SIZE = 30;
 
@@ -16,13 +20,19 @@ export default async function MyTeamPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  const { t, locale } = await getPortalLanguage();
   const user = await requireUser();
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
-  if (!user.employeeId) return <p className="text-sm text-muted-foreground">No employee record.</p>;
+  if (!user.employeeId)
+    return <p className="text-sm text-muted-foreground">{t("records.noEmployee")}</p>;
 
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-    try { return await p; } catch { return fallback; }
+    try {
+      return await p;
+    } catch {
+      return fallback;
+    }
   };
 
   const me = await safe(
@@ -35,12 +45,19 @@ export default async function MyTeamPage({
     }),
     null,
   );
-  if (!me) return <p className="text-sm text-muted-foreground">Employee record missing.</p>;
+  if (!me)
+    return <p className="text-sm text-muted-foreground">{t("records.team.missing")}</p>;
 
   const peerWhere = me.departmentId
-    ? { departmentId: me.departmentId, id: { not: me.id }, employmentStatus: "ACTIVE" as const }
+    ? {
+        departmentId: me.departmentId,
+        id: { not: me.id },
+        employmentStatus: "ACTIVE" as const,
+      }
     : null;
-  const peerTotal = peerWhere ? await safe(db.employee.count({ where: peerWhere }), 0) : 0;
+  const peerTotal = peerWhere
+    ? await safe(db.employee.count({ where: peerWhere }), 0)
+    : 0;
   const peerPages = Math.max(1, Math.ceil(peerTotal / PEERS_PAGE_SIZE));
   const page = Math.min(requestedPage, peerPages);
 
@@ -69,14 +86,14 @@ export default async function MyTeamPage({
   return (
     <>
       <PageHeader
-        title="My team"
-        description={`${me.department?.name ?? "—"} · ${peerTotal + 1} people`}
+        title={t("records.team.title")}
+        description={`${me.department?.name ?? "—"} · ${t("records.team.people", { count: new Intl.NumberFormat(locale).format(peerTotal + 1) })}`}
       />
 
       {/* Org tree: supervisor → me → reports */}
       <div className="space-y-4">
         {me.supervisor && (
-          <Section title="Reports to">
+          <Section title={t("records.team.reportsTo")}>
             <PersonCard
               id={me.supervisor.id}
               anchor="supervisor"
@@ -90,7 +107,7 @@ export default async function MyTeamPage({
           </Section>
         )}
 
-        <Section title="Me">
+        <Section title={t("records.team.me")}>
           <PersonCard
             id={me.id}
             anchor="me"
@@ -104,7 +121,11 @@ export default async function MyTeamPage({
         </Section>
 
         {reports.length > 0 && (
-          <Section title={`Direct reports (${reports.length})`}>
+          <Section
+            title={t("records.team.directReports", {
+              count: new Intl.NumberFormat(locale).format(reports.length),
+            })}
+          >
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {reports.map((r) => (
                 <PersonCard
@@ -125,7 +146,11 @@ export default async function MyTeamPage({
         {peers.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Department peers ({peerTotal})</CardTitle>
+              <CardTitle className="text-base">
+                {t("records.team.departmentPeers", {
+                  count: new Intl.NumberFormat(locale).format(peerTotal),
+                })}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -142,20 +167,26 @@ export default async function MyTeamPage({
                 ))}
               </div>
               {peerPages > 1 && (
-                <nav className="mt-4 flex items-center justify-between text-xs" aria-label="Peers pagination">
+                <nav
+                  className="mt-4 flex items-center justify-between text-xs"
+                  aria-label={t("records.team.pagination")}
+                >
                   {page > 1 ? (
                     <Link href={`/dashboard/team?page=${page - 1}`} className="underline">
-                      Previous
+                      {t("records.team.previous")}
                     </Link>
                   ) : (
                     <span />
                   )}
                   <span className="text-muted-foreground">
-                    Page {page} of {peerPages}
+                    {t("records.team.page", {
+                      page: new Intl.NumberFormat(locale).format(page),
+                      pages: new Intl.NumberFormat(locale).format(peerPages),
+                    })}
                   </span>
                   {page < peerPages ? (
                     <Link href={`/dashboard/team?page=${page + 1}`} className="underline">
-                      Next
+                      {t("records.team.next")}
                     </Link>
                   ) : (
                     <span />
@@ -173,7 +204,9 @@ export default async function MyTeamPage({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">{title}</h2>
+      <h2 className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h2>
       {children}
     </section>
   );
@@ -200,9 +233,11 @@ function PersonCard({
   tone?: "primary" | "self";
 }) {
   const ring =
-    tone === "self"  ? "ring-2 ring-primary"  :
-    tone === "primary" ? "ring-1 ring-primary/30" :
-    "";
+    tone === "self"
+      ? "ring-2 ring-primary"
+      : tone === "primary"
+        ? "ring-1 ring-primary/30"
+        : "";
   return (
     <Link
       id={`${anchor}-${id}`}
@@ -210,14 +245,23 @@ function PersonCard({
       className={`flex items-center gap-3 rounded-md border p-3 transition-colors hover:bg-muted/50 ${ring}`}
     >
       <span className="relative h-10 w-10 overflow-hidden rounded-full bg-muted">
-        <Image src={profilePic ?? getAvatarUrl(email)} alt={name} fill sizes="40px" className="object-cover" unoptimized />
+        <Image
+          src={profilePic ?? getAvatarUrl(email)}
+          alt={name}
+          fill
+          sizes="40px"
+          className="object-cover"
+          unoptimized
+        />
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{name}</p>
         <p className="truncate text-[11px] text-muted-foreground">{jobTitle ?? "—"}</p>
       </div>
       {department && (
-        <Badge variant="outline" className="text-[10px]">{department}</Badge>
+        <Badge variant="outline" className="text-[10px]">
+          {department}
+        </Badge>
       )}
     </Link>
   );

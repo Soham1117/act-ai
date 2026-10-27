@@ -26,6 +26,8 @@ datasource db {
 /// access — `requireAdmin` gates admin-only routes; `requireUser` lets
 /// either role through, so admins can use the employee dashboard too.
 model User {
+  /// Employee-portal display preference; kiosk language is separate.
+  preferredLanguage String @default("en")
   id                 String              @id @default(uuid()) @db.Uuid
   /// Login email — optional. Some employees (part-time / shop floor hires)
   /// have no company email at all and log in via `username` instead.
@@ -207,6 +209,8 @@ model Employee {
   gender        Gender
   maritalStatus MaritalStatus?
   profilePic    String?
+  /// User-selected kiosk portrait; takes precedence over automatic punch photos.
+  kioskProfilePhotoKey String?
   /// bcrypt hash of the employee's kiosk PIN (self-set). Required to clock
   /// in/out at a shared kiosk terminal — never store the PIN itself.
   kioskPinHash  String?
@@ -639,6 +643,9 @@ model ReimbursementStatusHistory {
 // ──────────────────────────────────────────────────────────────────────
 
 model Notification {
+  /// Structured system copy. Legacy/admin-authored notifications keep their original text.
+  translationKey String?
+  translationParams Json?
   id         String                       @id @default(cuid())
   type       NotificationType
   title      String
@@ -1258,6 +1265,8 @@ enum EmploymentStatus {
   TERMINATED
   /// Self-onboarded via invite; awaiting admin approval. Read-only access.
   PENDING_REVIEW
+  /// Temporarily inactive; keeps read-only portal access without termination.
+  INACTIVE
 }
 
 enum CompensationType {
@@ -1474,6 +1483,7 @@ enum BenefitCostPeriod {
 enum ContractWorkerStatus {
   ACTIVE
   ENDED
+  INACTIVE
 }
 
 model StaffingAgency {
@@ -1494,6 +1504,8 @@ model ContractWorker {
   /// Business ID, format CW-0001. Auto-generated.
   workerId    String               @unique
   name        String
+  /// User-selected kiosk portrait; takes precedence over automatic punch photos.
+  kioskProfilePhotoKey String?
   phone       String?
   agencyId    String
   agency      StaffingAgency       @relation(fields: [agencyId], references: [id], onDelete: Restrict)

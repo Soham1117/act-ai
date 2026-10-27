@@ -1,3 +1,5 @@
+"use client";
+import { usePortalLanguage } from "@/components/portal-language";
 import { Download, Eye, Paperclip } from "lucide-react";
 
 /** View / download links for a claim's receipts (served by the authenticated receipt route). */
@@ -6,8 +8,9 @@ export function ReceiptLinks({
 }: {
   receipts: { id: string; originalName: string }[];
 }) {
+  const { t } = usePortalLanguage();
   if (receipts.length === 0) {
-    return <span className="text-[11px] text-muted-foreground">No receipts attached</span>;
+    return <span className="text-[11px] text-muted-foreground">{t("common.noReceipts")}</span>;
   }
   return (
     <ul className="flex flex-wrap gap-x-4 gap-y-1">
@@ -20,14 +23,14 @@ export function ReceiptLinks({
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
-            aria-label={`View ${r.originalName}`}
+            aria-label={t("common.viewFile", { name: r.originalName })}
           >
             <Eye className="inline h-3 w-3" />
           </a>
           <a
             href={`/api/reimbursements/receipts/${r.id}/file?download=1`}
             className="text-primary hover:underline"
-            aria-label={`Download ${r.originalName}`}
+            aria-label={t("common.downloadFile", { name: r.originalName })}
           >
             <Download className="inline h-3 w-3" />
           </a>

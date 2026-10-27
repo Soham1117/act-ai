@@ -35,6 +35,7 @@ import {
 import { TERMINATION_GRACE_DAYS } from "@/lib/access";
 import { env } from "@/lib/env";
 import { DEFAULT_KIOSK_PIN } from "@/lib/kiosk-pin";
+import { closeOpenEntry, revalidateTimePages, withEmployeeLock } from "@/server/time-core";
 
 /* -------------------------------------------------------------------------- */
 /* Create                                                                     */
@@ -94,14 +95,14 @@ export async function createEmployee(
     const emailUser = data.email ? clashes.find((u) => u.email === data.email) : undefined;
     const nameUser = data.username ? clashes.find((u) => u.username === data.username) : undefined;
     if (nameUser) {
-      return fail("That username is already taken. Pick another.");
+      return fail("That username is already taken. Pick another.", "errors.employees.thatUsernameIsAlreadyTakenPick_17523");
     }
     const mode = resolveEmailHireMode(
       emailUser ? { employeeId: emailUser.employee?.id ?? null } : null,
     );
     if (mode === "conflict") {
       return fail(
-        "That company email already belongs to an employee. Use a different login email.",
+        "That company email already belongs to an employee. Use a different login email.", "errors.employees.thatCompanyEmailAlreadyBelongsTo_dc726",
       );
     }
     if (data.email) {
@@ -110,7 +111,7 @@ export async function createEmployee(
         select: { id: true },
       });
       if (empClash) {
-        return fail("That company email is already on an employee record. Use a different email.");
+        return fail("That company email is already on an employee record. Use a different email.", "errors.employees.thatCompanyEmailIsAlreadyOn_955ba");
       }
     }
     if (data.departmentId) {
@@ -118,7 +119,7 @@ export async function createEmployee(
         where: { id: data.departmentId },
         select: { id: true },
       });
-      if (!dept) return fail("That department no longer exists. Refresh and pick another.");
+      if (!dept) return fail("That department no longer exists. Refresh and pick another.", "errors.employees.thatDepartmentNoLongerExistsRefresh_2fe3f");
     }
 
     const [passwordHash, kioskPinHash] = await Promise.all([
@@ -270,7 +271,7 @@ export async function updateEmployee(
     const parsed = updateSchema.parse(input);
     const existing = await db.employee.findUnique({ where: { id: employeeId } });
     if (!existing) {
-      return fail("That employee was not found. Refresh the page and try again.");
+      return fail("That employee was not found. Refresh the page and try again.", "errors.employees.thatEmployeeWasNotFoundRefresh_88e26");
     }
 
     // Everything except the dates is copied through as-is (undefined = leave).
@@ -300,14 +301,14 @@ export async function updateEmployee(
         where: { id: data.departmentId as string },
         select: { id: true },
       });
-      if (!dept) return fail("That department no longer exists. Refresh and pick another.");
+      if (!dept) return fail("That department no longer exists. Refresh and pick another.", "errors.employees.thatDepartmentNoLongerExistsRefresh_2fe3f");
     }
 
     if (data.supervisorId) {
       const supervisorId = data.supervisorId as string;
       const all = await db.employee.findMany({ select: { id: true, supervisorId: true } });
       if (!all.some((e) => e.id === supervisorId)) {
-        return fail("That supervisor no longer exists. Refresh and pick another.");
+        return fail("That supervisor no longer exists. Refresh and pick another.", "errors.employees.thatSupervisorNoLongerExistsRefresh_19a44");
       }
       const map = new Map(all.map((e) => [e.id, e.supervisorId]));
       if (createsSupervisorCycle(employeeId, supervisorId, map)) {
@@ -324,7 +325,7 @@ export async function updateEmployee(
         where: { id: primaryJobCodeId },
         select: { id: true },
       });
-      if (!jc) return fail("That job code no longer exists. Refresh and pick another.");
+      if (!jc) return fail("That job code no longer exists. Refresh and pick another.", "errors.employees.thatJobCodeNoLongerExists_a1eac");
     }
     if (primaryJobCodeId !== undefined) data.primaryJobCodeId = primaryJobCodeId;
 
@@ -398,7 +399,7 @@ export async function changeEmployeePassword(
       select: { userId: true, name: true },
     });
     if (!employee) {
-      return fail("That employee was not found. Refresh the page and try again.");
+      return fail("That employee was not found. Refresh the page and try again.", "errors.employees.thatEmployeeWasNotFoundRefresh_88e26");
     }
     await db.user.update({
       where: { id: employee.userId },
@@ -446,6 +447,9 @@ export async function setEmploymentStatus(
 ): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
   try {
+    // Runtime validation keeps crafted Server Action requests from bypassing
+    // the dedicated inactive transition (shift closure and admin protection).
+    status = z.enum(["ACTIVE", "ON_LEAVE", "TERMINATED"]).parse(status);
     const emp = await db.employee.findUnique({
       where: { id: employeeId },
       select: {
@@ -456,10 +460,10 @@ export async function setEmploymentStatus(
         terminationDate: true,
       },
     });
-    if (!emp) return fail("That employee was not found. Refresh the page and try again.");
+    if (!emp) return fail("That employee was not found. Refresh the page and try again.", "errors.employees.thatEmployeeWasNotFoundRefresh_88e26");
 
     if (emp.employmentStatus === "PENDING_REVIEW" && status !== "TERMINATED") {
-      return fail("This hire is awaiting review. Use Approve to activate the account.");
+      return fail("This hire is awaiting review. Use Approve to activate the account.", "errors.employees.thisHireIsAwaitingReviewUse_969db");
     }
     if (emp.employmentStatus === status && status !== "TERMINATED") {
       return ok({ id: emp.id });
@@ -470,7 +474,7 @@ export async function setEmploymentStatus(
     const reason = opts.reason?.trim() || null;
 
     if (status === "TERMINATED") {
-      if (emp.userId === admin.id) return fail("You can't terminate your own account.");
+      if (emp.userId === admin.id) return fail("You can't terminate your own account.", "errors.employees.youCantTerminateYourOwnAccount_2d6aa");
       const c = checkTerminationDate(opts.terminationDate || todayDateString());
       if (!c.ok) return fail(c.error);
       terminationDate = c.date;
@@ -481,19 +485,18 @@ export async function setEmploymentStatus(
       data.terminationReason = null;
     }
 
-    const updated =
-      status === "TERMINATED"
-        ? await db.$transaction(async (tx) => {
-            const employee = await tx.employee.update({ where: { id: employeeId }, data });
-            // The status change and session revocation are one atomic unit: a
-            // pre-termination JWT must not remain usable if this commit succeeds.
-            await tx.user.update({
-              where: { id: emp.userId },
-              data: { tokenVersion: { increment: 1 } },
-            });
-            return employee;
-          })
-        : await db.employee.update({ where: { id: employeeId }, data });
+    const updated = await withEmployeeLock(employeeId, async (tx) => {
+      const employee = await tx.employee.update({ where: { id: employeeId }, data });
+      // Serialize all status transitions with punches and inactive changes.
+      // Termination and session revocation remain one atomic unit.
+      if (status === "TERMINATED") {
+        await tx.user.update({
+          where: { id: emp.userId },
+          data: { tokenVersion: { increment: 1 } },
+        });
+      }
+      return employee;
+    });
 
     await audit({
       action: "employee.status_change",
@@ -509,6 +512,8 @@ export async function setEmploymentStatus(
 
     if (status === "TERMINATED" && terminationDate) {
       await notifyEmployees([employeeId], {
+      translationKey: "notificationTemplates.employmentEnded",
+      translationParams: { endDate: readOnlyUntil(terminationDate).toISOString() },
         type: "SYSTEM",
         title: "Your employment has ended",
         message: `Your account is read-only until ${accessEndText(terminationDate)} so you can still view your pay stubs and documents. After that you will no longer be able to sign in.`,
@@ -516,6 +521,8 @@ export async function setEmploymentStatus(
       });
     } else if (emp.employmentStatus === "TERMINATED") {
       await notifyEmployees([employeeId], {
+      translationKey: "notificationTemplates.accountReactivated",
+      translationParams: {},
         type: "SYSTEM",
         title: "Your account was reactivated",
         message: "Your account has full access again.",
@@ -525,6 +532,63 @@ export async function setEmploymentStatus(
     revalidatePath("/admin/employees");
     revalidatePath(`/admin/employees/${employeeId}`);
     return ok({ id: updated.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+/** Pause/resume employment without ending it or changing termination details. */
+export async function setEmployeeActive(
+  employeeId: string,
+  isActive: boolean,
+): Promise<ActionResult<{ id: string; closedOpenEntries: number }>> {
+  const admin = await requireAdmin();
+  try {
+    const active = z.boolean().parse(isActive);
+    const status = active ? "ACTIVE" : "INACTIVE";
+    const result = await withEmployeeLock(employeeId, async (tx) => {
+      const employee = await tx.employee.findUnique({
+        where: { id: employeeId },
+        select: { id: true, userId: true, name: true, employmentStatus: true, user: { select: { role: true } } },
+      });
+      if (!employee) return { error: "That employee was not found. Refresh the page." };
+      if (employee.employmentStatus === "PENDING_REVIEW") {
+        return { error: "This hire is awaiting review. Use Approve to activate the account." };
+      }
+      if (employee.employmentStatus === "TERMINATED") {
+        return { error: "Reactivate the terminated employee before changing active status." };
+      }
+      if (!active && (employee.userId === admin.id || employee.user.role === "ADMIN")) {
+        return { error: "Admin accounts cannot be made inactive. Remove their admin role first." };
+      }
+      if (employee.employmentStatus === status) return { employee, changed: false, closedIds: [] };
+      const open = active ? [] : await tx.timeEntry.findMany({
+        where: { employeeId, status: { in: ["ACTIVE", "ON_BREAK"] } },
+        include: { breaks: true },
+      });
+      const now = new Date();
+      for (const entry of open) {
+        await closeOpenEntry(tx, entry, now, {
+          lastEditedById: admin.id,
+          editReason: "Clocked out because the employee was made inactive by an admin.",
+        });
+      }
+      await tx.employee.update({ where: { id: employeeId }, data: { employmentStatus: status } });
+      return { employee, changed: true, closedIds: open.map((entry) => entry.id) };
+    });
+    if ("error" in result) return fail(result.error!);
+    if (result.changed) {
+      await audit({
+        action: "employee.status_change",
+        resource: `Employee:${employeeId}`,
+        diff: { name: result.employee.name, from: result.employee.employmentStatus, to: status, closedTimeEntryIds: result.closedIds },
+      });
+    }
+    revalidatePath("/admin/employees");
+    revalidatePath(`/admin/employees/${employeeId}`);
+    revalidatePath("/dashboard", "layout");
+    revalidateTimePages();
+    return ok({ id: employeeId, closedOpenEntries: result.closedIds.length });
   } catch (err) {
     return failFromUnknown(err);
   }
@@ -541,7 +605,7 @@ export async function approveEmployee(employeeId: string): Promise<ActionResult<
       data: { employmentStatus: "ACTIVE" },
     });
     if (res.count === 0) {
-      return fail("This hire is no longer awaiting review. Refresh the page.");
+      return fail("This hire is no longer awaiting review. Refresh the page.", "errors.employees.thisHireIsNoLongerAwaiting_fc0c4");
     }
     const emp = await db.employee.findUnique({
       where: { id: employeeId },
@@ -553,6 +617,8 @@ export async function approveEmployee(employeeId: string): Promise<ActionResult<
       diff: { name: emp?.name, employeeId: emp?.employeeId },
     });
     await notifyEmployees([employeeId], {
+      translationKey: "notificationTemplates.accountApproved",
+      translationParams: {},
       type: "SYSTEM",
       title: "Your account was approved",
       message: "Welcome aboard. Your account is now fully active.",
@@ -578,9 +644,9 @@ export async function rejectPendingHire(employeeId: string): Promise<ActionResul
       where: { id: employeeId },
       select: { id: true, userId: true, name: true, employeeId: true, employmentStatus: true, email: true },
     });
-    if (!emp) return fail("That employee was not found. Refresh the page and try again.");
+    if (!emp) return fail("That employee was not found. Refresh the page and try again.", "errors.employees.thatEmployeeWasNotFoundRefresh_88e26");
     if (emp.employmentStatus !== "PENDING_REVIEW") {
-      return fail("Only hires awaiting review can be rejected. Use Terminate for anyone else.");
+      return fail("Only hires awaiting review can be rejected. Use Terminate for anyone else.", "errors.employees.onlyHiresAwaitingReviewCanBe_dd085");
     }
     await db.$transaction(async (tx) => {
       const r = await tx.employee.deleteMany({
@@ -626,15 +692,15 @@ export async function setUserRole(
         user: { select: { role: true } },
       },
     });
-    if (!emp) return fail("That employee was not found. Refresh the page and try again.");
+    if (!emp) return fail("That employee was not found. Refresh the page and try again.", "errors.employees.thatEmployeeWasNotFoundRefresh_88e26");
     if (emp.userId === admin.id) {
-      return fail("You can't change your own role. Ask another admin.");
+      return fail("You can't change your own role. Ask another admin.", "errors.employees.youCantChangeYourOwnRole_373f4");
     }
     if (emp.user.role === role) return ok();
 
     if (role === "ADMIN") {
       if (emp.employmentStatus !== "ACTIVE" && emp.employmentStatus !== "ON_LEAVE") {
-        return fail("Only active employees can be made admins.");
+        return fail("Only active employees can be made admins.", "errors.employees.onlyActiveEmployeesCanBeMade_ddbe6");
       }
     }
 
@@ -677,6 +743,8 @@ export async function setUserRole(
       diff: { name: emp.name, from: changed.from, to: role },
     });
     await notifyEmployees([employeeId], {
+      translationKey: role === "ADMIN" ? "notificationTemplates.roleAdmin" : "notificationTemplates.roleEmployee",
+      translationParams: {},
       type: "SYSTEM",
       title: role === "ADMIN" ? "You are now an admin" : "Your admin access was removed",
       message: "Sign in again for the change to take effect.",
@@ -703,7 +771,7 @@ export async function updateEmployeeProfilePic(
       where: { id: employeeId },
       select: { id: true },
     });
-    if (!exists) return fail("That employee was not found. Refresh the page and try again.");
+    if (!exists) return fail("That employee was not found. Refresh the page and try again.", "errors.employees.thatEmployeeWasNotFoundRefresh_88e26");
 
     const v = validateUpload("image", { name: file.name, bytes: file.bytes });
     if (!v.ok) return fail(v.error);
@@ -760,7 +828,7 @@ export async function updateMyPersonalEmail(
   ).safeParse(normalized);
   if (!parsed.success) {
     return fail(
-      "Enter a valid personal email address (codes are sent here for sign-in).",
+      "Enter a valid personal email address (codes are sent here for sign-in).", "errors.employees.enterAValidPersonalEmailAddress_1bee7",
     );
   }
 
@@ -773,7 +841,7 @@ export async function updateMyPersonalEmail(
       !row?.passwordHash ||
       !(await verifyPassword(currentPassword, row.passwordHash))
     ) {
-      return fail("Current password is incorrect. Re-enter it and try again.");
+      return fail("Current password is incorrect. Re-enter it and try again.", "errors.employees.currentPasswordIsIncorrectReenterIt_1e015");
     }
     await db.employee.update({
       where: { id: user.employeeId },
@@ -854,7 +922,7 @@ export async function bulkDeleteEmployees(
 ): Promise<ActionResult<{ count: number }>> {
   const admin = await requireAdmin();
   const unique = [...new Set(ids)];
-  if (unique.length === 0) return fail("Select at least one employee to delete.");
+  if (unique.length === 0) return fail("Select at least one employee to delete.", "errors.employees.selectAtLeastOneEmployeeTo_b5f44");
   if (opts?.confirm !== BULK_DELETE_CONFIRM_WORD) {
     return fail(`Type ${BULK_DELETE_CONFIRM_WORD} to confirm permanent deletion.`);
   }
@@ -874,11 +942,11 @@ export async function bulkDeleteEmployees(
       },
     });
     if (employees.length !== unique.length) {
-      return fail("Some selected employees no longer exist. Refresh the page and try again.");
+      return fail("Some selected employees no longer exist. Refresh the page and try again.", "errors.employees.someSelectedEmployeesNoLongerExist_7be6f");
     }
 
     const self = employees.filter((e) => e.userId === admin.id);
-    if (self.length) return fail("You can't delete your own account.");
+    if (self.length) return fail("You can't delete your own account.", "errors.employees.youCantDeleteYourOwnAccount_89bdb");
 
     const admins = employees.filter((e) => e.user.role === "ADMIN");
     if (admins.length) {
@@ -944,7 +1012,7 @@ export async function bulkTerminateEmployees(
 ): Promise<ActionResult<{ count: number; skipped: number }>> {
   const admin = await requireAdmin();
   const unique = [...new Set(ids)];
-  if (unique.length === 0) return fail("Select at least one employee.");
+  if (unique.length === 0) return fail("Select at least one employee.", "errors.employees.selectAtLeastOneEmployee_a34e7");
   try {
     const c = checkTerminationDate(opts.terminationDate || todayDateString());
     if (!c.ok) return fail(c.error);
@@ -966,7 +1034,7 @@ export async function bulkTerminateEmployees(
     );
     if (eligible.length === 0) {
       return fail(
-        "Nothing to terminate: the selection is already terminated, or contains admins or yourself.",
+        "Nothing to terminate: the selection is already terminated, or contains admins or yourself.", "errors.employees.nothingToTerminateTheSelectionIs_9784d",
       );
     }
 
@@ -1003,6 +1071,8 @@ export async function bulkTerminateEmployees(
     await notifyEmployees(
       eligible.map((e) => e.id),
       {
+      translationKey: "notificationTemplates.employmentEnded",
+      translationParams: { endDate: readOnlyUntil(c.date).toISOString() },
         type: "SYSTEM",
         title: "Your employment has ended",
         message: `Your account is read-only until ${accessEndText(c.date)} (${TERMINATION_GRACE_DAYS} days) so you can still view your pay stubs and documents. After that you will no longer be able to sign in.`,

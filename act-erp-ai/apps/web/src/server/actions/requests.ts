@@ -32,9 +32,19 @@ async function writableOrFail(): Promise<{ user: SessionUser } | { error: string
 
 const submitSchema = z.object({
   type: z.enum([
-    "DOCUMENT_REQUEST", "DETAILS_CHANGE", "LEAVE_REQUEST", "PAYROLL_INQUIRY",
-    "SCHEDULE_CHANGE", "ACCESS_REQUEST", "TRAINING_REQUEST", "EQUIPMENT_REQUEST",
-    "LOCATION_CHANGE", "TEAM_REQUEST", "PROJECT_REQUEST", "BENEFITS_INQUIRY", "OTHER",
+    "DOCUMENT_REQUEST",
+    "DETAILS_CHANGE",
+    "LEAVE_REQUEST",
+    "PAYROLL_INQUIRY",
+    "SCHEDULE_CHANGE",
+    "ACCESS_REQUEST",
+    "TRAINING_REQUEST",
+    "EQUIPMENT_REQUEST",
+    "LOCATION_CHANGE",
+    "TEAM_REQUEST",
+    "PROJECT_REQUEST",
+    "BENEFITS_INQUIRY",
+    "OTHER",
   ]),
   title: z.string().trim().min(2).max(120),
   description: z.string().trim().min(2).max(5000),
@@ -44,11 +54,12 @@ export async function submitRequest(
   input: z.infer<typeof submitSchema>,
 ): Promise<ActionResult<{ id: string }>> {
   const w = await writableOrFail();
-  if ("error" in w) return fail(w.error);
+  if ("error" in w) return fail(w.error, "common.readOnly");
   const user = w.user;
   if (!user.employeeId) {
     return fail(
       "Your account has no employee profile yet. Ask an admin to create one before you can submit a request.",
+      "errors.requests.yourAccountHasNoEmployeeProfile_7f914",
     );
   }
   try {
@@ -56,6 +67,7 @@ export async function submitRequest(
     if (data.type === "LEAVE_REQUEST") {
       return fail(
         "Time off is requested from the Leave page, where your balance and dates are checked. Open Leave and use Request leave.",
+        "errors.requests.timeOffIsRequestedFromThe_64376",
       );
     }
 
@@ -112,7 +124,10 @@ export async function updateRequestStatus(
     const data = updateStatusSchema.parse(input);
     const note = data.note?.trim() || null;
     if (data.status === "REJECTED" && !note) {
-      return fail("Enter a reason for rejecting this request. The employee will see it.");
+      return fail(
+        "Enter a reason for rejecting this request. The employee will see it.",
+        "errors.requests.enterAReasonForRejectingThis_f09ec",
+      );
     }
     return await transition(admin, data.requestId, data.status, note, "request.status");
   } catch (err) {
@@ -132,7 +147,14 @@ export async function reopenRequest(
   const admin = await requireAdmin();
   try {
     const data = reopenSchema.parse(input);
-    return await transition(admin, data.requestId, "PENDING", data.note, "request.reopen", true);
+    return await transition(
+      admin,
+      data.requestId,
+      "PENDING",
+      data.note,
+      "request.reopen",
+      true,
+    );
   } catch (err) {
     return failFromUnknown(err);
   }
@@ -146,10 +168,16 @@ async function transition(
   auditAction: string,
   isReopen = false,
 ): Promise<ActionResult<{ id: string; status: string }>> {
-  type TxResult = { error: string } | { employeeId: string; title: string; from: string };
+  type TxResult =
+    | { error: string; errorCode?: string; errorParams?: Record<string, string | number> }
+    | { employeeId: string; title: string; from: string };
   const result: TxResult = await db.$transaction(async (tx): Promise<TxResult> => {
     const cur = await tx.request.findUnique({ where: { id: requestId } });
-    if (!cur) return { error: "That request no longer exists. Refresh the page." };
+    if (!cur)
+      return {
+        error: "That request no longer exists. Refresh the page.",
+        errorCode: "businessErrors.request.missing",
+      };
     const allowed = isReopen
       ? cur.status === "COMPLETED" || cur.status === "REJECTED"
       : REQUEST_TRANSITIONS[cur.status].includes(to);
@@ -158,6 +186,10 @@ async function transition(
         error: isReopen
           ? "Only completed or rejected requests can be reopened."
           : `A ${cur.status.toLowerCase()} request cannot be moved to ${to.toLowerCase()}. Refresh the page.`,
+        errorCode: isReopen
+          ? "businessErrors.request.reopenState"
+          : "businessErrors.request.transition",
+        errorParams: { from: cur.status, to },
       };
     }
     const res = await tx.request.updateMany({
@@ -168,7 +200,11 @@ async function transition(
         reviewerId: admin.employeeId ?? undefined,
       },
     });
-    if (res.count !== 1) return { error: "That request was just changed by someone else. Refresh the page." };
+    if (res.count !== 1)
+      return {
+        error: "That request was just changed by someone else. Refresh the page.",
+        errorCode: "businessErrors.request.changed",
+      };
     await tx.requestStatusHistory.create({
       data: {
         requestId,
@@ -179,7 +215,7 @@ async function transition(
     });
     return { employeeId: cur.employeeId, title: cur.title, from: cur.status };
   });
-  if ("error" in result) return fail(result.error);
+  if ("error" in result) return fail(result.error, result.errorCode, result.errorParams);
 
   await audit({
     action: auditAction,
@@ -187,11 +223,16 @@ async function transition(
     diff: { from: result.from, to, note },
   });
   const verb =
-    to === "PROCESSING" ? "is being processed"
-    : to === "COMPLETED" ? "was completed"
-    : to === "REJECTED" ? "was rejected"
-    : "was reopened";
+    to === "PROCESSING"
+      ? "is being processed"
+      : to === "COMPLETED"
+        ? "was completed"
+        : to === "REJECTED"
+          ? "was rejected"
+          : "was reopened";
   await notifyEmployees([result.employeeId], {
+    translationKey: "notificationTemplates.requestStatus",
+    translationParams: { title: result.title, status: to, note: note ?? "" },
     type: "REQUEST",
     title: `Request ${to.toLowerCase()}`,
     message: `Your request "${result.title}" ${verb}.${note ? ` Note: ${note}` : ""}`,
@@ -209,26 +250,39 @@ async function transition(
  */
 export async function cancelRequest(requestId: string): Promise<ActionResult> {
   const w = await writableOrFail();
-  if ("error" in w) return fail(w.error);
+  if ("error" in w) return fail(w.error, "common.readOnly");
   const user = w.user;
   try {
-    if (!user.employeeId) return fail("Your account has no employee profile.");
-    type TxResult = { error: string } | { title: string };
+    if (!user.employeeId)
+      return fail(
+        "Your account has no employee profile.",
+        "errors.requests.yourAccountHasNoEmployeeProfile_953ae",
+      );
+    type TxResult = { error: string; errorCode?: string } | { title: string };
     const result: TxResult = await db.$transaction(async (tx): Promise<TxResult> => {
       const cur = await tx.request.findUnique({ where: { id: requestId } });
       if (!cur || cur.employeeId !== user.employeeId) {
-        return { error: "That request no longer exists. Refresh the page." };
+        return {
+          error: "That request no longer exists. Refresh the page.",
+          errorCode: "businessErrors.request.missing",
+        };
       }
       if (cur.status !== "PENDING") {
         return {
-          error: "Only requests that haven't been picked up yet can be withdrawn. Contact an admin.",
+          error:
+            "Only requests that haven't been picked up yet can be withdrawn. Contact an admin.",
+          errorCode: "businessErrors.request.withdrawState",
         };
       }
       const res = await tx.request.updateMany({
         where: { id: requestId, status: "PENDING" },
         data: { status: "REJECTED" },
       });
-      if (res.count !== 1) return { error: "That request was just updated. Refresh the page." };
+      if (res.count !== 1)
+        return {
+          error: "That request was just updated. Refresh the page.",
+          errorCode: "businessErrors.request.updated",
+        };
       await tx.requestStatusHistory.create({
         data: {
           requestId,
@@ -239,8 +293,12 @@ export async function cancelRequest(requestId: string): Promise<ActionResult> {
       });
       return { title: cur.title };
     });
-    if ("error" in result) return fail(result.error);
-    await audit({ action: "request.cancel", resource: `Request:${requestId}`, diff: { title: result.title } });
+    if ("error" in result) return fail(result.error, result.errorCode);
+    await audit({
+      action: "request.cancel",
+      resource: `Request:${requestId}`,
+      diff: { title: result.title },
+    });
     await notifyAdmins({
       type: "REQUEST",
       title: "Request withdrawn",

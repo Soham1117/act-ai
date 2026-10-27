@@ -7,6 +7,8 @@ type Payload = {
   message: string;
   link?: string;
   priority?: Priority;
+  translationKey?: string;
+  translationParams?: Record<string, string | number>;
 };
 
 /**
@@ -24,6 +26,7 @@ export async function notifyEmployees(employeeIds: string[], p: Payload): Promis
         message: p.message,
         priority: p.priority ?? "MEDIUM",
         link: p.link ?? null,
+        ...(p.translationKey ? { translationKey: p.translationKey, translationParams: p.translationParams ?? {} } : {}),
         recipients: { createMany: { data: ids.map((employeeId) => ({ employeeId })), skipDuplicates: true } },
       },
     });

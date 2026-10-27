@@ -33,7 +33,7 @@ export function nextContractWorkerIdFrom(existing: readonly string[]): string {
 }
 
 export type ContractWorkerEligibilityInput = {
-  status: "ACTIVE" | "ENDED";
+  status: "ACTIVE" | "ENDED" | "INACTIVE";
   startDate: Date;
   endDate: Date | null;
 };
@@ -59,6 +59,9 @@ export function contractWorkerIneligibleReason(
   today: Date,
 ): string | null {
   if (isContractWorkerEligible(worker, today)) return null;
+  if (worker.status === "INACTIVE") {
+    return "This worker is inactive. Please see an admin to reactivate them.";
+  }
   if (worker.status !== "ACTIVE") {
     return "This contract has ended. Please see an admin.";
   }

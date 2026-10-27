@@ -1,5 +1,6 @@
 "use server";
 
+import { applyPendingPortalLanguage } from "@/server/portal-language-preference";
 import { randomInt } from "crypto";
 import { AuthError } from "next-auth";
 import { signIn, signOut as naSignOut } from "@/lib/auth/auth";
@@ -8,12 +9,12 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { sendLoginCode } from "@/lib/email";
 import { rateLimited } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { ok, fail, type ActionResult } from "@/lib/action-result";
+import { ok, fail, type ActionResult, type ActionFail } from "@/lib/action-result";
 import { env } from "@/lib/env";
 import { accessLevelFor } from "@/lib/access";
 import { audit } from "@/lib/audit";
 
-export type LoginResult = { ok: true } | { ok: false; error: string };
+export type LoginResult = { ok: true } | ActionFail;
 
 const CHALLENGE_TTL_MS = 10 * 60_000;
 const GENERIC_ERROR = "Invalid email/username or password. Check both and try again.";
@@ -29,15 +30,15 @@ const GENERIC_ERROR = "Invalid email/username or password. Check both and try ag
 export async function requestLoginChallenge(
   identifier: string,
   password: string,
-): Promise<{ ok: true; challengeId: string | null } | { ok: false; error: string }> {
+): Promise<{ ok: true; challengeId: string | null } | ActionFail> {
   const id = identifier.trim().toLowerCase();
-  if (!id || !password) return { ok: false, error: GENERIC_ERROR };
+  if (!id || !password) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
 
   // Rate-limit by identifier, not IP (no IP available from a server action,
   // and this is a low-traffic internal app) — blunts both password-guessing
   // and code-spamming a real employee's inbox.
   if (rateLimited(`login:${id}`, 8, 15 * 60_000)) {
-    return { ok: false, error: "Too many attempts. Try again in a few minutes." };
+    return { ok: false, error: "Too many attempts. Try again in a few minutes.", errorCode: "errors.auth.login_52eb86aa" };
   }
 
   const user = await db.user.findFirst({
@@ -57,10 +58,10 @@ export async function requestLoginChallenge(
       },
     },
   });
-  if (!user?.passwordHash) return { ok: false, error: GENERIC_ERROR };
+  if (!user?.passwordHash) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
 
   const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) return { ok: false, error: GENERIC_ERROR };
+  if (!ok) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
 
   // Password was right: tell a former employee why they can't get in rather
   // than a misleading "invalid password". (Terminated accounts stay
@@ -69,16 +70,17 @@ export async function requestLoginChallenge(
     return {
       ok: false,
       error:
-        "This account no longer has access. If you think that's a mistake, contact your administrator.",
+        "This account no longer has access. If you think that's a mistake, contact your administrator.", errorCode: "errors.auth.login_90a921f5",
     };
   }
 
   if (env.LOGIN_2FA_ENABLED === "false") {
     try {
       await signIn("credentials", { identifier: id, password, redirect: false });
+      await applyPendingPortalLanguage(user.id);
       return { ok: true, challengeId: null };
     } catch (err) {
-      if (err instanceof AuthError) return { ok: false, error: GENERIC_ERROR };
+      if (err instanceof AuthError) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
       throw err;
     }
   }
@@ -93,7 +95,7 @@ export async function requestLoginChallenge(
     return {
       ok: false,
       error:
-        "No personal email on file for 2FA. Ask an admin to add one before you can sign in.",
+        "No personal email on file for 2FA. Ask an admin to add one before you can sign in.", errorCode: "errors.auth.login_af94f673",
     };
   }
 
@@ -114,7 +116,7 @@ export async function requestLoginChallenge(
     // stopped working" is exactly the kind of thing that needs a stack trace.
     await db.loginChallenge.delete({ where: { id: challenge.id } }).catch(() => {});
     console.error("sendLoginCode failed:", err);
-    return { ok: false, error: "Could not send the sign-in code. Try again shortly." };
+    return { ok: false, error: "Could not send the sign-in code. Try again shortly.", errorCode: "errors.auth.login_ac2e8cd0" };
   }
 
   return { ok: true, challengeId: challenge.id };
@@ -129,14 +131,18 @@ export async function verifyLoginChallenge(
   code: string,
 ): Promise<LoginResult> {
   if (rateLimited(`login-code:${challengeId}`, 5, 10 * 60_000)) {
-    return { ok: false, error: "Too many attempts. Request a new code." };
+    return { ok: false, error: "Too many attempts. Request a new code.", errorCode: "errors.auth.login_cb3ae152" };
   }
   try {
     await signIn("credentials", { challengeId, code, redirect: false });
+    try {
+      const completed = await db.loginChallenge.findUnique({ where: { id: challengeId }, select: { userId: true } });
+      if (completed) await applyPendingPortalLanguage(completed.userId);
+    } catch { console.error("[portal-language] post-login preference unavailable"); }
     return { ok: true };
   } catch (err) {
     if (err instanceof AuthError) {
-      return { ok: false, error: "Incorrect or expired code." };
+      return { ok: false, error: "Incorrect or expired code.", errorCode: "errors.auth.login_ffa8ce67" };
     }
     throw err;
   }
@@ -164,18 +170,18 @@ export async function changeMyPassword(
   // action is blocked by the standard session boundary.
   const user = await getSessionUserForPasswordChange();
   if (!user)
-    return fail("You are not signed in. Sign in again, then change your password.");
+    return fail("You are not signed in. Sign in again, then change your password.", "errors.auth.youAreNotSignedInSign_6a02d");
   if (next.length < 8) {
-    return fail("New password must be at least 8 characters. Choose a longer password.");
+    return fail("New password must be at least 8 characters. Choose a longer password.", "errors.auth.newPasswordMustBeAtLeast_28ba5");
   }
   if (next.length > 72) {
-    return fail("New password is too long (max 72 characters).");
+    return fail("New password is too long (max 72 characters).", "errors.auth.newPasswordIsTooLongMax_463f1");
   }
   if (next === current) {
-    return fail("Choose a new password that is different from your current one.");
+    return fail("Choose a new password that is different from your current one.", "errors.auth.chooseANewPasswordThatIs_e9a27");
   }
   if (rateLimited(`pwchange:${user.id}`, 8, 15 * 60_000)) {
-    return fail("Too many attempts. Try again in a few minutes.");
+    return fail("Too many attempts. Try again in a few minutes.", "errors.auth.tooManyAttemptsTryAgainIn_52eb8");
   }
 
   const row = await db.user.findUnique({
@@ -183,7 +189,7 @@ export async function changeMyPassword(
     select: { passwordHash: true },
   });
   if (!row?.passwordHash || !(await verifyPassword(current, row.passwordHash))) {
-    return fail("Current password is incorrect. Re-enter it and try again.");
+    return fail("Current password is incorrect. Re-enter it and try again.", "errors.auth.currentPasswordIsIncorrectReenterIt_1e015");
   }
   await db.user.update({
     where: { id: user.id },

@@ -53,6 +53,13 @@ describe("isContractWorkerEligible", () => {
     expect(isContractWorkerEligible({ ...base, status: "ENDED" }, d("2026-10-12"))).toBe(false);
   });
 
+  it("blocks inactive workers without describing their assignment as ended", () => {
+    const worker = { ...base, status: "INACTIVE" as const };
+    expect(isContractWorkerEligible(worker, d("2026-10-12"))).toBe(false);
+    expect(contractWorkerIneligibleReason(worker, d("2026-10-12"))).toMatch(/inactive/);
+    expect(isContractWorkerEligible({ ...worker, status: "ACTIVE" }, d("2026-10-12"))).toBe(true);
+  });
+
   it("explains why a worker is blocked", () => {
     expect(contractWorkerIneligibleReason(base, d("2026-10-12"))).toBeNull();
     expect(contractWorkerIneligibleReason(base, d("2026-10-01"))).toMatch(/not started/);

@@ -4,14 +4,19 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmployeeScheduleCalendar } from "./employee-schedule-calendar";
 import { addDays, startOfMonth, endOfMonth } from "date-fns";
-import { isOvernight, shiftDateTimes } from "@/lib/schedule-rules";
+import { shiftDateTimes } from "@/lib/schedule-rules";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
-export const metadata = { title: "Schedule" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("time.schedule.title") };
+}
 
 export default async function ScheduleViewPage() {
+  const { t } = await getPortalLanguage();
   const user = await requireUser();
   if (!user.employeeId)
-    return <p className="text-sm text-muted-foreground">No employee record.</p>;
+    return <p className="text-sm text-muted-foreground">{t("time.schedule.noEmployee")}</p>;
 
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
     try { return await p; } catch { return fallback; }
@@ -37,7 +42,7 @@ export default async function ScheduleViewPage() {
     );
     return {
       id: s.id,
-      title: `${s.jobCode}${isOvernight(s.startTime, s.endTime) ? " (+1 day)" : ""}`,
+      title: s.jobCode,
       start: evStart,
       end: evEnd,
       description: s.notes ?? "",
@@ -47,8 +52,8 @@ export default async function ScheduleViewPage() {
   return (
     <>
       <PageHeader
-        title="My schedule"
-        description="Your shifts. Use the calendar arrows to view other months. Overnight shifts show +1 day."
+        title={t("time.schedule.pageTitle")}
+        description={t("time.schedule.description")}
       />
       <Card>
         <CardContent className="p-2 sm:p-4">

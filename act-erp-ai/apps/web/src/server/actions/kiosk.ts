@@ -31,6 +31,11 @@ import {
 import { clientIpFromHeaders, normalizeNetwork } from "@/lib/ip-network";
 import { isStaleShift } from "@/lib/time-rules";
 import { businessDateOnly } from "@/lib/format";
+import {
+  kioskProfilePhotoUrl,
+  saveKioskProfilePhoto,
+} from "@/server/kiosk-profile-photo-store";
+import { latestKioskPhotoUrls } from "@/server/kiosk-roster-photos";
 import { storePunchPhoto } from "@/server/punch-photo-store";
 import { _clockIn, _clockOut, _startBreak, _endBreak } from "@/server/time-core";
 
@@ -40,7 +45,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const PIN_FAIL_WINDOW_MS = 5 * 60_000;
 const PIN_MAX_FAILS_PER_EMPLOYEE = 5;
 const PIN_MAX_FAILS_PER_IP = 20;
-const NOT_ACTIVE_MESSAGE = "This account isn't active for kiosk use. Please see an admin.";
+const NOT_ACTIVE_MESSAGE =
+  "This account isn't active for kiosk use. Please see an admin.";
 const NOT_ACTIVATED_MESSAGE =
   "This kiosk session is not active on this device. An admin must activate the kiosk here first.";
 
@@ -109,7 +115,9 @@ type ActivatableKiosk =
 async function findActivatableKiosk(slug: string): Promise<ActivatableKiosk> {
   const session = await db.kioskSession.findUnique({ where: { slug } });
   if (!session) {
-    return { error: "That kiosk was not found. Check the slug or create the kiosk first." };
+    return {
+      error: "That kiosk was not found. Check the slug or create the kiosk first.",
+    };
   }
   if (session.revokedAt) {
     return {
@@ -196,12 +204,18 @@ async function trustRequestNetwork(
   label: string | undefined,
 ): Promise<
   | { error: string }
-  | { ip: string; cidr: string; row: Awaited<ReturnType<typeof db.kioskTrustedNetwork.upsert>> }
+  | {
+      ip: string;
+      cidr: string;
+      row: Awaited<ReturnType<typeof db.kioskTrustedNetwork.upsert>>;
+    }
 > {
   const ip = clientIpFromHeaders(await headers());
   const cidr = ip ? normalizeNetwork(ip) : null;
   if (!ip || !cidr) {
-    return { error: "The server could not read a valid IPv4 address for this connection." };
+    return {
+      error: "The server could not read a valid IPv4 address for this connection.",
+    };
   }
   const row = await db.kioskTrustedNetwork.upsert({
     where: { cidr },
@@ -239,7 +253,13 @@ export async function trustCurrentNetworkAndActivate(
     await audit({
       action: "kiosk.network.trust",
       resource: `KioskTrustedNetwork:${trusted.row.id}`,
-      diff: { ip: trusted.ip, cidr: trusted.cidr, slug, adminEmail: admin.email, activating: true },
+      diff: {
+        ip: trusted.ip,
+        cidr: trusted.cidr,
+        slug,
+        adminEmail: admin.email,
+        activating: true,
+      },
     });
     await notifyAdmins({
       type: "SYSTEM",
@@ -258,7 +278,9 @@ export async function trustCurrentNetworkAndActivate(
 }
 
 /** Admin: trust the network the current request came from (no activation). */
-export async function trustCurrentNetwork(label?: string): Promise<ActionResult<{ cidr: string }>> {
+export async function trustCurrentNetwork(
+  label?: string,
+): Promise<ActionResult<{ cidr: string }>> {
   const admin = await requireAdmin();
   try {
     const trusted = await trustRequestNetwork(admin, labelSchema.parse(label));
@@ -266,7 +288,12 @@ export async function trustCurrentNetwork(label?: string): Promise<ActionResult<
     await audit({
       action: "kiosk.network.trust",
       resource: `KioskTrustedNetwork:${trusted.row.id}`,
-      diff: { ip: trusted.ip, cidr: trusted.cidr, adminEmail: admin.email, activating: false },
+      diff: {
+        ip: trusted.ip,
+        cidr: trusted.cidr,
+        adminEmail: admin.email,
+        activating: false,
+      },
     });
     await notifyAdmins({
       type: "SYSTEM",
@@ -408,8 +435,11 @@ async function requireActiveKiosk(slug: string) {
   const session = await getActiveKioskSession(slug);
   if (!session) return null;
   const now = new Date();
-  const extend = session.expiresAt.getTime() - now.getTime() < (KIOSK_TTL_DAYS - 1) * DAY_MS;
-  const expiresAt = extend ? new Date(now.getTime() + KIOSK_TTL_DAYS * DAY_MS) : session.expiresAt;
+  const extend =
+    session.expiresAt.getTime() - now.getTime() < (KIOSK_TTL_DAYS - 1) * DAY_MS;
+  const expiresAt = extend
+    ? new Date(now.getTime() + KIOSK_TTL_DAYS * DAY_MS)
+    : session.expiresAt;
   await db.kioskSession.update({
     where: { id: session.id },
     data: { lastUsedAt: now, ...(extend ? { expiresAt } : {}) },
@@ -451,6 +481,7 @@ type KioskLookupOk = {
   name: string;
   email: string | null;
   profilePic: string | null;
+  capturedPhotoUrl: string | null;
   jobTitle: string | null;
   hasPin: boolean;
   /** PIN is still the temporary default; must be changed before punching. */
@@ -468,6 +499,7 @@ export type KioskRosterEmployee = {
   employeeId: string;
   name: string;
   profilePic: string | null;
+  capturedPhotoUrl: string | null;
   jobTitle: string | null;
   status: "ACTIVE" | "ON_BREAK" | "OUT";
 };
@@ -498,6 +530,7 @@ export async function kioskListEmployees(
         employeeId: true,
         name: true,
         profilePic: true,
+        kioskProfilePhotoKey: true,
         jobTitle: true,
         timeEntries: {
           where: { status: { in: ["ACTIVE", "ON_BREAK"] } },
@@ -508,12 +541,25 @@ export async function kioskListEmployees(
       },
     });
 
+    const photos = await latestKioskPhotoUrls(
+      slug,
+      "employee",
+      rows.map((row) => row.id),
+    );
     return ok({
       employees: rows.map((row) => ({
         id: row.id,
         employeeId: row.employeeId,
         name: row.name,
         profilePic: row.profilePic,
+        capturedPhotoUrl: row.kioskProfilePhotoKey
+          ? kioskProfilePhotoUrl(
+              slug,
+              "employee",
+              row.id,
+              row.kioskProfilePhotoKey.split("/").pop()!,
+            )
+          : (photos.get(row.id) ?? null),
         jobTitle: row.jobTitle,
         status: (openEntry(row.timeEntries[0])?.status ?? "OUT") as
           | "ACTIVE"
@@ -585,6 +631,7 @@ export async function kioskLookup(
       return fail(NOT_ACTIVE_MESSAGE);
     }
 
+    const photos = await latestKioskPhotoUrls(slug, "employee", [employee.id]);
     const rawOpen = employee.timeEntries[0];
     const active = openEntry(rawOpen);
     return ok({
@@ -593,6 +640,14 @@ export async function kioskLookup(
       name: employee.name,
       email: employee.email,
       profilePic: employee.profilePic,
+      capturedPhotoUrl: employee.kioskProfilePhotoKey
+        ? kioskProfilePhotoUrl(
+            slug,
+            "employee",
+            employee.id,
+            employee.kioskProfilePhotoKey.split("/").pop()!,
+          )
+        : (photos.get(employee.id) ?? null),
       jobTitle: employee.jobTitle,
       hasPin: !!employee.kioskPinHash,
       mustChangePin: await isDefaultPin(employee.kioskPinHash),
@@ -635,7 +690,10 @@ async function authenticateKioskPin(
   const ip = clientIpFromHeaders(await headers()) ?? "unknown";
   const empKey = `pin:${sessionId}:${employee.id}`;
   const ipKey = `pinip:${sessionId}:${ip}`;
-  if (isLocked(empKey, PIN_MAX_FAILS_PER_EMPLOYEE) || isLocked(ipKey, PIN_MAX_FAILS_PER_IP)) {
+  if (
+    isLocked(empKey, PIN_MAX_FAILS_PER_EMPLOYEE) ||
+    isLocked(ipKey, PIN_MAX_FAILS_PER_IP)
+  ) {
     const mins = Math.max(minutesUntilUnlock(empKey), minutesUntilUnlock(ipKey), 1);
     return {
       ok: false,
@@ -659,7 +717,8 @@ async function authenticateKioskPin(
     });
     return {
       ok: false,
-      error: "Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.",
+      error:
+        "Incorrect PIN. Try again, or ask an admin to reset your PIN if you forgot it.",
     };
   }
   clearFailures(empKey);
@@ -668,7 +727,9 @@ async function authenticateKioskPin(
 
 export async function kioskAction(
   input: z.infer<typeof actionSchema>,
-): Promise<ActionResult<{ id: string | null; status: string | null; autoClosed?: boolean }>> {
+): Promise<
+  ActionResult<{ id: string | null; status: string | null; autoClosed?: boolean }>
+> {
   try {
     const session = await requireActiveKiosk(input.slug);
     if (!session) return fail(NOT_ACTIVATED_MESSAGE);
@@ -681,7 +742,9 @@ export async function kioskAction(
     if (pinRequired && !data.pin) {
       return fail("This kiosk now asks for a PIN. Reload the page and try again.");
     }
-    const pin = pinRequired ? z.object({ pin: pinSchema }).parse({ pin: data.pin }).pin : null;
+    const pin = pinRequired
+      ? z.object({ pin: pinSchema }).parse({ pin: data.pin }).pin
+      : null;
     if (!pinRequired && rateLimited(`punch:${session.id}`, 60, 60_000)) {
       return fail("Too many punches on this kiosk — wait a moment and try again.");
     }
@@ -801,7 +864,12 @@ export async function kioskMyTimings(input: {
     if (kioskNeedsPin(session)) {
       const pin = pinSchema.safeParse(input.pin);
       if (!pin.success) return fail("Enter your 4-digit PIN");
-      const auth = await authenticateKioskPin(session.id, employee, pin.data, session.slug);
+      const auth = await authenticateKioskPin(
+        session.id,
+        employee,
+        pin.data,
+        session.slug,
+      );
       if (!auth.ok) return fail(auth.error);
       if (await isDefaultPin(employee.kioskPinHash)) {
         return fail("You must set a new PIN first. Clock in or out to choose one.");
@@ -865,7 +933,12 @@ export async function kioskChangePin(
     });
     if (!employee) return fail("Unknown employee ID. Check the ID and try again.");
 
-    const auth = await authenticateKioskPin(session.id, employee, data.currentPin, session.slug);
+    const auth = await authenticateKioskPin(
+      session.id,
+      employee,
+      data.currentPin,
+      session.slug,
+    );
     if (!auth.ok) return fail(auth.error);
 
     if (!(await isDefaultPin(employee.kioskPinHash))) {
@@ -1031,5 +1104,49 @@ export async function resetEmployeeKioskPin(employeeId: string): Promise<ActionR
     return ok();
   } catch (err) {
     return failFromUnknown(err);
+  }
+}
+
+/** A portrait change always requires the person's own non-temporary PIN. */
+export async function kioskUpdateProfilePhoto(input: {
+  slug: string;
+  employeeId: string;
+  pin: string;
+  photo: string;
+}): Promise<ActionResult<{ url: string }>> {
+  try {
+    const session = await requireActiveKiosk(input.slug);
+    if (!session) return fail(NOT_ACTIVATED_MESSAGE);
+    if (rateLimited(`profile-photo:${session.id}`, 20, 60_000))
+      return fail("Too many requests � wait a moment and try again.");
+    const pin = pinSchema.safeParse(input.pin);
+    if (!pin.success) return fail("Enter your 4-digit PIN");
+    const employee = await db.employee.findFirst({
+      where: { employeeId: { equals: input.employeeId.trim(), mode: "insensitive" } },
+    });
+    if (!employee) return fail("Unknown employee ID. Check the ID and try again.");
+    const auth = await authenticateKioskPin(session.id, employee, pin.data, session.slug);
+    if (!auth.ok) return fail(auth.error);
+    if (await isDefaultPin(employee.kioskPinHash))
+      return fail("You must set a new PIN first. Clock in or out to choose one.");
+    const key = await saveKioskProfilePhoto("employee", employee.id, input.photo);
+    if (!key) return fail("Take a new photo and try again.");
+    await audit({
+      action: "kiosk.profile_photo_update",
+      resource: `Employee:${employee.id}`,
+      actor: { id: employee.userId, email: employee.email },
+      diff: { kioskSlug: session.slug },
+    });
+    revalidatePath(`/kiosk/${input.slug}`);
+    return ok({
+      url: kioskProfilePhotoUrl(
+        input.slug,
+        "employee",
+        employee.id,
+        key.split("/").pop()!,
+      ),
+    });
+  } catch (err) {
+    return failFromUnknown(err, "Could not save your photo. Try again.");
   }
 }

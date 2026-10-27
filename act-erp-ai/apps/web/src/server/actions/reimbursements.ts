@@ -12,6 +12,7 @@ import { notifyAdmins, notifyEmployees } from "@/lib/notify";
 import { businessDateOnly, formatCurrency } from "@/lib/format";
 import {
   MAX_RECEIPTS,
+  MAX_REIMBURSEMENT_AMOUNT,
   canReopen,
   canTransition,
   validateClaimAmount,
@@ -23,8 +24,15 @@ import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-resul
 const submitSchema = z.object({
   title: z.string().trim().min(2).max(100),
   category: z.enum([
-    "TRAVEL", "MEALS", "OFFICE_SUPPLIES", "TRAINING", "EQUIPMENT",
-    "MEDICAL", "FUEL", "ACCOMMODATION", "OTHER",
+    "TRAVEL",
+    "MEALS",
+    "OFFICE_SUPPLIES",
+    "TRAINING",
+    "EQUIPMENT",
+    "MEDICAL",
+    "FUEL",
+    "ACCOMMODATION",
+    "OTHER",
   ]),
   amount: z.coerce.number(),
   currency: z.string().length(3).default("USD"),
@@ -38,6 +46,16 @@ function revalidateAll() {
   revalidatePath("/admin/reimbursements");
 }
 
+class ReimbursementActionError extends Error {
+  constructor(
+    message: string,
+    readonly errorCode?: string,
+    readonly errorParams?: Record<string, string | number>,
+  ) {
+    super(message);
+  }
+}
+
 export async function submitReimbursement(
   input: z.input<typeof submitSchema>,
   receipts: { name: string; type: string; size: number; bytes: ArrayBuffer }[] = [],
@@ -48,19 +66,35 @@ export async function submitReimbursement(
     if (!user.employeeId) {
       return fail(
         "Your account has no employee profile yet. Ask an admin to create one before you can submit a reimbursement.",
+        "errors.reimbursements.yourAccountHasNoEmployeeProfile_5421b",
       );
     }
     const data = submitSchema.parse(input);
 
     const amountCheck = validateClaimAmount(data.amount);
-    if (!amountCheck.ok) return fail(amountCheck.error);
+    if (!amountCheck.ok)
+      return fail(amountCheck.error, "businessErrors.reimbursement.amount", {
+        limit: MAX_REIMBURSEMENT_AMOUNT.toLocaleString("en-US"),
+      });
 
     const expenseDate = new Date(`${data.expenseDate}T00:00:00.000Z`);
-    if (Number.isNaN(expenseDate.getTime())) return fail("Enter a valid expense date.");
-    if (expenseDate > businessDateOnly()) return fail("The expense date can't be in the future.");
+    if (Number.isNaN(expenseDate.getTime()))
+      return fail(
+        "Enter a valid expense date.",
+        "errors.reimbursements.enterAValidExpenseDate_93621",
+      );
+    if (expenseDate > businessDateOnly())
+      return fail(
+        "The expense date can't be in the future.",
+        "errors.reimbursements.theExpenseDateCantBeIn_1ddc7",
+      );
 
     if (receipts.length > MAX_RECEIPTS) {
-      return fail(`Attach at most ${MAX_RECEIPTS} receipts per claim.`);
+      return fail(
+        `Attach at most ${MAX_RECEIPTS} receipts per claim.`,
+        "errors.receiptLimit",
+        { count: MAX_RECEIPTS },
+      );
     }
     const validated: Array<{
       name: string;
@@ -69,7 +103,12 @@ export async function submitReimbursement(
     }> = [];
     for (const f of receipts) {
       const v = validateUpload("receipt", { name: f.name, bytes: f.bytes });
-      if (!v.ok) return fail(`${f.name}: ${v.error}`);
+      if (!v.ok)
+        return fail(
+          `${f.name}: ${v.error}`,
+          "businessErrors.reimbursement.receiptUpload",
+          { file: f.name },
+        );
       validated.push({ name: f.name, bytes: f.bytes, v });
     }
 
@@ -136,8 +175,10 @@ export async function submitReimbursement(
     return ok({ id: created.id, status: created.status });
   } catch (err) {
     // Don't orphan receipt objects when the claim itself failed.
-    for (const p of uploadedKeys) await deleteFile("reimbursement-receipts", p).catch(() => null);
-    if (err instanceof ReadOnlyAccountError) return fail(READ_ONLY_MESSAGE);
+    for (const p of uploadedKeys)
+      await deleteFile("reimbursement-receipts", p).catch(() => null);
+    if (err instanceof ReadOnlyAccountError)
+      return fail(READ_ONLY_MESSAGE, "common.readOnly");
     return failFromUnknown(err);
   }
 }
@@ -164,12 +205,18 @@ export async function reviewReimbursement(
     const data = reviewSchema.parse(input);
 
     if (data.status === "REJECTED" && !data.note) {
-      return fail("Enter a reason for rejecting this claim. The employee will see it.");
+      return fail(
+        "Enter a reason for rejecting this claim. The employee will see it.",
+        "errors.reimbursements.enterAReasonForRejectingThis_0d97b",
+      );
     }
 
     const result = await db.$transaction(async (tx) => {
-      const current = await tx.reimbursement.findUnique({ where: { id: data.reimbursementId } });
-      if (!current) throw new Error("That claim no longer exists. Refresh the page and try again.");
+      const current = await tx.reimbursement.findUnique({
+        where: { id: data.reimbursementId },
+      });
+      if (!current)
+        throw new Error("That claim no longer exists. Refresh the page and try again.");
 
       const from = current.status as ReimbursementStatus;
       if (!canTransition(from, data.status)) {
@@ -185,7 +232,12 @@ export async function reviewReimbursement(
         const amount = Number(current.amount);
         paidAmount = data.paidAmount ?? amount;
         const paidCheck = validatePaidAmount(paidAmount, amount, data.note);
-        if (!paidCheck.ok) throw new Error(paidCheck.error);
+        if (!paidCheck.ok)
+          throw new ReimbursementActionError(
+            paidCheck.error,
+            "businessErrors.reimbursement.paidAmount",
+            { message: paidCheck.error },
+          );
       }
 
       const now = new Date();
@@ -219,7 +271,12 @@ export async function reviewReimbursement(
     await audit({
       action: `reimbursement.${data.status.toLowerCase()}`,
       resource: `Reimbursement:${data.reimbursementId}`,
-      diff: { from: result.from, status: data.status, paidAmount: result.paidAmount, note: data.note },
+      diff: {
+        from: result.from,
+        status: data.status,
+        paidAmount: result.paidAmount,
+        note: data.note,
+      },
     });
 
     const r = result.current;
@@ -230,6 +287,17 @@ export async function reviewReimbursement(
       if (data.note) message += ` Note: ${data.note}`;
     }
     await notifyEmployees([r.employeeId], {
+      translationKey:
+        data.status === "PAID"
+          ? "notificationTemplates.reimbursementPaid"
+          : "notificationTemplates.reimbursementStatus",
+      translationParams: {
+        title: r.title,
+        status: data.status,
+        note: data.note ?? "",
+        amount: Number(result.paidAmount ?? r.amount),
+        currency: r.currency,
+      },
       type: "REIMBURSEMENT",
       title: `Reimbursement ${data.status.replace("_", " ").toLowerCase()}`,
       message,
@@ -240,20 +308,26 @@ export async function reviewReimbursement(
     revalidateAll();
     return ok({ id: r.id, status: data.status });
   } catch (err) {
+    if (err instanceof ReimbursementActionError)
+      return fail(err.message, err.errorCode, err.errorParams);
     return failFromUnknown(err);
   }
 }
 
 /** Admin: put a rejected claim back in the queue (audited, recorded in history). */
-export async function reopenReimbursement(
-  input: { reimbursementId: string; note?: string },
-): Promise<ActionResult<{ id: string }>> {
+export async function reopenReimbursement(input: {
+  reimbursementId: string;
+  note?: string;
+}): Promise<ActionResult<{ id: string }>> {
   const admin = await requireAdmin();
   try {
     const note = input.note?.trim() || undefined;
     const result = await db.$transaction(async (tx) => {
-      const current = await tx.reimbursement.findUnique({ where: { id: input.reimbursementId } });
-      if (!current) throw new Error("That claim no longer exists. Refresh the page and try again.");
+      const current = await tx.reimbursement.findUnique({
+        where: { id: input.reimbursementId },
+      });
+      if (!current)
+        throw new Error("That claim no longer exists. Refresh the page and try again.");
       if (!canReopen(current.status as ReimbursementStatus)) {
         throw new Error("Only a rejected claim can be reopened.");
       }
@@ -267,7 +341,10 @@ export async function reopenReimbursement(
           approvalDate: null,
         },
       });
-      if (res.count === 0) throw new Error("This claim changed while you were reopening it. Refresh the page.");
+      if (res.count === 0)
+        throw new Error(
+          "This claim changed while you were reopening it. Refresh the page.",
+        );
       await tx.reimbursementStatusHistory.create({
         data: {
           reimbursementId: current.id,
@@ -284,6 +361,8 @@ export async function reopenReimbursement(
       diff: { note },
     });
     await notifyEmployees([result.employeeId], {
+      translationKey: "notificationTemplates.reimbursementReopened",
+      translationParams: { title: result.title },
       type: "REIMBURSEMENT",
       title: "Reimbursement reopened",
       message: `Your rejected claim "${result.title}" was reopened for review.`,

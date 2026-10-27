@@ -22,7 +22,7 @@ const uploadSchema = z.object({
 });
 
 function handleError(err: unknown) {
-  if (err instanceof ReadOnlyAccountError) return fail(READ_ONLY_MESSAGE);
+  if (err instanceof ReadOnlyAccountError) return fail(READ_ONLY_MESSAGE, "common.readOnly");
   return failFromUnknown(err);
 }
 
@@ -53,24 +53,24 @@ export async function uploadDocument(
         : user.employeeId;
     if (!targetEmployeeId) {
       return fail(
-        "No employee profile is linked to your account for this upload. Ask an admin to create one, or pick an employee if you are an admin.",
+        "No employee profile is linked to your account for this upload. Ask an admin to create one, or pick an employee if you are an admin.", "errors.documents.noEmployeeProfileIsLinkedTo_3373a",
       );
     }
     if (user.role !== "ADMIN" && targetEmployeeId !== user.employeeId) {
-      return fail("You can only upload documents to your own employee profile.");
+      return fail("You can only upload documents to your own employee profile.", "errors.documents.youCanOnlyUploadDocumentsTo_a6834");
     }
     if (user.role !== "ADMIN" && (data.documentType === "COMPANY" || data.documentType === "BENEFITS")) {
-      return fail("Only admins can upload company or benefits documents.");
+      return fail("Only admins can upload company or benefits documents.", "errors.documents.onlyAdminsCanUploadCompanyOr_188f7");
     }
 
     const target = await db.employee.findUnique({
       where: { id: targetEmployeeId },
       select: { id: true },
     });
-    if (!target) return fail("That employee no longer exists. Refresh the page and try again.");
+    if (!target) return fail("That employee no longer exists. Refresh the page and try again.", "errors.documents.thatEmployeeNoLongerExistsRefresh_dd3a1");
 
     const v = validateUpload("document", { name: file.name, bytes: file.bytes });
-    if (!v.ok) return fail(v.error);
+    if (!v.ok) return fail(v.error, "businessErrors.documents.upload");
 
     const path = `${targetEmployeeId}/${Date.now()}-${v.safeFileName}`;
     const { key } = await uploadFile("documents", path, file.bytes, {
@@ -108,6 +108,8 @@ export async function uploadDocument(
     });
     if (user.role === "ADMIN" && targetEmployeeId !== user.employeeId) {
       await notifyEmployees([targetEmployeeId], {
+      translationKey: "notificationTemplates.documentAvailable",
+      translationParams: { title: data.title },
         type: "COMPANY",
         title: "New document available",
         message: `A new document "${data.title}" was added to your documents.`,
@@ -166,7 +168,7 @@ export async function uploadDocumentBulk(
       requested = all.map((e) => e.id);
     }
     if (requested.length === 0) {
-      return fail("Select at least one employee (or choose all active employees).");
+      return fail("Select at least one employee (or choose all active employees).", "errors.documents.selectAtLeastOneEmployeeOr_e3817");
     }
     // Only employees that actually exist.
     const existing = await db.employee.findMany({
@@ -176,7 +178,7 @@ export async function uploadDocumentBulk(
     const existingIds = new Set(existing.map((e) => e.id));
     requested = requested.filter((id) => existingIds.has(id));
     if (requested.length === 0) {
-      return fail("None of the selected employees exist any more. Refresh the page and try again.");
+      return fail("None of the selected employees exist any more. Refresh the page and try again.", "errors.documents.noneOfTheSelectedEmployeesExist_acf76");
     }
 
     let targetIds = requested;
@@ -198,7 +200,7 @@ export async function uploadDocumentBulk(
     }
 
     const v = validateUpload("document", { name: file.name, bytes: file.bytes });
-    if (!v.ok) return fail(v.error);
+    if (!v.ok) return fail(v.error, "businessErrors.documents.upload");
 
     const path = `_shared/${Date.now()}-${v.safeFileName}`;
     const { key } = await uploadFile("documents", path, file.bytes, {
@@ -242,6 +244,8 @@ export async function uploadDocumentBulk(
       },
     });
     await notifyEmployees(targetIds, {
+      translationKey: "notificationTemplates.documentAvailable",
+      translationParams: { title: data.title },
       type: data.documentType === "BENEFITS" ? "BENEFITS" : "COMPANY",
       title: "New document available",
       message: `A new document "${data.title}" was added to your documents.`,
@@ -271,12 +275,12 @@ export async function deleteDocument(id: string): Promise<ActionResult> {
 
     const doc = await db.document.findUnique({ where: { id } });
     if (!doc) {
-      return fail("That document no longer exists. Refresh the page and try again.");
+      return fail("That document no longer exists. Refresh the page and try again.", "errors.documents.thatDocumentNoLongerExistsRefresh_a242d");
     }
 
     const isUploader = doc.uploadedById === user.id;
     if (!isAdmin && !isUploader) {
-      return fail("You can only delete documents you uploaded yourself. Ask an admin if you need this removed.");
+      return fail("You can only delete documents you uploaded yourself. Ask an admin if you need this removed.", "errors.documents.youCanOnlyDeleteDocumentsYou_b863b");
     }
 
     await db.document.delete({ where: { id } });

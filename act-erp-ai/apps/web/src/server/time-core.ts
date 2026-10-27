@@ -148,6 +148,8 @@ async function reportAutoClosed(employeeId: string, entryIds: string[], trigger:
     priority: "HIGH",
   });
   await notifyEmployees([employeeId], {
+      translationKey: "notificationTemplates.shiftAutoClosed",
+      translationParams: { hours: MAX_SHIFT_MINUTES / 60 },
     type: "TIME",
     title: "A previous shift was left open",
     message: `Your earlier shift ran past ${MAX_SHIFT_MINUTES / 60} hours and was closed automatically. An admin will review the hours.`,

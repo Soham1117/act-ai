@@ -30,3 +30,5 @@ __pycache__/
 
 # Generated pdf.js worker (copied from node_modules by postinstall)
 apps/web/public/pdf.worker.min.mjs
+
+SERVER_ACCESS.local.md

@@ -380,6 +380,49 @@ export async function endContractWorker(
   }
 }
 
+/** Pause/resume a worker, retaining the assignment dates and all history. */
+export async function setContractWorkerActive(
+  id: string,
+  isActive: boolean,
+): Promise<ActionResult<{ id: string; closedOpenEntries: number }>> {
+  const admin = await requireAdmin();
+  try {
+    const active = z.boolean().parse(isActive);
+    const status = active ? "ACTIVE" : "INACTIVE";
+    const result = await withContractWorkerLock(id, async (tx) => {
+      const worker = await tx.contractWorker.findUnique({ where: { id } });
+      if (!worker) return { error: "That worker no longer exists. Refresh the page." };
+      if (worker.status === "ENDED") return { error: "Reactivate the ended assignment before changing active status." };
+      if (worker.status === status) return { worker, changed: false, closedIds: [] };
+      const open = active ? [] : await tx.contractTimeEntry.findMany({
+        where: { contractWorkerId: id, status: { in: ["ACTIVE", "ON_BREAK"] } },
+        include: { breaks: true },
+      });
+      const now = new Date();
+      for (const entry of open) {
+        await closeOpenContractEntry(tx, entry, now, {
+          lastEditedById: admin.id,
+          editReason: "Clocked out because the worker was made inactive by an admin.",
+        });
+      }
+      await tx.contractWorker.update({ where: { id }, data: { status } });
+      return { worker, changed: true, closedIds: open.map((entry) => entry.id) };
+    });
+    if ("error" in result) return fail(result.error!);
+    if (result.changed) {
+      await audit({
+        action: active ? "contract.worker.activate" : "contract.worker.deactivate",
+        resource: `ContractWorker:${id}`,
+        diff: { workerId: result.worker.workerId, from: result.worker.status, to: status, closedTimeEntryIds: result.closedIds },
+      });
+    }
+    revalidateAll();
+    return ok({ id, closedOpenEntries: result.closedIds.length });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
 /** Set an ENDED worker back to ACTIVE. Optionally set a new end date (`YYYY-MM-DD`); default clears it. */
 export async function reactivateContractWorker(
   id: string,
@@ -393,15 +436,18 @@ export async function reactivateContractWorker(
       if ("error" in e) return fail(e.error);
       end = e.date;
     }
-    const worker = await db.contractWorker.findUnique({ where: { id } });
-    if (!worker) return fail("That worker no longer exists. Refresh the page.");
-    if (end && end.getTime() < worker.startDate.getTime()) {
-      return fail("The end date can't be before the start date.");
-    }
-    await db.contractWorker.update({
-      where: { id },
-      data: { status: "ACTIVE", endDate: end },
+    const result = await withContractWorkerLock(id, async (tx) => {
+      const worker = await tx.contractWorker.findUnique({ where: { id } });
+      if (!worker) return { error: "That worker no longer exists. Refresh the page." };
+      if (worker.status === "INACTIVE") return { error: "Use Activate for an inactive worker to keep the assignment dates unchanged." };
+      if (end && end.getTime() < worker.startDate.getTime()) {
+        return { error: "The end date can't be before the start date." };
+      }
+      await tx.contractWorker.update({ where: { id }, data: { status: "ACTIVE", endDate: end } });
+      return { worker };
     });
+    if ("error" in result) return fail(result.error!);
+    const worker = result.worker;
     await audit({
       action: "contract.worker.reactivate",
       resource: `ContractWorker:${id}`,

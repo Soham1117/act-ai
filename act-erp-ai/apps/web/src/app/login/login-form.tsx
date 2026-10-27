@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Loader2, Mail } from "lucide-react";
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { requestLoginChallenge, verifyLoginChallenge } from "@/server/actions/auth";
 import { runAction } from "@/lib/toast-action";
+import { usePortalLanguage } from "@/components/portal-language";
 
 /** Only same-site paths; never follow an external `next` URL. */
 function safeNext(next: string | undefined): string {
@@ -21,11 +22,8 @@ function safeNext(next: string | undefined): string {
     : "/";
 }
 
-const credsSchema = z.object({
-  identifier: z.string().min(1, "Enter your email or username"),
-  password: z.string().min(1, "Required"),
-});
-type CredsValues = z.infer<typeof credsSchema>;
+type CredsValues = { identifier: string; password: string };
+type LoginFailure = { ok: false; error: string; errorCode?: string; errorParams?: Record<string, string | number> };
 
 export function LoginForm({
   next,
@@ -34,12 +32,24 @@ export function LoginForm({
   next?: string;
   initialError?: string;
 }) {
+  const { t, errorMessage } = usePortalLanguage();
+  const credsSchema = useMemo(() => z.object({
+    identifier: z.string().min(1, t("auth.login.enterIdentifier")),
+    password: z.string().min(1, t("auth.login.required")),
+  }), [t]);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [showPw, setShowPw] = useState(false);
-  const [error, setError] = useState<string | null>(initialError ?? null);
+  const [failure, setFailure] = useState<LoginFailure | null>(() =>
+    initialError ? { ok: false, error: "", errorCode: "auth.login.initialError" } : null,
+  );
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  const error = failure
+    ? failure.errorCode === "auth.login.initialError"
+      ? t("auth.login.initialError")
+      : errorMessage(failure)
+    : null;
 
   const form = useForm<CredsValues>({
     resolver: zodResolver(credsSchema),
@@ -47,11 +57,11 @@ export function LoginForm({
   });
 
   function onSubmitCreds(values: CredsValues) {
-    setError(null);
+    setFailure(null);
     startTransition(async () => {
       const res = await runAction(() => requestLoginChallenge(values.identifier, values.password));
       if (!res.ok) {
-        setError(res.error);
+        setFailure(res);
         return;
       }
       if (!res.challengeId) {
@@ -66,11 +76,11 @@ export function LoginForm({
   function onSubmitCode(e: React.FormEvent) {
     e.preventDefault();
     if (!challengeId) return;
-    setError(null);
+    setFailure(null);
     startTransition(async () => {
       const res = await runAction(() => verifyLoginChallenge(challengeId, code));
       if (!res.ok) {
-        setError(res.error);
+        setFailure(res);
         return;
       }
       router.refresh();
@@ -89,11 +99,11 @@ export function LoginForm({
         <div className="flex flex-col items-center gap-2 text-center">
           <Mail className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm">
-            We emailed a 6-digit code to your personal email. It expires in 10 minutes.
+          {t("auth.login.twoFactorEmail")}
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="code">Code</Label>
+          <Label htmlFor="code">{t("auth.login.code")}</Label>
           <Input
             id="code"
             inputMode="numeric"
@@ -107,18 +117,18 @@ export function LoginForm({
         </div>
         <Button type="submit" className="w-full" disabled={pending || code.length !== 6}>
           {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Verify and sign in
+          {t("auth.login.verify")}
         </Button>
         <button
           type="button"
           onClick={() => {
             setChallengeId(null);
             setCode("");
-            setError(null);
+            setFailure(null);
           }}
           className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
         >
-          Use a different account
+          {t("auth.login.differentAccount")}
         </button>
       </form>
     );
@@ -133,7 +143,7 @@ export function LoginForm({
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="identifier">Email or username</Label>
+        <Label htmlFor="identifier">{t("auth.login.identifier")}</Label>
         <Input
           id="identifier"
           type="text"
@@ -144,19 +154,19 @@ export function LoginForm({
         />
         {form.formState.errors.identifier && (
           <p className="text-xs text-destructive">
-            {form.formState.errors.identifier.message}
+            {t("auth.login.enterIdentifier")}
           </p>
         )}
       </div>
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t("auth.login.password")}</Label>
           <Link
             href="/auth/forgot-password"
             className="text-xs text-muted-foreground hover:text-primary hover:underline"
           >
-            Forgot password?
+            {t("auth.login.forgotPassword")}
           </Link>
         </div>
         <div className="relative">
@@ -170,21 +180,21 @@ export function LoginForm({
             type="button"
             onClick={() => setShowPw((s) => !s)}
             className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            aria-label={showPw ? "Hide password" : "Show password"}
+            aria-label={showPw ? t("auth.login.hidePassword") : t("auth.login.showPassword")}
           >
             {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
         {form.formState.errors.password && (
           <p className="text-xs text-destructive">
-            {form.formState.errors.password.message}
+            {t("auth.login.required")}
           </p>
         )}
       </div>
 
       <Button type="submit" className="w-full" disabled={pending}>
         {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Sign in
+        {t("auth.login.submit")}
       </Button>
     </form>
   );

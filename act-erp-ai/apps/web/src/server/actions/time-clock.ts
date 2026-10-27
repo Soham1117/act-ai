@@ -46,14 +46,14 @@ export async function reviewTimeEntry(
     const data = reviewSchema.parse(input);
     const notes = data.notes?.trim() || null;
     if (data.decision === "REJECTED" && !notes) {
-      return fail("Enter a reason for rejecting this entry. The employee will see it.");
+      return fail("Enter a reason for rejecting this entry. The employee will see it.", "errors.time-clock.enterAReasonForRejectingThis_ab30f");
     }
 
     const existing = await db.timeEntry.findUnique({
       where: { id: data.timeEntryId },
       select: { employeeId: true },
     });
-    if (!existing) return fail("That time entry no longer exists. Refresh the page.");
+    if (!existing) return fail("That time entry no longer exists. Refresh the page.", "errors.time-clock.thatTimeEntryNoLongerExists_fb2dd");
 
     const result = await withEmployeeLock(existing.employeeId, async (tx) => {
       const entry = await tx.timeEntry.findUnique({ where: { id: data.timeEntryId } });
@@ -127,7 +127,7 @@ export async function bulkReviewTimeEntries(
     const data = bulkSchema.parse(input);
     const notes = data.notes?.trim() || null;
     if (data.decision === "REJECTED" && !notes) {
-      return fail("Enter a reason for rejecting these entries. Employees will see it.");
+      return fail("Enter a reason for rejecting these entries. Employees will see it.", "errors.time-clock.enterAReasonForRejectingThese_86970");
     }
     const ids = [...new Set(data.ids)];
 
@@ -151,7 +151,7 @@ export async function bulkReviewTimeEntries(
       }),
     );
     if (changed.length === 0) {
-      return fail("None of the selected entries are pending review any more. Refresh the page.");
+      return fail("None of the selected entries are pending review any more. Refresh the page.", "errors.time-clock.noneOfTheSelectedEntriesAre_9fada");
     }
     const committedDecision = changed[0]!.approvalStatus as "APPROVED" | "REJECTED";
 

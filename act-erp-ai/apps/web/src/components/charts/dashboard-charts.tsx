@@ -32,6 +32,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
+import { usePortalLanguage } from "@/components/portal-language";
 
 const CHART_PALETTE = [
   "var(--color-chart-1)",
@@ -89,15 +90,22 @@ export function HoursByDeptChart({
 // Hours trend (area)
 // ─────────────────────────────────────────────────────────────────────
 
-export function HoursTrendChart({ data }: { data: Array<{ week: string; hours: number }> }) {
+export function HoursTrendChart({
+  data,
+}: {
+  data: Array<{ week: string; hours: number }>;
+}) {
+  const { t } = usePortalLanguage();
   if (data.length === 0) return <Empty label="trend" />;
-  const config: ChartConfig = { hours: { label: "Hours", color: "hsl(var(--primary))" } };
+  const config: ChartConfig = {
+    hours: { label: t("home.charts.hours"), color: "hsl(var(--primary))" },
+  };
   return (
     <ChartContainer config={config} className="h-60 w-full">
       <AreaChart data={data}>
         <defs>
           <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.45} />
+            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.45} />
             <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
           </linearGradient>
         </defs>
@@ -184,7 +192,11 @@ export function RadarSpiderChart({
   };
   return (
     <ChartContainer config={config} className="h-72 w-full">
-      <RadarChart data={data} outerRadius="85%" margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+      <RadarChart
+        data={data}
+        outerRadius="85%"
+        margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+      >
         <PolarGrid strokeOpacity={0.35} />
         <PolarAngleAxis dataKey={nameKey} tick={{ fontSize: 11 }} />
         <PolarRadiusAxis tick={false} axisLine={false} />
@@ -215,6 +227,7 @@ export function CategoryBar({
   labelKey: string;
   valueKey: string;
 }) {
+  const { formatCurrency } = usePortalLanguage();
   if (data.length === 0) return <Empty />;
   const max = Math.max(...data.map((d) => Number(d[valueKey])), 1);
   return (
@@ -226,7 +239,7 @@ export function CategoryBar({
           <li key={String(d[labelKey])} className="space-y-1">
             <div className="flex items-baseline justify-between text-xs">
               <span className="text-muted-foreground">{String(d[labelKey])}</span>
-              <span className="font-mono tabular-nums">${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+              <span className="font-mono tabular-nums">{formatCurrency(v)}</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-muted">
               <div
@@ -253,13 +266,22 @@ export function HeadcountGrowthChart({
 }: {
   data: Array<{ month: string; count: number }>;
 }) {
+  const { t } = usePortalLanguage();
   if (data.length === 0) return <Empty />;
-  const config: ChartConfig = { count: { label: "Headcount", color: "hsl(var(--chart-1))" } };
+  const config: ChartConfig = {
+    count: { label: t("home.charts.headcount"), color: "hsl(var(--chart-1))" },
+  };
   return (
     <ChartContainer config={config} className="h-52 w-full">
       <LineChart data={data}>
         <CartesianGrid vertical={false} strokeOpacity={0.2} />
-        <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={10} interval={Math.floor(data.length / 8)} />
+        <XAxis
+          dataKey="month"
+          tickLine={false}
+          axisLine={false}
+          fontSize={10}
+          interval={Math.floor(data.length / 8)}
+        />
         <YAxis tickLine={false} axisLine={false} fontSize={10} width={24} />
         <ChartTooltip content={<ChartTooltipContent />} />
         <Line
@@ -284,24 +306,32 @@ export function WeeklyHoursChart({
   /** Each item: a day in the period. `weekday` (0=Sun..6=Sat) drives the color. */
   data: Array<{ day: string; hours: number; weekday: number }>;
 }) {
+  const { t, locale } = usePortalLanguage();
   const total = data.reduce((s, d) => s + d.hours, 0);
   if (total === 0) return <Empty label="hours" />;
   // Distinct color per weekday so Mon/Tue/.../Sun each have their own hue.
-  const colorFor = (weekday: number) =>
-    `hsl(var(--chart-${(weekday % 8) + 1}))`;
+  const colorFor = (weekday: number) => `hsl(var(--chart-${(weekday % 8) + 1}))`;
   const config: ChartConfig = {
-    hours: { label: "Hours", color: "hsl(var(--chart-1))" },
+    hours: { label: t("home.charts.hours"), color: "hsl(var(--chart-1))" },
   };
   return (
     <ChartContainer config={config} className="h-44 w-full">
       <BarChart data={data}>
         <CartesianGrid vertical={false} strokeOpacity={0.2} />
-        <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={10} interval={0} />
+        <XAxis
+          dataKey="day"
+          tickLine={false}
+          axisLine={false}
+          fontSize={10}
+          interval={0}
+        />
         <YAxis tickLine={false} axisLine={false} fontSize={11} width={24} />
         <ChartTooltip
           content={
             <ChartTooltipContent
-              formatter={(value) => `${Number(value).toFixed(1)}h`}
+              formatter={(value) =>
+                `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Number(value))}h`
+              }
             />
           }
         />
@@ -316,9 +346,10 @@ export function WeeklyHoursChart({
 }
 
 function Empty({ label = "data" }: { label?: string }) {
+  const { t } = usePortalLanguage();
   return (
     <div className="grid h-full min-h-40 place-items-center text-xs text-muted-foreground">
-      No {label} yet.
+      {t(`home.charts.empty.${label}`)}
     </div>
   );
 }
@@ -338,22 +369,31 @@ export function ClockedVsScheduledChart({
     scheduledTodayTotal: number;
   };
 }) {
+  const { t, locale } = usePortalLanguage();
   const config: ChartConfig = {
-    clockedIn: { label: "Clocked in", color: "hsl(var(--chart-1))" },
-    scheduledNow: { label: "Scheduled now", color: "hsl(var(--chart-3))" },
+    clockedIn: { label: t("home.charts.clockedIn"), color: "hsl(var(--chart-1))" },
+    scheduledNow: { label: t("home.charts.scheduledNow"), color: "hsl(var(--chart-3))" },
   };
   const radial = [
-    { name: "Scheduled now", value: data.scheduledNow, fill: "hsl(var(--chart-3))" },
-    { name: "Clocked in", value: data.clockedIn, fill: "hsl(var(--chart-1))" },
+    {
+      name: t("home.charts.scheduledNow"),
+      value: data.scheduledNow,
+      fill: "hsl(var(--chart-3))",
+    },
+    {
+      name: t("home.charts.clockedIn"),
+      value: data.clockedIn,
+      fill: "hsl(var(--chart-1))",
+    },
   ];
   const coverage =
     data.scheduledNow > 0
       ? Math.round((data.clockedIn / data.scheduledNow) * 100)
       : data.clockedIn > 0
-      ? 100
-      : 0;
+        ? 100
+        : 0;
   return (
-    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center">
+    <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <ChartContainer config={config} className="mx-auto aspect-square h-44 w-44">
         <RadialBarChart
           data={radial}
@@ -381,7 +421,7 @@ export function ClockedVsScheduledChart({
                   className="fill-foreground"
                   style={{ fontSize: 28, fontWeight: 700 }}
                 >
-                  {coverage}%
+                  {new Intl.NumberFormat(locale).format(coverage)}%
                 </tspan>
                 <tspan
                   x="50%"
@@ -389,7 +429,7 @@ export function ClockedVsScheduledChart({
                   className="fill-muted-foreground"
                   style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}
                 >
-                  Coverage
+                  {t("home.charts.coverage")}
                 </tspan>
               </text>
             )}
@@ -397,10 +437,26 @@ export function ClockedVsScheduledChart({
         </RadialBarChart>
       </ChartContainer>
       <div className="grid grid-cols-2 gap-2">
-        <Tile label="Clocked in" value={data.clockedIn} tone="primary" />
-        <Tile label="Scheduled now" value={data.scheduledNow} tone="muted" />
-        <Tile label="No-shows" value={data.noShow} tone={data.noShow > 0 ? "danger" : "muted"} />
-        <Tile label="Walk-ins" value={data.unscheduledClockedIn} tone="muted" />
+        <Tile
+          label={t("home.charts.clockedIn")}
+          value={new Intl.NumberFormat(locale).format(data.clockedIn)}
+          tone="primary"
+        />
+        <Tile
+          label={t("home.charts.scheduledNow")}
+          value={new Intl.NumberFormat(locale).format(data.scheduledNow)}
+          tone="muted"
+        />
+        <Tile
+          label={t("home.charts.noShows")}
+          value={new Intl.NumberFormat(locale).format(data.noShow)}
+          tone={data.noShow > 0 ? "danger" : "muted"}
+        />
+        <Tile
+          label={t("home.charts.walkIns")}
+          value={new Intl.NumberFormat(locale).format(data.unscheduledClockedIn)}
+          tone="muted"
+        />
       </div>
     </div>
   );
@@ -419,11 +475,13 @@ function Tile({
     tone === "primary"
       ? "text-primary"
       : tone === "danger"
-      ? "text-destructive"
-      : "text-foreground";
+        ? "text-destructive"
+        : "text-foreground";
   return (
     <div className="rounded-md border bg-card px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
       <p className={`mt-0.5 text-xl font-semibold tabular-nums ${toneCls}`}>{value}</p>
     </div>
   );
@@ -436,20 +494,33 @@ function Tile({
 export function DeptUtilizationChart({
   data,
 }: {
-  data: Array<{ department: string; headcount: number; scheduled: number; worked: number; utilization: number }>;
+  data: Array<{
+    department: string;
+    headcount: number;
+    scheduled: number;
+    worked: number;
+    utilization: number;
+  }>;
 }) {
+  const { t, locale } = usePortalLanguage();
   if (data.length === 0) return <Empty label="utilization" />;
   const config: ChartConfig = {
-    scheduled: { label: "Scheduled hrs", color: "hsl(var(--chart-2))" },
-    worked: { label: "Worked hrs", color: "hsl(var(--chart-1))" },
-    utilization: { label: "Utilization %", color: "hsl(var(--chart-5))" },
+    scheduled: { label: t("home.charts.scheduledHours"), color: "hsl(var(--chart-2))" },
+    worked: { label: t("home.charts.workedHours"), color: "hsl(var(--chart-1))" },
+    utilization: { label: t("home.charts.utilization"), color: "hsl(var(--chart-5))" },
   };
   return (
     <ChartContainer config={config} className="h-64 w-full">
       <ComposedChart data={data}>
         <CartesianGrid vertical={false} strokeOpacity={0.2} />
         <XAxis dataKey="department" tickLine={false} axisLine={false} fontSize={11} />
-        <YAxis yAxisId="hours" tickLine={false} axisLine={false} fontSize={11} width={32} />
+        <YAxis
+          yAxisId="hours"
+          tickLine={false}
+          axisLine={false}
+          fontSize={11}
+          width={32}
+        />
         <YAxis
           yAxisId="pct"
           orientation="right"
@@ -457,7 +528,7 @@ export function DeptUtilizationChart({
           axisLine={false}
           fontSize={11}
           width={32}
-          tickFormatter={(v) => `${v}%`}
+          tickFormatter={(v) => `${new Intl.NumberFormat(locale).format(v)}%`}
         />
         <ChartTooltip content={<ChartTooltipContent />} />
         <ChartLegend content={<ChartLegendContent />} />
@@ -501,10 +572,11 @@ export function PayrollTrendChart({
 }: {
   data: Array<{ period: string; cost: number; hours: number }>;
 }) {
+  const { t, locale, formatCurrency } = usePortalLanguage();
   if (data.length === 0) return <Empty label="payroll" />;
   const config: ChartConfig = {
-    cost: { label: "Estimated cost", color: "hsl(var(--chart-1))" },
-    hours: { label: "Hours", color: "hsl(var(--chart-4))" },
+    cost: { label: t("home.charts.estimatedCost"), color: "hsl(var(--chart-1))" },
+    hours: { label: t("home.charts.hours"), color: "hsl(var(--chart-4))" },
   };
   return (
     <ChartContainer config={config} className="h-60 w-full">
@@ -523,16 +595,23 @@ export function PayrollTrendChart({
           axisLine={false}
           fontSize={11}
           width={48}
-          tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+          tickFormatter={(v) => `${formatCurrency(v / 1000, "USD")}k`}
         />
-        <YAxis yAxisId="hrs" orientation="right" tickLine={false} axisLine={false} fontSize={11} width={32} />
+        <YAxis
+          yAxisId="hrs"
+          orientation="right"
+          tickLine={false}
+          axisLine={false}
+          fontSize={11}
+          width={32}
+        />
         <ChartTooltip
           content={
             <ChartTooltipContent
               formatter={(value, name) =>
                 name === "cost"
-                  ? `$${Number(value).toLocaleString()}`
-                  : `${Number(value).toLocaleString()} hrs`
+                  ? formatCurrency(Number(value))
+                  : `${new Intl.NumberFormat(locale).format(Number(value))} ${t("home.charts.hoursShort")}`
               }
             />
           }
@@ -571,9 +650,10 @@ export function OvertimeRiskChart({
 }: {
   data: Array<{ name: string; hours: number; overtime: boolean; department: string }>;
 }) {
+  const { t, locale } = usePortalLanguage();
   if (data.length === 0) return <Empty label="hours" />;
   const config: ChartConfig = {
-    hours: { label: "Hours", color: "hsl(var(--chart-1))" },
+    hours: { label: t("home.charts.hours"), color: "hsl(var(--chart-1))" },
   };
   return (
     <ChartContainer config={config} className="h-72 w-full">
@@ -593,7 +673,12 @@ export function OvertimeRiskChart({
           x={40}
           stroke="hsl(var(--destructive))"
           strokeDasharray="4 4"
-          label={{ value: "40h", position: "top", fill: "hsl(var(--destructive))", fontSize: 10 }}
+          label={{
+            value: `${new Intl.NumberFormat(locale).format(40)}h`,
+            position: "top",
+            fill: "hsl(var(--destructive))",
+            fontSize: 10,
+          }}
         />
         <Bar
           dataKey="hours"
@@ -622,6 +707,7 @@ export function ApprovalsAgingChart({
 }: {
   data: Array<Record<string, string | number>>;
 }) {
+  const { t } = usePortalLanguage();
   const queues = ["Timesheets", "Leave", "Requests", "Reimbursements"] as const;
   const total = data.reduce(
     (s, row) => s + queues.reduce((q, k) => q + Number(row[k] ?? 0), 0),
@@ -629,7 +715,13 @@ export function ApprovalsAgingChart({
   );
   if (total === 0) return <Empty label="pending items" />;
   const config: ChartConfig = Object.fromEntries(
-    queues.map((q, i) => [q, { label: q, color: `hsl(var(--chart-${i + 1}))` }]),
+    queues.map((q, i) => [
+      q,
+      {
+        label: t(`home.charts.queue.${q.toLowerCase()}`),
+        color: `hsl(var(--chart-${i + 1}))`,
+      },
+    ]),
   );
   return (
     <ChartContainer config={config} className="h-60 w-full">
@@ -664,6 +756,7 @@ export function LeaveHeatmap({
 }: {
   data: Array<{ date: string; label: string; count: number; weekday: number }>;
 }) {
+  const { t, locale } = usePortalLanguage();
   if (data.length === 0) return <Empty label="leave" />;
   const max = Math.max(...data.map((d) => d.count), 1);
   // Pad start so columns align with weekday (Mon=1 .. Sun=0 -> shift Sun to end).
@@ -676,9 +769,9 @@ export function LeaveHeatmap({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-        <span>Next 30 days</span>
+        <span>{t("home.charts.next30Days")}</span>
         <span className="flex items-center gap-1.5">
-          Less
+          {t("home.charts.less")}
           {[0.15, 0.35, 0.6, 0.85, 1].map((o, i) => (
             <span
               key={i}
@@ -686,11 +779,15 @@ export function LeaveHeatmap({
               style={{ background: `hsl(var(--chart-1) / ${o})` }}
             />
           ))}
-          More
+          {t("home.charts.more")}
         </span>
       </div>
       <div className="grid grid-cols-7 gap-1.5">
-        {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+        {Array.from({ length: 7 }, (_, i) =>
+          new Intl.DateTimeFormat(locale, { timeZone: "UTC", weekday: "narrow" }).format(
+            new Date(Date.UTC(2024, 0, i + 1)),
+          ),
+        ).map((d, i) => (
           <div key={i} className="text-center text-[10px] text-muted-foreground">
             {d}
           </div>
@@ -706,7 +803,10 @@ export function LeaveHeatmap({
                     ? `hsl(var(--chart-1) / ${0.15 + (c.count! / max) * 0.85})`
                     : "hsl(var(--muted) / 0.4)",
               }}
-              title={`${c.label}: ${c.count} on leave`}
+              title={t("home.charts.leaveHeatmapTooltip", {
+                date: c.label ?? "",
+                count: new Intl.NumberFormat(locale).format(c.count!),
+              })}
             >
               <span className="absolute inset-0 grid place-items-center text-[10px] font-medium tabular-nums">
                 {c.count && c.count > 0 ? c.count : ""}
@@ -738,6 +838,7 @@ export function RequestsFunnel({
     medianHours: number;
   }>;
 }) {
+  const { t, locale, enumLabel } = usePortalLanguage();
   if (data.length === 0) return <Empty label="requests" />;
   const max = Math.max(...data.map((d) => d.total), 1);
   return (
@@ -753,18 +854,29 @@ export function RequestsFunnel({
         return (
           <li key={d.type} className="space-y-1">
             <div className="flex items-baseline justify-between text-xs">
-              <span className="font-medium capitalize">{d.type.toLowerCase()}</span>
+              <span className="font-medium">
+                {enumLabel(d.type.replace(/\s+/g, "_").toUpperCase())}
+              </span>
               <span className="font-mono tabular-nums text-muted-foreground">
-                {d.total} · ~{d.medianHours}h to decide
+                {new Intl.NumberFormat(locale).format(d.total)} ·{" "}
+                {t("home.charts.toDecide", {
+                  hours: new Intl.NumberFormat(locale).format(d.medianHours),
+                })}
               </span>
             </div>
             <div className="h-3 overflow-hidden rounded-full bg-muted">
-              <div className="flex h-full transition-[width] duration-700" style={{ width: `${widthPct}%` }}>
+              <div
+                className="flex h-full transition-[width] duration-700"
+                style={{ width: `${widthPct}%` }}
+              >
                 {segments.map((s) =>
                   s.v > 0 ? (
                     <div
                       key={s.key}
-                      title={`${s.key}: ${s.v}`}
+                      title={t("home.charts.segmentCount", {
+                        label: t(`home.charts.${s.key}`),
+                        count: new Intl.NumberFormat(locale).format(s.v),
+                      })}
                       style={{
                         flex: s.v,
                         background: s.color,
@@ -790,8 +902,11 @@ export function PersonalHoursTrend({
 }: {
   data: Array<{ week: string; hours: number }>;
 }) {
+  const { t } = usePortalLanguage();
   if (data.length === 0) return <Empty label="hours" />;
-  const config: ChartConfig = { hours: { label: "Hours", color: "hsl(var(--chart-2))" } };
+  const config: ChartConfig = {
+    hours: { label: t("home.charts.hours"), color: "hsl(var(--chart-2))" },
+  };
   return (
     <ChartContainer config={config} className="h-52 w-full">
       <AreaChart data={data}>
@@ -809,7 +924,12 @@ export function PersonalHoursTrend({
           y={40}
           stroke="hsl(var(--muted-foreground))"
           strokeDasharray="3 3"
-          label={{ value: "40h", position: "right", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+          label={{
+            value: "40h",
+            position: "right",
+            fontSize: 10,
+            fill: "hsl(var(--muted-foreground))",
+          }}
         />
         <Area
           type="monotone"
@@ -834,11 +954,12 @@ export function ScheduledVsWorkedChart({
 }: {
   data: Array<{ day: string; scheduled: number; worked: number }>;
 }) {
+  const { t, locale } = usePortalLanguage();
   const total = data.reduce((s, d) => s + d.scheduled + d.worked, 0);
   if (total === 0) return <Empty label="hours" />;
   const config: ChartConfig = {
-    scheduled: { label: "Scheduled", color: "hsl(var(--chart-2))" },
-    worked: { label: "Worked", color: "hsl(var(--chart-1))" },
+    scheduled: { label: t("home.charts.scheduled"), color: "hsl(var(--chart-2))" },
+    worked: { label: t("home.charts.worked"), color: "hsl(var(--chart-1))" },
   };
   return (
     <ChartContainer config={config} className="h-52 w-full">
@@ -849,7 +970,9 @@ export function ScheduledVsWorkedChart({
         <ChartTooltip
           content={
             <ChartTooltipContent
-              formatter={(value) => `${Number(value).toFixed(1)}h`}
+              formatter={(value) =>
+                `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Number(value))}h`
+              }
             />
           }
         />
@@ -886,17 +1009,31 @@ export function LeaveBalanceDonut({
   approved: number;
   remaining: number;
 }) {
+  const { t, locale } = usePortalLanguage();
   const total = taken + approved + remaining;
   if (total === 0) return <Empty label="leave" />;
   const data = [
-    { name: "Taken", value: taken, fill: "hsl(var(--chart-1))" },
-    { name: "Approved upcoming", value: approved, fill: "hsl(var(--chart-3))" },
-    { name: "Remaining", value: remaining, fill: "hsl(var(--chart-2))" },
+    { name: t("home.charts.taken"), value: taken, fill: "hsl(var(--chart-1))" },
+    {
+      name: t("home.charts.approvedUpcoming"),
+      value: approved,
+      fill: "hsl(var(--chart-3))",
+    },
+    { name: t("home.charts.remaining"), value: remaining, fill: "hsl(var(--chart-2))" },
   ];
   const config: ChartConfig = {
-    Taken: { label: "Taken", color: "hsl(var(--chart-1))" },
-    "Approved upcoming": { label: "Approved upcoming", color: "hsl(var(--chart-3))" },
-    Remaining: { label: "Remaining", color: "hsl(var(--chart-2))" },
+    [t("home.charts.taken")]: {
+      label: t("home.charts.taken"),
+      color: "hsl(var(--chart-1))",
+    },
+    [t("home.charts.approvedUpcoming")]: {
+      label: t("home.charts.approvedUpcoming"),
+      color: "hsl(var(--chart-3))",
+    },
+    [t("home.charts.remaining")]: {
+      label: t("home.charts.remaining"),
+      color: "hsl(var(--chart-2))",
+    },
   };
   return (
     <ChartContainer config={config} className="mx-auto aspect-square h-56 w-56">
@@ -920,8 +1057,13 @@ export function LeaveBalanceDonut({
             position="center"
             content={() => (
               <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                <tspan x="50%" dy="-0.4em" className="fill-foreground" style={{ fontSize: 26, fontWeight: 700 }}>
-                  {remaining}
+                <tspan
+                  x="50%"
+                  dy="-0.4em"
+                  className="fill-foreground"
+                  style={{ fontSize: 26, fontWeight: 700 }}
+                >
+                  {new Intl.NumberFormat(locale).format(remaining)}
                 </tspan>
                 <tspan
                   x="50%"
@@ -929,7 +1071,7 @@ export function LeaveBalanceDonut({
                   className="fill-muted-foreground"
                   style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}
                 >
-                  Days left
+                  {t("home.charts.daysLeft")}
                 </tspan>
               </text>
             )}
@@ -950,9 +1092,10 @@ export function PaySnapshotChart({
 }: {
   data: Array<{ period: string; estimate: number; hours: number }>;
 }) {
+  const { t, locale, formatCurrency } = usePortalLanguage();
   if (data.length === 0) return <Empty label="pay" />;
   const config: ChartConfig = {
-    estimate: { label: "Estimated $", color: "hsl(var(--chart-1))" },
+    estimate: { label: t("home.charts.estimatedPay"), color: "hsl(var(--chart-1))" },
   };
   return (
     <ChartContainer config={config} className="h-52 w-full">
@@ -964,13 +1107,15 @@ export function PaySnapshotChart({
           axisLine={false}
           fontSize={11}
           width={40}
-          tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
+          tickFormatter={(v) => `${formatCurrency(v / 1000, "USD")}k`}
         />
         <ChartTooltip
           content={
             <ChartTooltipContent
               formatter={(value, name) =>
-                name === "estimate" ? `$${Number(value).toLocaleString()}` : value
+                name === "estimate"
+                  ? formatCurrency(Number(value))
+                  : new Intl.NumberFormat(locale).format(Number(value))
               }
             />
           }
@@ -994,18 +1139,25 @@ export function PaySnapshotChart({
 export function ReimbursementTimelineChart({
   data,
 }: {
-  data: Array<{ month: string; PENDING: number; APPROVED: number; PAID: number; REJECTED: number }>;
+  data: Array<{
+    month: string;
+    PENDING: number;
+    APPROVED: number;
+    PAID: number;
+    REJECTED: number;
+  }>;
 }) {
+  const { t } = usePortalLanguage();
   const total = data.reduce(
     (s, d) => s + d.PENDING + d.APPROVED + d.PAID + d.REJECTED,
     0,
   );
   if (total === 0) return <Empty label="reimbursements" />;
   const config: ChartConfig = {
-    PENDING: { label: "Pending", color: "hsl(var(--chart-3))" },
-    APPROVED: { label: "Approved", color: "hsl(var(--chart-2))" },
-    PAID: { label: "Paid", color: "hsl(var(--chart-1))" },
-    REJECTED: { label: "Rejected", color: "hsl(var(--destructive))" },
+    PENDING: { label: t("home.charts.pending"), color: "hsl(var(--chart-3))" },
+    APPROVED: { label: t("home.charts.approved"), color: "hsl(var(--chart-2))" },
+    PAID: { label: t("home.charts.paid"), color: "hsl(var(--chart-1))" },
+    REJECTED: { label: t("home.charts.rejected"), color: "hsl(var(--destructive))" },
   };
   return (
     <ChartContainer config={config} className="h-52 w-full">
@@ -1044,18 +1196,28 @@ export function PunctualityChart({
   late: number;
   missed: number;
 }) {
+  const { t, locale } = usePortalLanguage();
   const total = onTime + late + missed;
   if (total === 0) return <Empty label="attendance" />;
   const score = Math.round((onTime / total) * 100);
   const data = [
-    { name: "On time", value: onTime, fill: "hsl(var(--chart-1))" },
-    { name: "Late", value: late, fill: "hsl(var(--chart-3))" },
-    { name: "Missed", value: missed, fill: "hsl(var(--destructive))" },
+    { name: t("home.charts.onTime"), value: onTime, fill: "hsl(var(--chart-1))" },
+    { name: t("home.charts.late"), value: late, fill: "hsl(var(--chart-3))" },
+    { name: t("home.charts.missed"), value: missed, fill: "hsl(var(--destructive))" },
   ];
   const config: ChartConfig = {
-    "On time": { label: "On time", color: "hsl(var(--chart-1))" },
-    Late: { label: "Late", color: "hsl(var(--chart-3))" },
-    Missed: { label: "Missed", color: "hsl(var(--destructive))" },
+    [t("home.charts.onTime")]: {
+      label: t("home.charts.onTime"),
+      color: "hsl(var(--chart-1))",
+    },
+    [t("home.charts.late")]: {
+      label: t("home.charts.late"),
+      color: "hsl(var(--chart-3))",
+    },
+    [t("home.charts.missed")]: {
+      label: t("home.charts.missed"),
+      color: "hsl(var(--destructive))",
+    },
   };
   return (
     <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -1078,8 +1240,13 @@ export function PunctualityChart({
             position="center"
             content={() => (
               <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                <tspan x="50%" dy="-0.4em" className="fill-foreground" style={{ fontSize: 28, fontWeight: 700 }}>
-                  {score}%
+                <tspan
+                  x="50%"
+                  dy="-0.4em"
+                  className="fill-foreground"
+                  style={{ fontSize: 28, fontWeight: 700 }}
+                >
+                  {new Intl.NumberFormat(locale).format(score)}%
                 </tspan>
                 <tspan
                   x="50%"
@@ -1087,7 +1254,7 @@ export function PunctualityChart({
                   className="fill-muted-foreground"
                   style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1 }}
                 >
-                  On time
+                  {t("home.charts.onTime")}
                 </tspan>
               </text>
             )}
@@ -1101,12 +1268,16 @@ export function PunctualityChart({
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.fill }} />
               {d.name}
             </span>
-            <span className="font-mono tabular-nums">{d.value}</span>
+            <span className="font-mono tabular-nums">
+              {new Intl.NumberFormat(locale).format(d.value)}
+            </span>
           </li>
         ))}
         <li className="flex items-center justify-between gap-3 border-t pt-2 text-xs text-muted-foreground">
-          <span>Total scheduled days</span>
-          <span className="font-mono tabular-nums">{total}</span>
+          <span>{t("home.charts.totalScheduledDays")}</span>
+          <span className="font-mono tabular-nums">
+            {new Intl.NumberFormat(locale).format(total)}
+          </span>
         </li>
       </ul>
     </div>

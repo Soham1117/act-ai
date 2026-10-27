@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Loader2, LogOut, Pencil, Plus, RotateCcw, UserX } from "lucide-react";
+import { KeyRound, Loader2, LogOut, Pencil, Plus, RotateCcw, UserX, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import {
   reactivateContractWorker,
   resetContractWorkerKioskPin,
   updateContractWorker,
+  setContractWorkerActive,
 } from "@/server/actions/contract-workers";
 import { selectClass, type AgencyOption, type JobCodeOption, type WorkerRow } from "./shared";
 
@@ -195,6 +196,48 @@ export function WorkerFormDialog({
             <Button onClick={submit} disabled={pending}>
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {worker ? "Save changes" : "Add worker"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/** Temporary pause/resume; separate from ending an assignment. */
+export function WorkerActiveButton({ worker }: { worker: WorkerRow }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const active = worker.status === "ACTIVE";
+  const label = active ? "Make inactive" : "Activate";
+  return (
+    <>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} disabled={pending}>
+        {active ? <Pause className="mr-1 h-3.5 w-3.5" /> : <RotateCcw className="mr-1 h-3.5 w-3.5" />}
+        {label}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{label}: {worker.name}?</DialogTitle>
+            <DialogDescription>
+              {active
+                ? "The worker cannot clock in while inactive. The assignment dates and history are kept. Any open shift is clocked out for approval. You can activate them again later."
+                : "The worker becomes active again with the same assignment dates. They can clock in within those dates."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Cancel</Button>
+            <Button disabled={pending} onClick={() => startTransition(async () => {
+              const res = await runAction(() => setContractWorkerActive(worker.id, !active));
+              if (!toastAction(res)) return;
+              toast.success(`${worker.name} ${active ? "made inactive" : "activated"}${res.closedOpenEntries ? ". Open shifts closed for approval." : ""}`);
+              setOpen(false);
+              router.refresh();
+            })}>
+              {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              {label}
             </Button>
           </DialogFooter>
         </DialogContent>

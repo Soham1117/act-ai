@@ -74,36 +74,54 @@ export async function submitLeaveRequest(
   input: z.infer<typeof submitSchema>,
 ): Promise<ActionResult<{ id: string; totalDays: number }>> {
   const w = await writableOrFail();
-  if ("error" in w) return fail(w.error);
+  if ("error" in w) return fail(w.error, "common.readOnly");
   const user = w.user;
 
   try {
     const data = submitSchema.parse(input);
 
-    const onBehalf = !!data.onBehalfOfEmployeeId && data.onBehalfOfEmployeeId !== user.employeeId;
+    const onBehalf =
+      !!data.onBehalfOfEmployeeId && data.onBehalfOfEmployeeId !== user.employeeId;
     if (onBehalf && user.role !== "ADMIN") {
-      return fail("Only admins can create leave for another employee.");
+      return fail(
+        "Only admins can create leave for another employee.",
+        "errors.leave.onlyAdminsCanCreateLeaveFor_05f0f",
+      );
     }
     const employeeId = onBehalf ? data.onBehalfOfEmployeeId! : user.employeeId;
     if (!employeeId) {
       return fail(
         "Your account has no employee profile yet. Ask an admin to create one before you can submit leave.",
+        "errors.leave.yourAccountHasNoEmployeeProfile_0ab21",
       );
     }
     const adminOverride = user.role === "ADMIN" && onBehalf;
 
     const start = parseDateOnly(data.startDate);
     const end = parseDateOnly(data.endDate);
-    if (!start || !end) return fail("Enter valid start and end dates.");
+    if (!start || !end)
+      return fail(
+        "Enter valid start and end dates.",
+        "errors.leave.enterValidStartAndEndDates_0926c",
+      );
     if (end < start) {
-      return fail("The end date must be on or after the start date. Adjust the dates and try again.");
+      return fail(
+        "The end date must be on or after the start date. Adjust the dates and try again.",
+        "errors.leave.theEndDateMustBeOn_02af6",
+      );
     }
     if ((end.getTime() - start.getTime()) / DAY_MS > 366) {
-      return fail("Leave requests cannot span more than one year. Split it into separate requests.");
+      return fail(
+        "Leave requests cannot span more than one year. Split it into separate requests.",
+        "errors.leave.leaveRequestsCannotSpanMoreThan_e148a",
+      );
     }
     const today = businessDateOnly();
     if (start < today && !adminOverride) {
-      return fail("Start date cannot be in the past. Pick today or a later date.");
+      return fail(
+        "Start date cannot be in the past. Pick today or a later date.",
+        "errors.leave.startDateCannotBeInThe_75736",
+      );
     }
 
     const range = {
@@ -116,11 +134,21 @@ export async function submitLeaveRequest(
     if (totalDays <= 0) {
       return fail(
         "That range has no working days (weekends are not counted). Pick at least one weekday.",
+        "errors.leave.thatRangeHasNoWorkingDays_020d6",
       );
     }
-    const noticeDays = Math.max(0, Math.round((start.getTime() - today.getTime()) / DAY_MS));
+    const noticeDays = Math.max(
+      0,
+      Math.round((start.getTime() - today.getTime()) / DAY_MS),
+    );
 
-    type TxResult = { error: string } | { id: string; name: string };
+    type TxResult =
+      | {
+          error: string;
+          errorCode?: string;
+          errorParams?: Record<string, string | number>;
+        }
+      | { id: string; name: string };
     const result: TxResult = await db.$transaction(
       async (tx): Promise<TxResult> => {
         const employee = await tx.employee.findUnique({
@@ -131,10 +159,17 @@ export async function submitLeaveRequest(
           return {
             error:
               "Your employee profile could not be found. Ask an admin to check your account, then try again.",
+            errorCode: "businessErrors.leave.employeeMissing",
           };
         }
-        if (employee.employmentStatus !== "ACTIVE" && employee.employmentStatus !== "ON_LEAVE") {
-          return { error: "Leave can only be requested for active employees." };
+        if (
+          employee.employmentStatus !== "ACTIVE" &&
+          employee.employmentStatus !== "ON_LEAVE"
+        ) {
+          return {
+            error: "Leave can only be requested for active employees.",
+            errorCode: "businessErrors.leave.employeeInactive",
+          };
         }
 
         const existing = await tx.leaveRequest.findMany({
@@ -149,13 +184,21 @@ export async function submitLeaveRequest(
         if (clash) {
           return {
             error: `This overlaps your ${clash.status.toLowerCase()} ${clash.leaveType.toLowerCase()} leave (${formatDateOnly(clash.startDate)} to ${formatDateOnly(clash.endDate)}). Cancel that request first or choose different dates.`,
+            errorCode: "businessErrors.leave.overlap",
+            errorParams: {
+              status: clash.status,
+              type: clash.leaveType,
+              startDate: clash.startDate.toISOString().slice(0, 10),
+              endDate: clash.endDate.toISOString().slice(0, 10),
+            },
           };
         }
 
         const balInput = await loadBalanceInput(employeeId, yearsSpanned(start, end), tx);
         if (balInput) {
           const short = balanceShortfall(balInput, data.leaveType, range);
-          if (short) return { error: short };
+          if (short)
+            return { error: short, errorCode: "businessErrors.leave.balanceShortfall" };
         }
 
         const created = await tx.leaveRequest.create({
@@ -175,7 +218,8 @@ export async function submitLeaveRequest(
       },
       { isolationLevel: "Serializable" },
     );
-    if ("error" in result) return fail(result.error);
+    if ("error" in result)
+      return fail(result.error, result.errorCode, result.errorParams);
 
     await audit({
       action: "leave.submit",
@@ -198,7 +242,7 @@ export async function submitLeaveRequest(
     revalidateLeave(employeeId);
     return ok({ id: result.id, totalDays });
   } catch (err) {
-    if (isSerializationConflict(err)) return fail(CONFLICT_MESSAGE);
+    if (isSerializationConflict(err)) return fail(CONFLICT_MESSAGE, "errors.conflict");
     return failFromUnknown(err);
   }
 }
@@ -221,22 +265,49 @@ export async function reviewLeave(
     const data = reviewSchema.parse(input);
     const notes = data.notes?.trim() || null;
     if (data.decision === "REJECTED" && !notes) {
-      return fail("Enter a reason for rejecting this request. The employee will see it.");
+      return fail(
+        "Enter a reason for rejecting this request. The employee will see it.",
+        "errors.leave.enterAReasonForRejectingThis_f09ec",
+      );
     }
     if (data.decision === "APPROVED" && data.overrideBalance && !notes) {
-      return fail("Enter a reason for approving beyond the employee's balance.");
+      return fail(
+        "Enter a reason for approving beyond the employee's balance.",
+        "errors.leave.enterAReasonForApprovingBeyond_a9995",
+      );
     }
 
     type TxResult =
-      | { error: string }
-      | { row: { id: string; employeeId: string; status: string; totalDays: number; leaveType: string; startDate: Date; endDate: Date }; overridden: boolean };
+      | {
+          error: string;
+          errorCode?: string;
+          errorParams?: Record<string, string | number>;
+        }
+      | {
+          row: {
+            id: string;
+            employeeId: string;
+            status: string;
+            totalDays: number;
+            leaveType: string;
+            startDate: Date;
+            endDate: Date;
+          };
+          overridden: boolean;
+        };
     const result: TxResult = await db.$transaction(
       async (tx): Promise<TxResult> => {
         const lr = await tx.leaveRequest.findUnique({ where: { id: data.requestId } });
-        if (!lr) return { error: "That leave request no longer exists. Refresh the page." };
+        if (!lr)
+          return {
+            error: "That leave request no longer exists. Refresh the page.",
+            errorCode: "businessErrors.leave.requestMissing",
+          };
         if (lr.status !== "PENDING") {
           return {
             error: `That request is already ${lr.status.toLowerCase()}. Refresh the page.`,
+            errorCode: "businessErrors.leave.requestState",
+            errorParams: { status: lr.status },
           };
         }
 
@@ -255,15 +326,27 @@ export async function reviewLeave(
           if (clash) {
             return {
               error: `This overlaps already-approved ${clash.leaveType.toLowerCase()} leave (${formatDateOnly(clash.startDate)} to ${formatDateOnly(clash.endDate)}). Reject or adjust one of them.`,
+              errorCode: "businessErrors.leave.overlapApproved",
+              errorParams: {
+                type: clash.leaveType,
+                startDate: clash.startDate.toISOString().slice(0, 10),
+                endDate: clash.endDate.toISOString().slice(0, 10),
+              },
             };
           }
-          const balInput = await loadBalanceInput(lr.employeeId, yearsSpanned(lr.startDate, lr.endDate), tx);
+          const balInput = await loadBalanceInput(
+            lr.employeeId,
+            yearsSpanned(lr.startDate, lr.endDate),
+            tx,
+          );
           if (balInput) {
             const over = overdrawnYears(balInput, lr.leaveType, lr);
             if (over.length > 0) {
               if (!data.overrideBalance) {
                 return {
                   error: `Approving would put the employee's ${lr.leaveType.toLowerCase()} balance below zero for ${over.join(", ")}. Adjust their balance first, or approve with the override option and a reason.`,
+                  errorCode: "businessErrors.leave.overdrawn",
+                  errorParams: { type: lr.leaveType, years: over.join(", ") },
                 };
               }
               overridden = true;
@@ -280,7 +363,11 @@ export async function reviewLeave(
             reviewNotes: notes,
           },
         });
-        if (res.count !== 1) return { error: "That request was just changed by someone else. Refresh the page." };
+        if (res.count !== 1)
+          return {
+            error: "That request was just changed by someone else. Refresh the page.",
+            errorCode: "businessErrors.leave.changed",
+          };
         return {
           row: {
             id: lr.id,
@@ -296,15 +383,30 @@ export async function reviewLeave(
       },
       { isolationLevel: "Serializable" },
     );
-    if ("error" in result) return fail(result.error);
+    if ("error" in result)
+      return fail(result.error, result.errorCode, result.errorParams);
     const { row, overridden } = result;
 
     await audit({
       action: data.decision === "APPROVED" ? "leave.approve" : "leave.reject",
       resource: `LeaveRequest:${row.id}`,
-      diff: { decision: data.decision, notes, overrideBalance: overridden, employeeId: row.employeeId },
+      diff: {
+        decision: data.decision,
+        notes,
+        overrideBalance: overridden,
+        employeeId: row.employeeId,
+      },
     });
     await notifyEmployees([row.employeeId], {
+      translationKey: "notificationTemplates.leaveDecision",
+      translationParams: {
+        leaveType: row.leaveType,
+        startDate: row.startDate.toISOString(),
+        endDate: row.endDate.toISOString(),
+        days: Number(row.totalDays),
+        status: data.decision,
+        note: notes ?? "",
+      },
       type: "LEAVE",
       title: `Leave request ${data.decision === "APPROVED" ? "approved" : "rejected"}`,
       message: `Your ${row.leaveType.toLowerCase()} leave (${formatDateOnly(row.startDate)} to ${formatDateOnly(row.endDate)}, ${fmtDays(row.totalDays)}) was ${data.decision.toLowerCase()}.${notes ? ` Note: ${notes}` : ""}`,
@@ -313,7 +415,7 @@ export async function reviewLeave(
     revalidateLeave(row.employeeId);
     return ok({ id: row.id, status: row.status });
   } catch (err) {
-    if (isSerializationConflict(err)) return fail(CONFLICT_MESSAGE);
+    if (isSerializationConflict(err)) return fail(CONFLICT_MESSAGE, "errors.conflict");
     return failFromUnknown(err);
   }
 }
@@ -325,38 +427,68 @@ export async function reviewLeave(
  * Admins: cancel/revert any PENDING or APPROVED request (reason required when
  * reverting an APPROVED one, or any request that isn't their own).
  */
-export async function cancelLeaveRequest(id: string, reason?: string): Promise<ActionResult> {
+export async function cancelLeaveRequest(
+  id: string,
+  reason?: string,
+): Promise<ActionResult> {
   const user = await requireUser();
   try {
     const isAdmin = user.role === "ADMIN";
     const note = reason?.trim() || null;
 
     type TxResult =
-      | { error: string }
-      | { employeeId: string; wasApproved: boolean; leaveType: string; startDate: Date; endDate: Date; byAdmin: boolean };
+      | {
+          error: string;
+          errorCode?: string;
+          errorParams?: Record<string, string | number>;
+        }
+      | {
+          employeeId: string;
+          wasApproved: boolean;
+          leaveType: string;
+          startDate: Date;
+          endDate: Date;
+          byAdmin: boolean;
+        };
     const result: TxResult = await db.$transaction(
       async (tx): Promise<TxResult> => {
         const lr = await tx.leaveRequest.findUnique({ where: { id } });
-        if (!lr) return { error: "That leave request no longer exists. Refresh the page and try again." };
+        if (!lr)
+          return {
+            error: "That leave request no longer exists. Refresh the page and try again.",
+            errorCode: "businessErrors.leave.requestMissing",
+          };
         const isOwner = lr.employeeId === user.employeeId;
         if (!isOwner && !isAdmin) {
-          return { error: "You can only cancel your own leave requests." };
+          return {
+            error: "You can only cancel your own leave requests.",
+            errorCode: "businessErrors.leave.notOwner",
+          };
         }
         if (lr.status !== "PENDING" && lr.status !== "APPROVED") {
-          return { error: `That request is already ${lr.status.toLowerCase()}. Refresh the page.` };
+          return {
+            error: `That request is already ${lr.status.toLowerCase()}. Refresh the page.`,
+            errorCode: "businessErrors.leave.requestState",
+            errorParams: { status: lr.status },
+          };
         }
         const wasApproved = lr.status === "APPROVED";
 
         if (!isAdmin) {
-          if (user.accessLevel !== "FULL") return { error: READ_ONLY_MESSAGE };
+          if (user.accessLevel !== "FULL")
+            return { error: READ_ONLY_MESSAGE, errorCode: "common.readOnly" };
           if (wasApproved && lr.startDate <= businessDateOnly()) {
             return {
               error:
                 "Approved leave that has already started cannot be cancelled. Contact an admin if you need an adjustment.",
+              errorCode: "businessErrors.leave.started",
             };
           }
         } else if ((wasApproved || !isOwner) && !note) {
-          return { error: "Enter a reason for cancelling this leave. The employee will see it." };
+          return {
+            error: "Enter a reason for cancelling this leave. The employee will see it.",
+            errorCode: "businessErrors.leave.cancelReason",
+          };
         }
 
         const res = await tx.leaveRequest.updateMany({
@@ -364,11 +496,19 @@ export async function cancelLeaveRequest(id: string, reason?: string): Promise<A
           data: {
             status: "CANCELLED",
             ...(isAdmin && !isOwner
-              ? { reviewerId: user.employeeId ?? null, reviewedAt: new Date(), reviewNotes: note }
+              ? {
+                  reviewerId: user.employeeId ?? null,
+                  reviewedAt: new Date(),
+                  reviewNotes: note,
+                }
               : {}),
           },
         });
-        if (res.count !== 1) return { error: "That request was just changed by someone else. Refresh the page." };
+        if (res.count !== 1)
+          return {
+            error: "That request was just changed by someone else. Refresh the page.",
+            errorCode: "businessErrors.leave.changed",
+          };
         return {
           employeeId: lr.employeeId,
           wasApproved,
@@ -380,16 +520,28 @@ export async function cancelLeaveRequest(id: string, reason?: string): Promise<A
       },
       { isolationLevel: "Serializable" },
     );
-    if ("error" in result) return fail(result.error);
+    if ("error" in result)
+      return fail(result.error, result.errorCode, result.errorParams);
 
     await audit({
       action: result.byAdmin ? "leave.admin_cancel" : "leave.cancel",
       resource: `LeaveRequest:${id}`,
-      diff: { wasApproved: result.wasApproved, reason: note, employeeId: result.employeeId },
+      diff: {
+        wasApproved: result.wasApproved,
+        reason: note,
+        employeeId: result.employeeId,
+      },
     });
     const range = `${formatDateOnly(result.startDate)} to ${formatDateOnly(result.endDate)}`;
     if (result.byAdmin) {
       await notifyEmployees([result.employeeId], {
+        translationKey: "notificationTemplates.leaveCancelled",
+        translationParams: {
+          leaveType: result.leaveType,
+          startDate: result.startDate.toISOString(),
+          endDate: result.endDate.toISOString(),
+          note: note ?? "",
+        },
         type: "LEAVE",
         title: "Leave cancelled by an admin",
         message: `Your ${result.leaveType.toLowerCase()} leave (${range}) was cancelled.${note ? ` Reason: ${note}` : ""}`,
@@ -406,7 +558,7 @@ export async function cancelLeaveRequest(id: string, reason?: string): Promise<A
     revalidateLeave(result.employeeId);
     return ok();
   } catch (err) {
-    if (isSerializationConflict(err)) return fail(CONFLICT_MESSAGE);
+    if (isSerializationConflict(err)) return fail(CONFLICT_MESSAGE, "errors.conflict");
     return failFromUnknown(err);
   }
 }
@@ -428,14 +580,26 @@ export async function adjustLeaveBalance(
   try {
     const data = adjustSchema.parse(input);
     const days = Math.round(data.days * 10) / 10;
-    if (days === 0) return fail("Enter a non-zero number of days (use a minus sign to deduct).");
-    if (Math.abs(days) > 365) return fail("That adjustment is too large.");
+    if (days === 0)
+      return fail(
+        "Enter a non-zero number of days (use a minus sign to deduct).",
+        "errors.leave.enterANonzeroNumberOfDays_e5af1",
+      );
+    if (Math.abs(days) > 365)
+      return fail(
+        "That adjustment is too large.",
+        "errors.leave.thatAdjustmentIsTooLarge_5e3aa",
+      );
 
     const employee = await db.employee.findUnique({
       where: { id: data.employeeId },
       select: { id: true, name: true },
     });
-    if (!employee) return fail("That employee no longer exists. Refresh the page.");
+    if (!employee)
+      return fail(
+        "That employee no longer exists. Refresh the page.",
+        "errors.leave.thatEmployeeNoLongerExistsRefresh_a4033",
+      );
 
     const row = await db.leaveAdjustment.create({
       data: {
@@ -459,6 +623,13 @@ export async function adjustLeaveBalance(
       },
     });
     await notifyEmployees([data.employeeId], {
+      translationKey: "notificationTemplates.leaveAdjusted",
+      translationParams: {
+        leaveType: data.leaveType,
+        year: data.year,
+        days,
+        note: data.reason,
+      },
       type: "LEAVE",
       title: "Leave balance adjusted",
       message: `Your ${data.leaveType.toLowerCase()} leave balance for ${data.year} was adjusted by ${days > 0 ? "+" : ""}${days} day(s). Reason: ${data.reason}`,
@@ -511,7 +682,11 @@ export async function saveLeavePolicies(
         changes[p.leaveType] = { from: before[p.leaveType] ?? "default", to: v };
       }
     });
-    await audit({ action: "leave.policy_update", resource: "LeavePolicy", diff: changes });
+    await audit({
+      action: "leave.policy_update",
+      resource: "LeavePolicy",
+      diff: changes,
+    });
     revalidateLeave();
     return ok();
   } catch (err) {

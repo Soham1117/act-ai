@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
     mustChangePassword: boolean;
     employee: {
       id: string;
-      employmentStatus: "ACTIVE";
+      employmentStatus: "ACTIVE" | "INACTIVE";
       terminationDate: null;
       updatedAt: Date;
     } | null;
@@ -63,6 +63,13 @@ beforeEach(() => {
 });
 
 describe("forced-password authorization boundary", () => {
+  it("inactive accounts can read the portal but cannot write or use admin actions", async () => {
+    state.profile!.mustChangePassword = false;
+    state.profile!.employee!.employmentStatus = "INACTIVE";
+    await expect(requireUser()).resolves.toMatchObject({ accessLevel: "READ_ONLY" });
+    await expect(requireWritableUser()).rejects.toThrow("read-only");
+    await expect(requireAdmin()).rejects.toThrow("REDIRECT:/unauthorized");
+  });
   it.each([
     ["direct protected-route helper", getSessionUser],
     ["employee guard", requireUser],

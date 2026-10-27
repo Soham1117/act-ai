@@ -39,7 +39,7 @@ export default async function ContractWorkersPage({ searchParams }: { searchPara
   const agencyFilter = one(sp.agency);
   const statusFilter = one(sp.status);
   const status: ContractWorkerStatus | undefined =
-    statusFilter === "ACTIVE" || statusFilter === "ENDED" ? statusFilter : undefined;
+    statusFilter === "ACTIVE" || statusFilter === "ENDED" || statusFilter === "INACTIVE" ? statusFilter : undefined;
   const q = one(sp.q).trim();
 
   // Hours tab filters (default: current Mon-Sun business week)
@@ -178,6 +178,7 @@ export default async function ContractWorkersPage({ searchParams }: { searchPara
                   <select id="cw-f-status" name="status" defaultValue={status ?? ""} className={`${selectClass} h-9 w-36`}>
                     <option value="">All</option>
                     <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
                     <option value="ENDED">Ended</option>
                   </select>
                 </div>

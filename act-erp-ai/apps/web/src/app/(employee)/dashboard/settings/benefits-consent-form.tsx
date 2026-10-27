@@ -6,10 +6,15 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { runAction, toastAction } from "@/lib/toast-action";
-import { consentToBenefitsEDelivery, withdrawBenefitsEConsent } from "@/server/actions/employees";
+import { runAction } from "@/lib/toast-action";
+import {
+  consentToBenefitsEDelivery,
+  withdrawBenefitsEConsent,
+} from "@/server/actions/employees";
+import { usePortalLanguage } from "@/components/portal-language";
 
 export function BenefitsConsentForm({ consented }: { consented: boolean }) {
+  const { t, toastAction } = usePortalLanguage();
   const router = useRouter();
   const [isConsented, setIsConsented] = useState(consented);
   const [pending, startTransition] = useTransition();
@@ -19,7 +24,7 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
       const res = await runAction(() => consentToBenefitsEDelivery());
       if (!toastAction(res)) return;
       setIsConsented(true);
-      toast.success("Electronic benefits document delivery enabled");
+      toast.success(t("account.benefits.enabled"));
       router.refresh();
     });
   }
@@ -29,7 +34,7 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
       const res = await runAction(() => withdrawBenefitsEConsent());
       if (!toastAction(res)) return;
       setIsConsented(false);
-      toast.success("Reverted to paper delivery for benefits documents");
+      toast.success(t("account.benefits.withdrawn"));
       router.refresh();
     });
   }
@@ -40,17 +45,17 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
         <div className="flex items-center gap-2" role="status" aria-live="polite">
           <Badge variant="success" className="gap-1 text-xs">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Consented — electronic delivery on
+            {t("account.consent.enabledBadge")}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          Health & welfare plan documents (SPDs, summaries of material modifications, benefit
-          summaries) can be delivered through this system instead of on paper. You can withdraw
-          this at any time — a withdrawal takes effect immediately.
+          {t("account.benefits.enabledDescription")}
         </p>
         <Button variant="outline" size="sm" onClick={withdraw} disabled={pending}>
           {pending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-          {pending ? "Withdrawing consent…" : "Withdraw consent — go back to paper"}
+          {pending
+            ? t("account.consent.withdrawing")
+            : t("account.consent.withdrawToPaper")}
         </Button>
       </div>
     );
@@ -59,21 +64,12 @@ export function BenefitsConsentForm({ consented }: { consented: boolean }) {
   return (
     <div className="space-y-3">
       <div className="space-y-2 text-xs text-muted-foreground">
-        <p>
-          By default, benefits plan documents (SPDs, summaries of material modifications, benefit
-          summaries) are delivered on paper. You can instead choose to receive them electronically
-          through this system.
-        </p>
-        <p>
-          This does not cover your own coverage details (tier, member ID, cost) shown on the
-          Benefits page — that&apos;s always available regardless of this setting. It only governs
-          formal plan documents your employer is required to furnish. You may withdraw consent at
-          any time in this Settings page.
-        </p>
+        <p>{t("account.benefits.defaultDescription")}</p>
+        <p>{t("account.benefits.consentDescription")}</p>
       </div>
       <Button size="sm" onClick={give} disabled={pending}>
         {pending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-        {pending ? "Saving consent…" : "I consent to electronic benefits document delivery"}
+        {pending ? t("account.consent.saving") : t("account.benefits.giveConsent")}
       </Button>
     </div>
   );

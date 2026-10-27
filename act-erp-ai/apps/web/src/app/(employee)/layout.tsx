@@ -1,3 +1,5 @@
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
+import { PortalLanguageProvider } from "@/components/portal-language";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
@@ -19,6 +21,7 @@ export default async function EmployeeLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
+  const { language } = await getPortalLanguage();
   // Admin-set password must be replaced before anything else.
   if (user.mustChangePassword) redirect("/change-password");
   const readOnly =
@@ -37,6 +40,7 @@ export default async function EmployeeLayout({
     : 0;
   return (
     <Providers>
+      <PortalLanguageProvider language={language}>
       <SidebarProvider defaultOpen style={{ "--sidebar-width": "13.5rem" } as React.CSSProperties}>
         <EmployeeSidebar aiEnabled={aiEnabled} />
         <SidebarInset className="min-w-0">
@@ -50,6 +54,7 @@ export default async function EmployeeLayout({
           <div className="min-w-0 flex-1 p-4 md:p-6">{children}</div>
         </SidebarInset>
       </SidebarProvider>
+          </PortalLanguageProvider>
     </Providers>
   );
 }

@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { runAction, toastAction } from "@/lib/toast-action";
+import { runAction } from "@/lib/toast-action";
 import { updateMyPersonalEmail } from "@/server/actions/employees";
+import { usePortalLanguage } from "@/components/portal-language";
 
 export function PersonalEmailForm({
   current,
@@ -16,6 +17,7 @@ export function PersonalEmailForm({
   current: string;
   required: boolean;
 }) {
+  const { t, toastAction } = usePortalLanguage();
   const [pending, startTransition] = useTransition();
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState(current);
@@ -25,7 +27,7 @@ export function PersonalEmailForm({
     startTransition(async () => {
       const res = await runAction(() => updateMyPersonalEmail(password, email));
       if (!toastAction(res)) return;
-      toast.success("Personal email updated");
+      toast.success(t("account.personalEmail.updated"));
       setPassword("");
     });
   }
@@ -33,18 +35,27 @@ export function PersonalEmailForm({
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <div className="space-y-1.5">
-        <Label className="text-xs">Personal email {required ? "" : "(optional)"}</Label>
+        <Label className="text-xs">
+          {t(
+            required
+              ? "account.personalEmail.labelRequired"
+              : "account.personalEmail.labelOptional",
+          )}
+        </Label>
         <Input
           type="email"
+          aria-label={t("account.personalEmail.label")}
+          placeholder={t("account.personalEmail.placeholder")}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required={required}
         />
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">Current password</Label>
+        <Label className="text-xs">{t("account.password.current")}</Label>
         <Input
           type="password"
+          aria-label={t("account.password.current")}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
@@ -52,7 +63,7 @@ export function PersonalEmailForm({
       </div>
       <Button type="submit" disabled={pending || !password || email === current}>
         {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Update
+        {t("account.personalEmail.update")}
       </Button>
     </form>
   );

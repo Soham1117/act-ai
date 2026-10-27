@@ -1,34 +1,23 @@
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 import { Lock } from "lucide-react";
 import type { EmploymentStatus } from "@prisma/client";
 import { readOnlyUntil } from "@/lib/employee-validation";
 
 /** Visible notice on every employee page when the account is read-only. */
-export function ReadOnlyBanner({
+export async function ReadOnlyBanner({
   status,
   terminationDate,
 }: {
   status: EmploymentStatus | null;
   terminationDate: Date | null;
 }) {
-  let message: string;
-  if (status === "PENDING_REVIEW") {
-    message =
-      "Your account is awaiting approval by an administrator. You can look around, but you can't make changes (time off, requests, reimbursements, settings) until you're approved.";
-  } else if (status === "TERMINATED") {
-    const until = terminationDate
-      ? readOnlyUntil(terminationDate).toLocaleDateString("en-US", {
-          timeZone: "UTC",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })
-      : null;
-    message = `Your employment has ended. You can still view your pay stubs and documents${
-      until ? ` until ${until}` : " for a limited time"
-    }, but you can't make changes.`;
-  } else {
-    message = "Your account is read-only. You can view your records but can't make changes.";
-  }
+  const { t, formatDateOnly } = await getPortalLanguage();
+  const message = status === "PENDING_REVIEW" ? t("common.pendingReview")
+    : status === "INACTIVE" ? t("common.inactiveReadOnly")
+    : status === "TERMINATED" ? terminationDate
+      ? t("common.terminatedReadOnly", { date: formatDateOnly(readOnlyUntil(terminationDate)) })
+      : t("common.terminatedLimited")
+    : t("common.readOnly");
   return (
     <div
       role="status"

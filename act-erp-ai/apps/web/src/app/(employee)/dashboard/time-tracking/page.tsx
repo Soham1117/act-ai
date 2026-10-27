@@ -11,12 +11,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Activity, Clock, MonitorSmartphone } from "lucide-react";
 import { TimeEntriesList } from "./time-entries-list";
-import { businessDateOnly, formatBusinessTime, formatHours } from "@/lib/format";
+import { businessDateOnly } from "@/lib/format";
 import { isStaleShift, startOfBusinessMonth, startOfBusinessWeek } from "@/lib/time-rules";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
-export const metadata = { title: "Timesheet" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("timesheet.title") };
+}
 
 export default async function TimeTrackingPage() {
+  const { t, formatTime } = await getPortalLanguage();
   const user = await requireUser();
   const employeeId = user.employeeId;
 
@@ -32,9 +37,9 @@ export default async function TimeTrackingPage() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>No employee record</CardTitle>
+          <CardTitle>{t("timesheet.noEmployee")}</CardTitle>
           <CardDescription>
-            Your account isn&apos;t linked to an employee record yet. Contact an admin.
+            {t("timesheet.noEmployeeDescription")}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -83,12 +88,19 @@ export default async function TimeTrackingPage() {
 
   const onBreak = active?.status === "ON_BREAK";
   const staleActive = active ? isStaleShift(active.clockIn) : false;
+  const formatTrackedHours = (minutes: number | null | undefined) =>
+    minutes === null || minutes === undefined
+      ? "—"
+      : t("timesheet.hoursFormat", {
+          hours: Math.floor(minutes / 60),
+          minutes: (minutes % 60).toString().padStart(2, "0"),
+        });
 
   return (
     <>
       <PageHeader
-        title="Timesheet"
-        description="Your hours and approval status. Clock in/out happens at a kiosk."
+        title={t("timesheet.title")}
+        description={t("timesheet.description")}
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -96,20 +108,19 @@ export default async function TimeTrackingPage() {
           <CardContent className="flex items-center justify-between p-4">
             <div>
               <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                Current status
+                {t("timesheet.currentStatus")}
               </p>
               <p className="mt-1 text-base font-semibold">
-                {active ? (onBreak ? "On break" : "Clocked in") : "Clocked out"}
+                {active ? (onBreak ? t("timesheet.onBreak") : t("timesheet.clockedIn")) : t("timesheet.clockedOut")}
               </p>
               {active && staleActive && (
                 <p className="mt-0.5 text-[11px] font-medium text-destructive">
-                  This shift has been open over 16 hours. It will be closed and sent to an
-                  admin for review at your next punch.
+                  {t("timesheet.staleShift")}
                 </p>
               )}
               {active && (
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Since {formatBusinessTime(active.clockIn)}
+                  {t("timesheet.since", { time: formatTime(active.clockIn) })}
                   {" · "}
                   <span className="font-mono">{active.jobCode}</span>
                 </p>
@@ -121,13 +132,13 @@ export default async function TimeTrackingPage() {
           </CardContent>
         </Card>
         <StatCard
-          label="Hours this week"
-          value={formatHours(weekAgg._sum.totalWorkMin ?? 0)}
+          label={t("timesheet.hoursThisWeek")}
+          value={formatTrackedHours(weekAgg._sum.totalWorkMin ?? 0)}
           icon={<Clock className="h-4 w-4" />}
         />
         <StatCard
-          label="Hours this month"
-          value={formatHours(monthAgg._sum.totalWorkMin ?? 0)}
+          label={t("timesheet.hoursThisMonth")}
+          value={formatTrackedHours(monthAgg._sum.totalWorkMin ?? 0)}
           icon={<Clock className="h-4 w-4" />}
         />
       </div>
@@ -135,12 +146,12 @@ export default async function TimeTrackingPage() {
       <Card className="mt-6">
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Recent entries</CardTitle>
-            <CardDescription>Last 50 sessions. Rejected entries don&apos;t count toward your hours.</CardDescription>
+            <CardTitle className="text-base">{t("timesheet.recentEntries")}</CardTitle>
+            <CardDescription>{t("timesheet.last50RejectedNote")}</CardDescription>
           </div>
           <Badge variant="outline" className="gap-1.5 text-[11px]">
             <MonitorSmartphone className="h-3 w-3" />
-            Clock in/out at a kiosk
+            {t("timesheet.kioskClock")}
           </Badge>
         </CardHeader>
         <CardContent>

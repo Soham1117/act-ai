@@ -6,7 +6,7 @@
  * as `{ ok: false, error }` so the message reaches the client.
  */
 
-export type ActionFail = { ok: false; error: string };
+export type ActionFail = { ok: false; error: string; errorCode?: string; errorParams?: Record<string, string | number> };
 export type ActionOk<T extends Record<string, unknown> = Record<string, never>> =
   { ok: true } & T;
 export type ActionResult<T extends Record<string, unknown> = Record<string, never>> =
@@ -19,8 +19,8 @@ export function ok<T extends Record<string, unknown>>(data?: T) {
   return data ? ({ ok: true, ...data } as ActionOk<T>) : ({ ok: true } as ActionOk);
 }
 
-export function fail(error: string): ActionFail {
-  return { ok: false, error };
+export function fail(error: string, errorCode?: string, errorParams?: Record<string, string | number>): ActionFail {
+  return { ok: false, error, ...(errorCode ? { errorCode } : {}), ...(errorParams ? { errorParams } : {}) };
 }
 
 /** True when Next.js has already redacted the real message. */
@@ -128,5 +128,10 @@ export function failFromUnknown(
   err: unknown,
   fallback = "Something went wrong. Try again, or contact an admin if it keeps happening.",
 ): ActionFail {
-  return fail(humanizeUnexpectedError(err) ?? fallback);
+  const message = humanizeUnexpectedError(err) ?? fallback;
+  const code = err && typeof err === "object" && "name" in err && err.name === "ZodError"
+    ? "errors.invalidInput"
+    : err && typeof err === "object" && "code" in err && ["P2002", "P2003", "P2014"].includes(String(err.code))
+      ? "errors.conflict" : "errors.unexpected";
+  return fail(message, code);
 }

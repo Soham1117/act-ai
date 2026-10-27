@@ -6,12 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Receipt } from "lucide-react";
-import { businessDateOnly, formatCurrency, formatDateOnly } from "@/lib/format";
+import { businessDateOnly } from "@/lib/format";
 import { businessYearRange } from "@/lib/reimbursement";
 import { ReceiptLinks } from "@/components/receipt-links";
 import { ReimbursementDialog } from "./reimbursement-dialog";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
-export const metadata = { title: "Reimbursements" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("workspace.reimbursements.title") };
+}
 
 const PAGE_SIZE = 25;
 
@@ -21,13 +25,20 @@ export default async function EmployeeReimbursementsPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const user = await requireUser();
-  if (!user.employeeId) return <p className="text-sm text-muted-foreground">No employee record.</p>;
+  const { t, enumLabel, formatCurrency, formatDateOnly, formatDate } =
+    await getPortalLanguage();
+  if (!user.employeeId)
+    return <p className="text-sm text-muted-foreground">{t("workspace.noEmployee")}</p>;
   const employeeId = user.employeeId;
   const sp = await searchParams;
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
 
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-    try { return await p; } catch { return fallback; }
+    try {
+      return await p;
+    } catch {
+      return fallback;
+    }
   };
 
   const year = businessDateOnly().getUTCFullYear();
@@ -40,7 +51,10 @@ export default async function EmployeeReimbursementsPage({
         orderBy: { createdAt: "desc" },
         include: {
           receipts: { select: { id: true, originalName: true } },
-          history: { orderBy: { updatedAt: "asc" }, select: { id: true, status: true, note: true, updatedAt: true } },
+          history: {
+            orderBy: { updatedAt: "asc" },
+            select: { id: true, status: true, note: true, updatedAt: true },
+          },
         },
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
@@ -56,7 +70,10 @@ export default async function EmployeeReimbursementsPage({
       { _sum: { amount: null } },
     ),
     safe(
-      db.reimbursement.aggregate({ where: { employeeId, status: "APPROVED" }, _sum: { amount: true } }),
+      db.reimbursement.aggregate({
+        where: { employeeId, status: "APPROVED" },
+        _sum: { amount: true },
+      }),
       { _sum: { amount: null } },
     ),
     safe(
@@ -74,33 +91,56 @@ export default async function EmployeeReimbursementsPage({
   return (
     <>
       <PageHeader
-        title="Reimbursements"
-        description="Submit and track expense claims."
+        title={t("workspace.reimbursements.title")}
+        description={t("workspace.reimbursements.description")}
         actions={readOnly ? undefined : <ReimbursementDialog />}
       />
       <div className="grid gap-3 sm:grid-cols-4">
-        <StatCard label="Total claims" value={total} icon={<Receipt className="h-4 w-4" />} />
-        <StatCard label="Pending review" value={formatCurrency(Number(pendingAgg._sum.amount ?? 0))} />
-        <StatCard label="Approved, unpaid" value={formatCurrency(Number(approvedAgg._sum.amount ?? 0))} />
-        <StatCard label={`Paid ${year}`} value={formatCurrency(Number(paidAgg._sum.paidAmount ?? 0))} />
+        <StatCard
+          label={t("workspace.reimbursements.totalClaims")}
+          value={total}
+          icon={<Receipt className="h-4 w-4" />}
+        />
+        <StatCard
+          label={t("workspace.reimbursements.pendingReview")}
+          value={formatCurrency(Number(pendingAgg._sum.amount ?? 0))}
+        />
+        <StatCard
+          label={t("workspace.reimbursements.approvedUnpaid")}
+          value={formatCurrency(Number(approvedAgg._sum.amount ?? 0))}
+        />
+        <StatCard
+          label={t("workspace.reimbursements.paidYear", { year })}
+          value={formatCurrency(Number(paidAgg._sum.paidAmount ?? 0))}
+        />
       </div>
 
       <Card className="mt-6">
-        <CardHeader><CardTitle className="text-base">My claims</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {t("workspace.reimbursements.myClaims")}
+          </CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
           <ul className="divide-y">
             {records.length === 0 && (
               <li className="grid h-32 place-items-center text-xs text-muted-foreground">
-                No claims yet.
+                {t("workspace.reimbursements.empty")}
               </li>
             )}
             {records.map((r) => {
               const variant =
-                r.status === "PAID" ? "success" :
-                r.status === "REJECTED" ? "destructive" :
-                r.status === "APPROVED" ? "success" :
-                r.status === "UNDER_REVIEW" ? "warning" :
-                r.status === "PENDING" ? "warning" : "outline";
+                r.status === "PAID"
+                  ? "success"
+                  : r.status === "REJECTED"
+                    ? "destructive"
+                    : r.status === "APPROVED"
+                      ? "success"
+                      : r.status === "UNDER_REVIEW"
+                        ? "warning"
+                        : r.status === "PENDING"
+                          ? "warning"
+                          : "outline";
               const amount = Number(r.amount);
               const paid = r.paidAmount === null ? null : Number(r.paidAmount);
               return (
@@ -109,39 +149,54 @@ export default async function EmployeeReimbursementsPage({
                     <div>
                       <p className="text-sm font-medium">{r.title}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        {r.category.replace(/_/g, " ")} · {formatDateOnly(r.expenseDate)}
+                        {r.category === "OTHER"
+                          ? t("workspace.other")
+                          : enumLabel(r.category)}{" "}
+                        · {formatDateOnly(r.expenseDate)}
                       </p>
                     </div>
                     <span className="text-right font-mono text-sm tabular-nums">
                       {formatCurrency(amount, r.currency)}
                       {paid !== null && paid !== amount && (
-                        <span className="block text-[10px] text-muted-foreground">paid {formatCurrency(paid, r.currency)}</span>
+                        <span className="block text-[10px] text-muted-foreground">
+                          {t("workspace.reimbursements.paidAmount", {
+                            amount: formatCurrency(paid, r.currency),
+                          })}
+                        </span>
                       )}
                     </span>
-                    <Badge variant={variant} className="text-[10px]">{r.status.replace("_", " ")}</Badge>
+                    <Badge variant={variant} className="text-[10px]">
+                      {enumLabel(r.status)}
+                    </Badge>
                     <span className="text-[10px] text-muted-foreground">
-                      {r.createdAt.toLocaleDateString()}
+                      {formatDate(r.createdAt)}
                     </span>
                   </div>
                   {r.reviewNotes && (
                     <p
                       className={`rounded-md border p-2 text-xs ${
-                        r.status === "REJECTED" ? "border-destructive/40 bg-destructive/5" : "bg-muted/40"
+                        r.status === "REJECTED"
+                          ? "border-destructive/40 bg-destructive/5"
+                          : "bg-muted/40"
                       }`}
                     >
                       <span className="font-medium">
-                        {r.status === "REJECTED" ? "Rejection reason: " : "Note from reviewer: "}
-                      </span>
+                        {r.status === "REJECTED"
+                          ? t("workspace.reimbursements.rejectionReason")
+                          : t("workspace.reimbursements.reviewerNote")}
+                      </span>{" "}
                       {r.reviewNotes}
                     </p>
                   )}
                   <ReceiptLinks receipts={r.receipts} />
                   <details className="text-[11px] text-muted-foreground">
-                    <summary className="cursor-pointer select-none">History ({r.history.length})</summary>
+                    <summary className="cursor-pointer select-none">
+                      {t("workspace.reimbursements.history", { count: r.history.length })}
+                    </summary>
                     <ul className="mt-1 space-y-0.5 pl-3">
                       {r.history.map((h) => (
                         <li key={h.id}>
-                          {h.updatedAt.toLocaleDateString()} · {h.status.replace("_", " ")}
+                          {formatDateOnly(h.updatedAt)} · {enumLabel(h.status)}
                           {h.note ? ` — ${h.note}` : ""}
                         </li>
                       ))}
@@ -156,16 +211,18 @@ export default async function EmployeeReimbursementsPage({
 
       {totalPages > 1 && (
         <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-          <span>Page {page} of {totalPages}</span>
+          <span>{t("workspace.pagination.page", { page, totalPages })}</span>
           <div className="flex gap-2">
             {page > 1 && (
               <Button asChild size="sm" variant="outline">
-                <Link href={`?page=${page - 1}`}>Previous</Link>
+                <Link href={`?page=${page - 1}`}>
+                  {t("workspace.pagination.previous")}
+                </Link>
               </Button>
             )}
             {page < totalPages && (
               <Button asChild size="sm" variant="outline">
-                <Link href={`?page=${page + 1}`}>Next</Link>
+                <Link href={`?page=${page + 1}`}>{t("workspace.pagination.next")}</Link>
               </Button>
             )}
           </div>

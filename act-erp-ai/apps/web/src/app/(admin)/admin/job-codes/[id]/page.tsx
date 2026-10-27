@@ -48,7 +48,7 @@ export default async function JobCodeDetailPage({
       select: { id: true, name: true },
     }),
     db.employee.findMany({
-      where: { employmentStatus: { not: "TERMINATED" } },
+      where: { employmentStatus: { notIn: ["TERMINATED", "INACTIVE"] } },
       orderBy: { name: "asc" },
       select: { id: true, employeeId: true, name: true, email: true },
     }),

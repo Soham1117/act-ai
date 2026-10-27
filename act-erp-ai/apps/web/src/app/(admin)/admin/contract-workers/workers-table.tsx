@@ -9,6 +9,7 @@ import {
   ReactivateButton,
   ResetPinButton,
   WorkerFormDialog,
+  WorkerActiveButton,
 } from "./worker-dialogs";
 import { LiveBadge, type AgencyOption, type JobCodeOption, type WorkerRow } from "./shared";
 
@@ -56,9 +57,9 @@ export function WorkersTable({
               </td>
               <td className="p-3">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {w.status === "ENDED" ? (
+                  {w.status !== "ACTIVE" ? (
                     <Badge variant="secondary" className="text-[10px]">
-                      Ended
+                      {w.status === "INACTIVE" ? "Inactive" : "Ended"}
                     </Badge>
                   ) : (
                     <LiveBadge status={w.liveStatus} />
@@ -75,7 +76,8 @@ export function WorkersTable({
                   <WorkerFormDialog worker={w} agencies={agencies} jobCodes={jobCodes} trigger="edit" />
                   {w.liveStatus !== "OUT" && <ClockOutButton workerId={w.id} name={w.name} />}
                   <ResetPinButton workerId={w.id} name={w.name} />
-                  {w.status === "ACTIVE" ? <EndAssignmentButton worker={w} /> : <ReactivateButton worker={w} />}
+                  {w.status !== "ENDED" && <WorkerActiveButton worker={w} />}
+                  {w.status !== "ENDED" ? <EndAssignmentButton worker={w} /> : <ReactivateButton worker={w} />}
                 </div>
               </td>
             </tr>

@@ -21,22 +21,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import {
-  formatPhone,
-  formatHours,
-  formatCurrency,
-  getAvatarUrl,
-  formatSSNLast4,
-  formatBusinessTime,
-  formatDateOnly,
-} from "@/lib/format";
+import { formatPhone, formatHours, getAvatarUrl, formatSSNLast4 } from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
-export const metadata = { title: "My details" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("account.details.title") };
+}
 
 export default async function MyDetailsPage() {
   const user = await requireUser();
+  const { t, enumLabel, formatCurrency, formatDateOnly, formatTime } =
+    await getPortalLanguage();
   if (!user.employeeId) notFound();
 
   const employee = await db.employee
@@ -103,12 +101,14 @@ export default async function MyDetailsPage() {
             variant={
               employee.employmentStatus === "ACTIVE"
                 ? "success"
+                : employee.employmentStatus === "INACTIVE"
+                  ? "secondary"
                 : employee.employmentStatus === "ON_LEAVE"
                   ? "warning"
                   : "destructive"
             }
           >
-            {employee.employmentStatus.replace("_", " ")}
+            {enumLabel(employee.employmentStatus)}
           </Badge>
           {deptCfg && DeptIcon && (
             <span
@@ -135,43 +135,70 @@ export default async function MyDetailsPage() {
 
       <Tabs defaultValue="basic" className="space-y-4">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="basic">Basic info</TabsTrigger>
-          <TabsTrigger value="work">Work</TabsTrigger>
-          <TabsTrigger value="time-clock">Time clock</TabsTrigger>
-          <TabsTrigger value="leave">Leave</TabsTrigger>
-          <TabsTrigger value="payroll">Payroll</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-          <TabsTrigger value="benefits">Benefits</TabsTrigger>
-          <TabsTrigger value="training">Training</TabsTrigger>
+          <TabsTrigger value="basic">{t("account.details.tab.basic")}</TabsTrigger>
+          <TabsTrigger value="work">{t("account.details.tab.work")}</TabsTrigger>
+          <TabsTrigger value="time-clock">
+            {t("account.details.tab.timeClock")}
+          </TabsTrigger>
+          <TabsTrigger value="leave">{t("account.details.tab.leave")}</TabsTrigger>
+          <TabsTrigger value="payroll">{t("account.details.tab.payroll")}</TabsTrigger>
+          <TabsTrigger value="documents">
+            {t("account.details.tab.documents")}
+          </TabsTrigger>
+          <TabsTrigger value="benefits">{t("account.details.tab.benefits")}</TabsTrigger>
+          <TabsTrigger value="training">{t("account.details.tab.training")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="basic" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Personal</CardTitle>
+              <CardTitle className="text-base">{t("account.details.personal")}</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-              <Field label="Gender" value={employee.gender} />
-              <Field label="Marital status" value={employee.maritalStatus} />
               <Field
-                label="Date of birth"
-                value={employee.dateOfBirth?.toLocaleDateString()}
+                label={t("account.details.gender")}
+                value={enumLabel(employee.gender)}
               />
-              <Field label="Nationality" value={employee.nationality} />
-              <Field label="Education" value={employee.educationLevel} />
-              <Field label="SSN" value={formatSSNLast4(employee.ssnLast4)} />
-              <Field label="Phone" value={formatPhone(employee.phoneNumber)} />
               <Field
-                label="Address"
+                label={t("account.details.maritalStatus")}
+                value={
+                  employee.maritalStatus ? enumLabel(employee.maritalStatus) : undefined
+                }
+              />
+              <Field
+                label={t("account.details.dateOfBirth")}
+                value={formatDateOnly(employee.dateOfBirth)}
+              />
+              <Field
+                label={t("account.details.nationality")}
+                value={employee.nationality}
+              />
+              <Field
+                label={t("account.details.education")}
+                value={employee.educationLevel}
+              />
+              <Field
+                label={t("account.details.ssn")}
+                value={formatSSNLast4(employee.ssnLast4)}
+              />
+              <Field
+                label={t("account.details.phone")}
+                value={formatPhone(employee.phoneNumber)}
+              />
+              <Field
+                label={t("account.details.address")}
                 value={
                   [employee.address, employee.city, employee.state, employee.zipCode]
                     .filter(Boolean)
                     .join(", ") || "—"
                 }
               />
-              <Field label="Emergency contact" value={employee.emergencyName} />
               <Field
-                label="Emergency phone"
+                label={t("account.details.emergencyContact")}
+                value={employee.emergencyName}
+              />
+              <Field
+                label={t("account.details.emergencyPhone")}
                 value={formatPhone(employee.emergencyPhone)}
               />
             </CardContent>
@@ -181,36 +208,50 @@ export default async function MyDetailsPage() {
         <TabsContent value="work" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Employment</CardTitle>
+              <CardTitle className="text-base">
+                {t("account.details.employment")}
+              </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-              <Field label="Job title" value={employee.jobTitle} />
-              <Field label="Position" value={employee.position} />
-              <Field label="Department" value={employee.department?.name} />
-              <Field label="Supervisor" value={employee.supervisor?.name} />
+              <Field label={t("account.details.jobTitle")} value={employee.jobTitle} />
+              <Field label={t("account.details.position")} value={employee.position} />
               <Field
-                label="Date of hire"
-                value={employee.dateOfHire?.toLocaleDateString()}
+                label={t("account.details.department")}
+                value={employee.department?.name}
               />
               <Field
-                label="Employment type"
-                value={employee.employmentType.replace(/_/g, " ")}
+                label={t("account.details.supervisor")}
+                value={employee.supervisor?.name}
               />
-              <Field label="Work email" value={employee.workEmail} />
-              <Field label="Work phone" value={formatPhone(employee.workPhoneNumber)} />
+              <Field
+                label={t("account.details.dateOfHire")}
+                value={formatDateOnly(employee.dateOfHire)}
+              />
+              <Field
+                label={t("account.details.employmentType")}
+                value={enumLabel(employee.employmentType)}
+              />
+              <Field label={t("account.details.workEmail")} value={employee.workEmail} />
+              <Field
+                label={t("account.details.workPhone")}
+                value={formatPhone(employee.workPhoneNumber)}
+              />
               {employee.terminationDate && (
                 <>
                   <Field
-                    label="Termination date"
-                    value={employee.terminationDate.toLocaleDateString()}
+                    label={t("account.details.terminationDate")}
+                    value={formatDateOnly(employee.terminationDate)}
                   />
-                  <Field label="Termination reason" value={employee.terminationReason} />
+                  <Field
+                    label={t("account.details.terminationReason")}
+                    value={employee.terminationReason}
+                  />
                 </>
               )}
               {employee.jobDescription && (
                 <div className="sm:col-span-2">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    Job description
+                    {t("account.details.jobDescription")}
                   </p>
                   <p className="mt-1 whitespace-pre-line text-sm">
                     {employee.jobDescription}
@@ -222,15 +263,17 @@ export default async function MyDetailsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Compensation</CardTitle>
+              <CardTitle className="text-base">
+                {t("account.details.compensation")}
+              </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
               <Field
-                label="Compensation type"
-                value={employee.compensationType.replace(/_/g, " ")}
+                label={t("account.details.compensationType")}
+                value={enumLabel(employee.compensationType)}
               />
               <Field
-                label="Compensation value"
+                label={t("account.details.compensationValue")}
                 value={
                   employee.compensationValue
                     ? formatCurrency(Number(employee.compensationValue.toString()))
@@ -238,11 +281,13 @@ export default async function MyDetailsPage() {
                 }
               />
               <Field
-                label="Default hourly rate"
-                value={`${formatCurrency(Number(employee.defaultHourlyRate.toString()))}/hr`}
+                label={t("account.details.defaultHourlyRate")}
+                value={t("account.details.hourlyRate", {
+                  amount: formatCurrency(Number(employee.defaultHourlyRate.toString())),
+                })}
               />
               <Field
-                label="Primary job code"
+                label={t("account.details.primaryJobCode")}
                 value={
                   employee.primaryJobCode
                     ? `${employee.primaryJobCode.code} · ${employee.primaryJobCode.title}`
@@ -255,12 +300,16 @@ export default async function MyDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Job code assignments ({employee.jobCodes.length})
+                {t("account.details.jobCodeAssignments", {
+                  count: employee.jobCodes.length,
+                })}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {employee.jobCodes.length === 0 && (
-                <p className="text-xs text-muted-foreground">No job codes assigned.</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("account.details.noJobCodes")}
+                </p>
               )}
               {employee.jobCodes.map((a) => (
                 <div
@@ -272,7 +321,7 @@ export default async function MyDetailsPage() {
                       <span className="font-mono text-sm">{a.jobCode.code}</span>
                       {a.isPrimary && (
                         <Badge variant="secondary" className="text-[10px]">
-                          Primary
+                          {t("account.details.primary")}
                         </Badge>
                       )}
                     </div>
@@ -291,48 +340,59 @@ export default async function MyDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Recent time entries ({employee.timeEntries.length})
+                {t("account.details.recentTimeEntries", {
+                  count: employee.timeEntries.length,
+                })}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {employee.timeEntries.length === 0 ? (
                 <p className="px-4 py-8 text-center text-xs text-muted-foreground">
-                  No time entries yet.
+                  {t("account.details.noTimeEntries")}
                 </p>
               ) : (
                 <ul className="divide-y">
-                  {employee.timeEntries.map((t) => (
+                  {employee.timeEntries.map((entry) => (
                     <li
-                      key={t.id}
+                      key={entry.id}
                       className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-sm"
                     >
                       <span className="text-xs text-muted-foreground">
-                        {formatDateOnly(t.date)}
+                        {formatDateOnly(entry.date)}
                       </span>
                       <span className="font-mono text-xs">
-                        {formatBusinessTime(t.clockIn)}
+                        {formatTime(entry.clockIn)}
                         {" → "}
-                        {formatBusinessTime(t.clockOut)}
+                        {formatTime(entry.clockOut)}
                       </span>
                       <span className="font-mono text-xs text-muted-foreground">
-                        {t.jobCode}
+                        {entry.jobCode}
                       </span>
-                      <SourceBadge source={t.source} kioskLabel={t.kioskLabel} />
+                      <SourceBadge
+                        source={entry.source}
+                        kioskLabel={entry.kioskLabel}
+                        sourceLabel={enumLabel(entry.source)}
+                        kioskTitle={
+                          entry.kioskLabel
+                            ? t("account.details.kioskTitle", { name: entry.kioskLabel })
+                            : undefined
+                        }
+                      />
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm tabular-nums">
-                          {formatHours(t.totalWorkMin)}
+                          {formatHours(entry.totalWorkMin)}
                         </span>
                         <Badge
                           variant={
-                            t.approvalStatus === "APPROVED"
+                            entry.approvalStatus === "APPROVED"
                               ? "success"
-                              : t.approvalStatus === "REJECTED"
+                              : entry.approvalStatus === "REJECTED"
                                 ? "destructive"
                                 : "warning"
                           }
                           className="text-[10px]"
                         >
-                          {t.approvalStatus}
+                          {enumLabel(entry.approvalStatus)}
                         </Badge>
                       </div>
                     </li>
@@ -347,14 +407,18 @@ export default async function MyDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Leave summary · {leaveBalances?.totals.available ?? "—"}/{leaveBalances?.totals.allowed ?? "—"}{" "}
-                remaining
+                {t("account.details.leaveSummary", {
+                  available: leaveBalances?.totals.available ?? "—",
+                  allowed: leaveBalances?.totals.allowed ?? "—",
+                })}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <LeaveBalanceSummary balances={leaveBalances} />
               {employee.leaveRequests.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No leave requests yet.</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("account.details.noLeaveRequests")}
+                </p>
               ) : (
                 <ul className="divide-y">
                   {employee.leaveRequests.map((l) => (
@@ -364,11 +428,11 @@ export default async function MyDetailsPage() {
                     >
                       <div>
                         <p className="font-medium">
-                          {l.leaveType.replace(/_/g, " ")} · {Number(l.totalDays)}d
+                          {enumLabel(l.leaveType)} · {Number(l.totalDays)}
+                          {t("account.details.daysShort")}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {l.startDate.toLocaleDateString()} →{" "}
-                          {l.endDate.toLocaleDateString()}
+                          {formatDateOnly(l.startDate)} → {formatDateOnly(l.endDate)}
                         </p>
                       </div>
                       <Badge
@@ -381,7 +445,7 @@ export default async function MyDetailsPage() {
                         }
                         className="text-[10px]"
                       >
-                        {l.status}
+                        {enumLabel(l.status)}
                       </Badge>
                     </li>
                   ))}
@@ -395,12 +459,16 @@ export default async function MyDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Payroll documents ({employee.payrollDocs.length})
+                {t("account.details.payrollDocuments", {
+                  count: employee.payrollDocs.length,
+                })}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {employee.payrollDocs.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No payroll documents yet.</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("account.details.noPayrollDocuments")}
+                </p>
               ) : (
                 <ul className="divide-y">
                   {employee.payrollDocs.map((p) => (
@@ -411,8 +479,8 @@ export default async function MyDetailsPage() {
                       <div className="min-w-0">
                         <p className="truncate font-medium">{p.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {p.payPeriodStart.toLocaleDateString()} →{" "}
-                          {p.payPeriodEnd.toLocaleDateString()}
+                          {formatDateOnly(p.payPeriodStart)} →{" "}
+                          {formatDateOnly(p.payPeriodEnd)}
                         </p>
                       </div>
                       <a
@@ -434,8 +502,11 @@ export default async function MyDetailsPage() {
         <TabsContent value="documents">
           <DocumentList
             docs={docsByType("PERSONAL").concat(docsByType("ONBOARDING"))}
-            emptyHint="No personal or onboarding documents yet."
-            title="Documents"
+            emptyHint={t("account.details.noPersonalDocs")}
+            title={t("account.details.tab.documents")}
+            t={t}
+            enumLabel={enumLabel}
+            formatDateOnly={formatDateOnly}
           />
         </TabsContent>
 
@@ -444,11 +515,12 @@ export default async function MyDetailsPage() {
             <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
               <HeartPulse className="h-6 w-6 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                Your medical, dental, vision, and 401(k) info now lives on a dedicated
-                page.
+                {t("account.details.benefitsRedirect")}
               </p>
               <Button asChild size="sm">
-                <Link href="/dashboard/benefits">Go to Benefits</Link>
+                <Link href="/dashboard/benefits">
+                  {t("account.details.goToBenefits")}
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -457,8 +529,11 @@ export default async function MyDetailsPage() {
         <TabsContent value="training">
           <DocumentList
             docs={docsByType("TRAINING")}
-            emptyHint="No training records yet."
-            title="Training"
+            emptyHint={t("account.details.noTrainingRecords")}
+            title={t("account.details.tab.training")}
+            t={t}
+            enumLabel={enumLabel}
+            formatDateOnly={formatDateOnly}
           />
         </TabsContent>
       </Tabs>
@@ -495,24 +570,27 @@ function Row({
 function SourceBadge({
   source,
   kioskLabel,
+  sourceLabel,
+  kioskTitle,
 }: {
   source: TimeEntrySource;
   kioskLabel: string | null;
+  sourceLabel: string;
+  kioskTitle?: string;
 }) {
-  const cfg: Record<TimeEntrySource, { label: string; icon: React.ReactNode }> = {
-    KIOSK: { label: "Kiosk", icon: <MonitorSmartphone className="h-3 w-3" /> },
-    WEB: { label: "Web", icon: <Globe className="h-3 w-3" /> },
-    AUTO: { label: "Auto", icon: <Sparkles className="h-3 w-3" /> },
-    MANUAL: { label: "Manual", icon: <PenLine className="h-3 w-3" /> },
+  const cfg: Record<TimeEntrySource, React.ReactNode> = {
+    KIOSK: <MonitorSmartphone className="h-3 w-3" />,
+    WEB: <Globe className="h-3 w-3" />,
+    AUTO: <Sparkles className="h-3 w-3" />,
+    MANUAL: <PenLine className="h-3 w-3" />,
   };
-  const { label, icon } = cfg[source];
-  const display = source === "KIOSK" && kioskLabel ? kioskLabel : label;
+  const display = source === "KIOSK" && kioskLabel ? kioskLabel : sourceLabel;
   return (
     <span
-      title={source === "KIOSK" && kioskLabel ? `Kiosk: ${kioskLabel}` : undefined}
+      title={source === "KIOSK" && kioskLabel ? kioskTitle : undefined}
       className="inline-flex max-w-[160px] items-center gap-1 truncate rounded border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground"
     >
-      {icon}
+      {cfg[source]}
       <span className="truncate">{display}</span>
     </span>
   );
@@ -524,6 +602,9 @@ function DocumentList({
   docs,
   emptyHint,
   title,
+  t,
+  enumLabel,
+  formatDateOnly,
 }: {
   docs: Array<{
     id: string;
@@ -535,6 +616,9 @@ function DocumentList({
   }>;
   emptyHint: string;
   title: string;
+  t: (key: string, params?: Record<string, string | number>) => string;
+  enumLabel: (code: string) => string;
+  formatDateOnly: (value: Date | string | null | undefined) => string;
 }) {
   return (
     <Card>
@@ -556,7 +640,7 @@ function DocumentList({
                 <div className="min-w-0">
                   <p className="truncate font-medium">{d.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {d.documentType} · {d.uploadedAt.toLocaleDateString()}
+                    {enumLabel(d.documentType)} · {formatDateOnly(d.uploadedAt)}
                   </p>
                 </div>
                 <a
@@ -564,7 +648,7 @@ function DocumentList({
                   target="_blank"
                   rel="noreferrer"
                   className="rounded-md border px-2 py-1 text-primary hover:bg-muted"
-                  title="Open"
+                  title={t("account.details.openDocument")}
                 >
                   <FileText className="h-3.5 w-3.5" />
                 </a>

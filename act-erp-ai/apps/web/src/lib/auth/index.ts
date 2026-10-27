@@ -119,7 +119,7 @@ export async function requireWritableUser(): Promise<SessionUser> {
 /** Throws-redirect wrapper for admin-only pages. */
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
-  if (user.role !== "ADMIN") redirect("/unauthorized");
+  if (user.role !== "ADMIN" || user.accessLevel !== "FULL") redirect("/unauthorized");
   return user;
 }
 

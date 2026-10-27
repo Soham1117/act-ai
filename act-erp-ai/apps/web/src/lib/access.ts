@@ -5,7 +5,8 @@
  *  READ_ONLY  can sign in and VIEW their own data (payroll, documents,
  *             benefits, details) but cannot create or change anything.
  *             Applies to terminated employees for TERMINATION_GRACE_DAYS after
- *             their termination date, and to new hires awaiting admin review.
+ *             their termination date, inactive employees (without expiry),
+ *             and new hires awaiting admin review.
  *  NONE       cannot sign in (terminated longer than the grace window).
  *
  * Employment status applies to every account linked to an employee, including
@@ -20,7 +21,7 @@ export type AccessLevel = "FULL" | "READ_ONLY" | "NONE";
 type AccessInput = {
   role: "ADMIN" | "EMPLOYEE";
   employee: {
-    employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW";
+    employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW" | "INACTIVE";
     terminationDate: Date | null;
     updatedAt?: Date;
   } | null;
@@ -29,7 +30,7 @@ type AccessInput = {
 export function accessLevelFor(input: AccessInput, now: Date = new Date()): AccessLevel {
   const e = input.employee;
   if (!e) return "FULL"; // deliberately unlinked bootstrap/system account
-  if (e.employmentStatus === "PENDING_REVIEW") return "READ_ONLY";
+  if (e.employmentStatus === "PENDING_REVIEW" || e.employmentStatus === "INACTIVE") return "READ_ONLY";
   if (e.employmentStatus !== "TERMINATED") return "FULL";
   const since = e.terminationDate ?? e.updatedAt ?? now;
   const days = (now.getTime() - since.getTime()) / 86_400_000;

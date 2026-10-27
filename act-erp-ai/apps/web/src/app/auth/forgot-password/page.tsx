@@ -1,11 +1,13 @@
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/logo";
 import { ForgotPasswordForm } from "./forgot-password-form";
 
-export const metadata = { title: "Reset your password" };
+export async function generateMetadata() { const { t } = await getPortalLanguage(); return { title: t("recovery.title") }; }
 
-export default function ForgotPasswordPage() {
+export default async function ForgotPasswordPage() {
+  const { t } = await getPortalLanguage();
   return (
     <div className="min-h-screen flex flex-col">
       <header className="flex items-center justify-end p-6">
@@ -16,17 +18,17 @@ export default function ForgotPasswordPage() {
           <div className="flex flex-col items-center gap-4">
             <Logo priority width={180} height={72} className="h-12" />
             <div className="space-y-1 text-center">
-              <h1 className="text-2xl font-bold tracking-tight">Reset your password</h1>
+              <h1 className="text-2xl font-bold tracking-tight">{t("recovery.title")}</h1>
               <p className="text-sm text-muted-foreground">
-                Enter your work email and we&apos;ll send you a link.
+                {t("recovery.description")}
               </p>
             </div>
           </div>
           <ForgotPasswordForm />
           <p className="text-center text-xs text-muted-foreground">
-            Remembered it?{" "}
+            {t("recovery.remembered")}{" "}
             <Link href="/login" className="text-primary hover:underline">
-              Back to sign in
+              {t("recovery.back")}
             </Link>
           </p>
         </div>

@@ -107,7 +107,7 @@ export default async function EmployeeDetailPage({
       select: { id: true, name: true },
     }),
     db.employee.findMany({
-      where: { id: { not: id }, employmentStatus: { not: "TERMINATED" } },
+      where: { id: { not: id }, employmentStatus: { notIn: ["TERMINATED", "INACTIVE"] } },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -239,6 +239,8 @@ export default async function EmployeeDetailPage({
               variant={
                 employee.employmentStatus === "ACTIVE"
                   ? "success"
+                  : employee.employmentStatus === "INACTIVE"
+                    ? "secondary"
                   : employee.employmentStatus === "ON_LEAVE" ||
                       employee.employmentStatus === "PENDING_REVIEW"
                     ? "warning"

@@ -25,12 +25,11 @@ import {
   ClipboardList,
   TrendingUp,
 } from "lucide-react";
-import { BUSINESS_TIME_ZONE, formatBusinessTime, formatHours } from "@/lib/format";
+import { BUSINESS_TIME_ZONE, formatHours } from "@/lib/format";
 import {
   addDateOnlyDays,
   businessDayKey,
   businessHour,
-  dateOnlyShortLabel,
   dateOnlyWeekStart,
   scheduledInstant,
   scheduledRange,
@@ -47,10 +46,18 @@ import {
   ScheduledVsWorkedChart,
   WeeklyHoursChart,
 } from "@/components/charts/dashboard-charts";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
+import { localizeNotification } from "@/lib/portal-i18n/notifications";
 
-export const metadata = { title: "Home" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("home.title") };
+}
 
 export default async function EmployeeHomePage() {
+  const translator = await getPortalLanguage();
+  const { t, locale, dateFnsLocale, formatDate, formatDateOnly, formatTime, enumLabel } =
+    translator;
   const user = await requireUser();
   const employeeId = user.employeeId;
   const now = new Date();
@@ -58,8 +65,12 @@ export default async function EmployeeHomePage() {
   // the BUSINESS (Central) calendar day, so every boundary below is date-only.
   const todayStart = businessDayKey(now);
   const weekStart = businessDayKey(startOfBusinessWeek(now));
-  const monthStart = new Date(Date.UTC(todayStart.getUTCFullYear(), todayStart.getUTCMonth(), 1));
-  const monthEnd = new Date(Date.UTC(todayStart.getUTCFullYear(), todayStart.getUTCMonth() + 1, 0));
+  const monthStart = new Date(
+    Date.UTC(todayStart.getUTCFullYear(), todayStart.getUTCMonth(), 1),
+  );
+  const monthEnd = new Date(
+    Date.UTC(todayStart.getUTCFullYear(), todayStart.getUTCMonth() + 1, 0),
+  );
   const next7End = addDateOnlyDays(todayStart, 7);
   const dk = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -179,7 +190,14 @@ export default async function EmployeeHomePage() {
             take: 4,
             include: {
               notification: {
-                select: { title: true, message: true, createdAt: true, type: true },
+                select: {
+                  title: true,
+                  message: true,
+                  createdAt: true,
+                  type: true,
+                  translationKey: true,
+                  translationParams: true,
+                },
               },
             },
           }),
@@ -249,7 +267,10 @@ export default async function EmployeeHomePage() {
     employeeId
       ? safe(
           db.schedule.findMany({
-            where: { employeeId, date: { gte: weekStart, lte: addDateOnlyDays(weekStart, 6) } },
+            where: {
+              employeeId,
+              date: { gte: weekStart, lte: addDateOnlyDays(weekStart, 6) },
+            },
             select: { date: true, startTime: true, endTime: true },
           }),
           [] as Array<{ date: Date; startTime: string; endTime: string }>,
@@ -309,16 +330,20 @@ export default async function EmployeeHomePage() {
   // 8-week personal hours trend
   const trendBuckets = new Map<string, number>();
   for (let i = 7; i >= 0; i--) {
-    trendBuckets.set(dateOnlyShortLabel(addDateOnlyDays(weekStart, -7 * i)), 0);
+    trendBuckets.set(dk(dateOnlyWeekStart(addDateOnlyDays(weekStart, -7 * i))), 0);
   }
   for (const e of trendEntries) {
-    const wk = dateOnlyShortLabel(dateOnlyWeekStart(e.date));
+    const wk = dk(dateOnlyWeekStart(e.date));
     if (trendBuckets.has(wk)) {
       trendBuckets.set(wk, (trendBuckets.get(wk) ?? 0) + e.totalWorkMin / 60);
     }
   }
   const personalTrendData = Array.from(trendBuckets.entries()).map(([week, hours]) => ({
-    week,
+    week: new Intl.DateTimeFormat(locale, {
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+    }).format(new Date(week)),
     hours: Math.round(hours * 10) / 10,
   }));
 
@@ -336,7 +361,9 @@ export default async function EmployeeHomePage() {
     scheduledByDay.set(k, (scheduledByDay.get(k) ?? 0) + mins / 60);
   }
   const scheduledVsWorkedData = Array.from(byDay.entries()).map(([k, mins]) => ({
-    day: new Date(k).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short" }),
+    day: new Intl.DateTimeFormat(locale, { timeZone: "UTC", weekday: "short" }).format(
+      new Date(k),
+    ),
     scheduled: Math.round((scheduledByDay.get(k) ?? 0) * 10) / 10,
     worked: Math.round((mins / 60) * 10) / 10,
   }));
@@ -367,15 +394,28 @@ export default async function EmployeeHomePage() {
               cost += hrs * rate;
             }
             return {
-              period: dateOnlyShortLabel(p.payPeriodEnd),
+              period: formatDateOnly(p.payPeriodEnd),
               estimate: Math.round(cost),
               hours: Math.round(hours),
             };
           });
 
   // Reimbursement timeline · last 6 months grouped by status
-  const monthKey = (d: Date) =>
-    d.toLocaleDateString("en-US", { timeZone: BUSINESS_TIME_ZONE, month: "short" });
+  const monthKey = (d: Date) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: BUSINESS_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+    }).formatToParts(d);
+    const year = parts.find((part) => part.type === "year")?.value ?? "";
+    const month = parts.find((part) => part.type === "month")?.value ?? "";
+    return `${year}-${month}`;
+  };
+  const monthLabel = (d: Date) =>
+    new Intl.DateTimeFormat(locale, {
+      timeZone: BUSINESS_TIME_ZONE,
+      month: "short",
+    }).format(d);
   const reimbursementBuckets = new Map<
     string,
     { month: string; PENDING: number; APPROVED: number; PAID: number; REJECTED: number }
@@ -383,7 +423,7 @@ export default async function EmployeeHomePage() {
   for (let i = 5; i >= 0; i--) {
     const key = monthKey(startOfBusinessMonth(now, i));
     reimbursementBuckets.set(key, {
-      month: key,
+      month: monthLabel(startOfBusinessMonth(now, i)),
       PENDING: 0,
       APPROVED: 0,
       PAID: 0,
@@ -428,7 +468,11 @@ export default async function EmployeeHomePage() {
 
   const hour = businessHour(now);
   const greeting =
-    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+    hour < 12
+      ? "home.greeting.morning"
+      : hour < 18
+        ? "home.greeting.afternoon"
+        : "home.greeting.evening";
   const firstName = user.name.split(" ")[0];
 
   const totalLeaves = leaveBalances?.totals.allowed ?? 0;
@@ -445,16 +489,22 @@ export default async function EmployeeHomePage() {
   return (
     <>
       <PageHeader
-        title={`${greeting}, ${firstName}`}
+        title={t(greeting, { name: firstName })}
         description={
           todayEntry
-            ? `You're currently ${todayEntry.status === "ON_BREAK" ? "on break" : "clocked in"}.`
-            : "You're currently clocked out."
+            ? t("home.currentStatus", {
+                status: t(
+                  todayEntry.status === "ON_BREAK"
+                    ? "home.status.onBreak"
+                    : "home.status.clockedIn",
+                ),
+              })
+            : t("home.currentStatus", { status: t("home.status.clockedOut") })
         }
         actions={
           <Button asChild variant="outline">
             <Link href="/dashboard/time-tracking">
-              <Clock className="mr-2 h-4 w-4" /> View timesheet
+              <Clock className="mr-2 h-4 w-4" /> {t("home.viewTimesheet")}
             </Link>
           </Button>
         }
@@ -462,24 +512,35 @@ export default async function EmployeeHomePage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Hours this month"
+          label={t("home.hoursThisMonth")}
           value={formatHours(monthHours._sum.totalWorkMin ?? 0)}
           icon={<Clock className="h-4 w-4" />}
         />
         <StatCard
-          label="Leave remaining"
-          value={`${leavesRemaining} / ${totalLeaves || "—"} days`}
+          label={t("home.leaveRemaining")}
+          value={t("home.leaveDaysValue", {
+            remaining: new Intl.NumberFormat(locale).format(leavesRemaining),
+            total: totalLeaves ? new Intl.NumberFormat(locale).format(totalLeaves) : "—",
+          })}
           icon={<Plane className="h-4 w-4" />}
-          delta={totalLeaves > 0 ? { value: `${leavesUsedPct}% used` } : undefined}
+          delta={
+            totalLeaves > 0
+              ? {
+                  value: t("home.leaveUsed", {
+                    percent: new Intl.NumberFormat(locale).format(leavesUsedPct),
+                  }),
+                }
+              : undefined
+          }
         />
         <StatCard
-          label="Pending reimbursements"
-          value={pendingReimbs}
+          label={t("home.pendingReimbursements")}
+          value={new Intl.NumberFormat(locale).format(pendingReimbs)}
           icon={<Receipt className="h-4 w-4" />}
         />
         <StatCard
-          label="Unread notifications"
-          value={unreadCount}
+          label={t("home.unreadNotifications")}
+          value={new Intl.NumberFormat(locale).format(unreadCount)}
           icon={<Bell className="h-4 w-4" />}
         />
       </div>
@@ -489,11 +550,13 @@ export default async function EmployeeHomePage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Activity className="h-4 w-4 text-primary" /> Hours this month
+              <Activity className="h-4 w-4 text-primary" /> {t("home.hoursThisMonth")}
             </CardTitle>
             <CardDescription>
-              Daily hours clocked across {now.toLocaleDateString("en-US", { timeZone: BUSINESS_TIME_ZONE, month: "long", year: "numeric" })} (
-              {formatHours(monthHours._sum.totalWorkMin ?? 0)} total).
+              {t("home.dailyHoursSummary", {
+                month: formatDate(now, { month: "long", year: "numeric" }),
+                hours: formatHours(monthHours._sum.totalWorkMin ?? 0),
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -504,36 +567,40 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="h-4 w-4 text-primary" /> Today
+              <CalendarDays className="h-4 w-4 text-primary" /> {t("home.today")}
             </CardTitle>
             <CardDescription>
               {todayShift
-                ? `Scheduled ${todayShift.startTime}–${todayShift.endTime}`
-                : "No shift scheduled today."}
+                ? t("home.scheduledTime", {
+                    start: todayShift.startTime,
+                    end: todayShift.endTime,
+                  })
+                : t("home.noShiftToday")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-3">
               <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                Status
+                {t("home.statusLabel")}
               </p>
               <p className="mt-1 text-base font-semibold">
                 {todayEntry
                   ? todayEntry.status === "ON_BREAK"
-                    ? "On break"
-                    : "Clocked in"
-                  : "Clocked out"}
+                    ? t("home.status.onBreak")
+                    : t("home.status.clockedIn")
+                  : t("home.status.clockedOut")}
               </p>
               {todayEntry && (
                 <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                  Since {formatBusinessTime(todayEntry.clockIn)} · {todayEntry.jobCode}
+                  {t("home.since", { time: formatTime(todayEntry.clockIn) })} ·{" "}
+                  {todayEntry.jobCode}
                 </p>
               )}
             </div>
             {todayShift && (
               <div className="rounded-md border bg-muted/30 p-3">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Today&apos;s shift
+                  {t("home.todaysShift")}
                 </p>
                 <p className="mt-1 font-mono text-sm">
                   {todayShift.startTime} → {todayShift.endTime}
@@ -553,20 +620,21 @@ export default async function EmployeeHomePage() {
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
-                <CalendarDays className="h-4 w-4 text-primary" /> Upcoming shifts
+                <CalendarDays className="h-4 w-4 text-primary" />{" "}
+                {t("home.upcomingShifts")}
               </CardTitle>
-              <CardDescription>Next 7 days.</CardDescription>
+              <CardDescription>{t("home.next7Days")}</CardDescription>
             </div>
             <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
               <Link href="/dashboard/schedule">
-                View all <ChevronRight className="ml-0.5 h-3 w-3" />
+                {t("home.viewAll")} <ChevronRight className="ml-0.5 h-3 w-3" />
               </Link>
             </Button>
           </CardHeader>
           <CardContent>
             {upcomingShifts.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted-foreground">
-                No shifts scheduled.
+                {t("home.noShiftsScheduled")}
               </p>
             ) : (
               <ul className="divide-y">
@@ -577,14 +645,22 @@ export default async function EmployeeHomePage() {
                   >
                     <div className="flex h-9 w-9 flex-col items-center justify-center rounded-md border bg-muted/30 text-center">
                       <span className="text-[9px] uppercase text-muted-foreground">
-                        {s.date.toLocaleDateString("en-US", { timeZone: "UTC", month: "short" })}
+                        {new Intl.DateTimeFormat(locale, {
+                          timeZone: "UTC",
+                          month: "short",
+                        }).format(s.date)}
                       </span>
                       <span className="text-sm font-semibold leading-none">
                         {s.date.getUTCDate()}
                       </span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium">{s.date.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long" })}</p>
+                      <p className="text-sm font-medium">
+                        {new Intl.DateTimeFormat(locale, {
+                          timeZone: "UTC",
+                          weekday: "long",
+                        }).format(s.date)}
+                      </p>
                       <p className="font-mono text-[11px] text-muted-foreground">
                         {s.startTime} → {s.endTime} · {s.jobCode}
                       </p>
@@ -599,30 +675,34 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <ClipboardList className="h-4 w-4 text-primary" /> Action items
+              <ClipboardList className="h-4 w-4 text-primary" /> {t("home.actionItems")}
             </CardTitle>
-            <CardDescription>Things waiting on you or admin.</CardDescription>
+            <CardDescription>{t("home.actionItemsDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-1">
               <ActionItemRow
-                label="Pending requests"
+                label={t("home.pendingRequests")}
                 count={pendingRequests}
+                displayCount={new Intl.NumberFormat(locale).format(pendingRequests)}
                 href="/dashboard/requests"
               />
               <ActionItemRow
-                label="Pending leave"
+                label={t("home.pendingLeave")}
                 count={pendingLeave}
+                displayCount={new Intl.NumberFormat(locale).format(pendingLeave)}
                 href="/dashboard/leave"
               />
               <ActionItemRow
-                label="Pending reimbursements"
+                label={t("home.pendingReimbursements")}
                 count={pendingReimbs}
+                displayCount={new Intl.NumberFormat(locale).format(pendingReimbs)}
                 href="/dashboard/reimbursements"
               />
               <ActionItemRow
-                label="Unread notifications"
+                label={t("home.unreadNotifications")}
                 count={unreadCount}
+                displayCount={new Intl.NumberFormat(locale).format(unreadCount)}
                 href="/dashboard/notifications"
               />
             </ul>
@@ -633,20 +713,20 @@ export default async function EmployeeHomePage() {
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Bell className="h-4 w-4 text-primary" /> Notifications
+                <Bell className="h-4 w-4 text-primary" /> {t("home.notifications")}
               </CardTitle>
-              <CardDescription>Latest activity.</CardDescription>
+              <CardDescription>{t("home.latestActivity")}</CardDescription>
             </div>
             <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
               <Link href="/dashboard/notifications">
-                View all <ChevronRight className="ml-0.5 h-3 w-3" />
+                {t("home.viewAll")} <ChevronRight className="ml-0.5 h-3 w-3" />
               </Link>
             </Button>
           </CardHeader>
           <CardContent>
             {recentNotifications.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted-foreground">
-                Nothing yet.
+                {t("home.noNotifications")}
               </p>
             ) : (
               <ul className="space-y-2.5">
@@ -659,12 +739,18 @@ export default async function EmployeeHomePage() {
                       aria-hidden
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {r.notification.title}
-                      </p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Badge variant="outline" className="shrink-0 text-[9px]">
+                          {enumLabel(r.notification.type)}
+                        </Badge>
+                        <p className="truncate text-sm font-medium">
+                          {localizeNotification(r.notification, translator).title}
+                        </p>
+                      </div>
                       <p className="truncate text-[11px] text-muted-foreground">
                         {formatDistanceToNow(r.notification.createdAt, {
                           addSuffix: true,
+                          locale: dateFnsLocale,
                         })}
                       </p>
                     </div>
@@ -683,7 +769,7 @@ export default async function EmployeeHomePage() {
       <div className="mb-3 mt-10 flex items-center gap-2">
         <span className="h-px flex-1 bg-border" />
         <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          New analytics
+          {t("home.newAnalytics")}
         </span>
         <span className="h-px flex-1 bg-border" />
       </div>
@@ -692,12 +778,10 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarCheck className="h-4 w-4 text-primary" /> Scheduled vs worked ·
-              this week
+              <CalendarCheck className="h-4 w-4 text-primary" />{" "}
+              {t("home.scheduledVsWorkedTitle")}
             </CardTitle>
-            <CardDescription>
-              Daily side-by-side of what you were scheduled and what you logged.
-            </CardDescription>
+            <CardDescription>{t("home.scheduledVsWorkedDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ScheduledVsWorkedChart data={scheduledVsWorkedData} />
@@ -707,11 +791,9 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-4 w-4 text-primary" /> Hours trend · last 8 weeks
+              <TrendingUp className="h-4 w-4 text-primary" /> {t("home.hoursTrendTitle")}
             </CardTitle>
-            <CardDescription>
-              Your weekly hours, with the 40h reference line.
-            </CardDescription>
+            <CardDescription>{t("home.hoursTrendDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <PersonalHoursTrend data={personalTrendData} />
@@ -723,11 +805,9 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Plane className="h-4 w-4 text-primary" /> Leave balance
+              <Plane className="h-4 w-4 text-primary" /> {t("home.leaveBalance")}
             </CardTitle>
-            <CardDescription>
-              Days taken, approved upcoming, and remaining.
-            </CardDescription>
+            <CardDescription>{t("home.leaveBalanceDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <LeaveBalanceDonut
@@ -741,11 +821,9 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Banknote className="h-4 w-4 text-primary" /> Pay snapshot · last 6 periods
+              <Banknote className="h-4 w-4 text-primary" /> {t("home.paySnapshotTitle")}
             </CardTitle>
-            <CardDescription>
-              Estimated gross from logged hours × your rate.
-            </CardDescription>
+            <CardDescription>{t("home.paySnapshotDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <PaySnapshotChart data={paySnapshotData} />
@@ -757,11 +835,10 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Receipt className="h-4 w-4 text-primary" /> Reimbursements · last 6 months
+              <Receipt className="h-4 w-4 text-primary" />{" "}
+              {t("home.reimbursementsTrendTitle")}
             </CardTitle>
-            <CardDescription>
-              Submissions per month, stacked by current status.
-            </CardDescription>
+            <CardDescription>{t("home.reimbursementsTrendDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ReimbursementTimelineChart data={reimbursementTimelineData} />
@@ -771,11 +848,9 @@ export default async function EmployeeHomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Clock className="h-4 w-4 text-primary" /> Punctuality · last 30 days
+              <Clock className="h-4 w-4 text-primary" /> {t("home.punctualityTitle")}
             </CardTitle>
-            <CardDescription>
-              On-time within 10 min of scheduled start, vs late or missed.
-            </CardDescription>
+            <CardDescription>{t("home.punctualityDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <PunctualityChart onTime={onTime} late={late} missed={missed} />
@@ -789,10 +864,12 @@ export default async function EmployeeHomePage() {
 function ActionItemRow({
   label,
   count,
+  displayCount,
   href,
 }: {
   label: string;
   count: number;
+  displayCount: string;
   href: string;
 }) {
   return (
@@ -804,7 +881,7 @@ function ActionItemRow({
         <span>{label}</span>
         <span className="flex items-center gap-1.5">
           <Badge variant={count > 0 ? "default" : "secondary"} className="font-mono">
-            {count}
+            {displayCount}
           </Badge>
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
         </span>

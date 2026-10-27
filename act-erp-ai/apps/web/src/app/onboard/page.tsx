@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
-export const metadata = { title: "Onboarding" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("auth.onboard.title") };
+}
 
-export default function OnboardLandingPage() {
+export default async function OnboardLandingPage() {
+  const { t } = await getPortalLanguage();
   return (
     <div className="min-h-screen flex flex-col">
       <header className="p-6">
@@ -13,20 +18,20 @@ export default function OnboardLandingPage() {
       <main className="flex-1 flex items-center justify-center p-6">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Onboarding</CardTitle>
+            <CardTitle>{t("auth.onboard.title")}</CardTitle>
             <CardDescription>
-              You need a personal invite link from your admin to start onboarding.
+              {t("auth.onboard.inviteRequired")}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             <p>
-              Already have a link? Open it directly — it looks like{" "}
+              {t("auth.onboard.existingLink")} {" "}
               <code className="text-xs">/onboard/&lt;token&gt;</code>.
             </p>
             <p className="mt-3">
-              Existing employee?{" "}
+              {t("auth.onboard.existingEmployee")} {" "}
               <Link href="/login" className="text-primary hover:underline">
-                Sign in here
+                {t("auth.onboard.signInHere")}
               </Link>
               .
             </p>

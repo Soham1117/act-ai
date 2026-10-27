@@ -23,7 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { submitReimbursement } from "@/server/actions/reimbursements";
-import { runAction, toastAction } from "@/lib/toast-action";
+import { runAction } from "@/lib/toast-action";
+import { usePortalLanguage } from "@/components/portal-language";
 import { MAX_RECEIPTS, MAX_REIMBURSEMENT_AMOUNT } from "@/lib/reimbursement";
 import { businessDateString } from "@/lib/business-time";
 
@@ -31,11 +32,19 @@ const RECEIPT_MAX_BYTES = 8 * 1024 * 1024;
 const RECEIPT_EXTS = ["pdf", "png", "jpg", "jpeg"];
 
 const CATEGORIES = [
-  "TRAVEL", "MEALS", "OFFICE_SUPPLIES", "TRAINING", "EQUIPMENT",
-  "MEDICAL", "FUEL", "ACCOMMODATION", "OTHER",
+  "TRAVEL",
+  "MEALS",
+  "OFFICE_SUPPLIES",
+  "TRAINING",
+  "EQUIPMENT",
+  "MEDICAL",
+  "FUEL",
+  "ACCOMMODATION",
+  "OTHER",
 ] as const;
 
 export function ReimbursementDialog() {
+  const { t, enumLabel, toastAction } = usePortalLanguage();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [title, setTitle] = useState("");
@@ -60,15 +69,15 @@ export function ReimbursementDialog() {
     for (const f of Array.from(list)) {
       const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
       if (!RECEIPT_EXTS.includes(ext)) {
-        toast.error(`${f.name}: receipts must be PDF, PNG or JPG.`);
+        toast.error(t("workspace.reimbursements.invalidReceiptType", { name: f.name }));
         continue;
       }
       if (f.size > RECEIPT_MAX_BYTES) {
-        toast.error(`${f.name} is larger than 8 MB.`);
+        toast.error(t("workspace.reimbursements.receiptTooLarge", { name: f.name }));
         continue;
       }
       if (next.length >= MAX_RECEIPTS) {
-        toast.error(`You can attach up to ${MAX_RECEIPTS} receipts.`);
+        toast.error(t("workspace.reimbursements.maxReceipts", { count: MAX_RECEIPTS }));
         break;
       }
       next.push(f);
@@ -80,11 +89,15 @@ export function ReimbursementDialog() {
     e.preventDefault();
     const amt = Number(amount);
     if (!(amt > 0)) {
-      toast.error("Enter an amount greater than $0.00.");
+      toast.error(t("workspace.reimbursements.amountPositive"));
       return;
     }
     if (amt > MAX_REIMBURSEMENT_AMOUNT) {
-      toast.error(`Claims over $${MAX_REIMBURSEMENT_AMOUNT.toLocaleString("en-US")} need to go through HR.`);
+      toast.error(
+        t("workspace.reimbursements.amountOverLimit", {
+          amount: MAX_REIMBURSEMENT_AMOUNT.toLocaleString("en-US"),
+        }),
+      );
       return;
     }
     startTransition(async () => {
@@ -96,66 +109,122 @@ export function ReimbursementDialog() {
           bytes: await f.arrayBuffer(),
         })),
       );
-      const res = await runAction(() => submitReimbursement(
-        {
-          title,
-          category,
-          amount: amt,
-          currency: "USD",
-          description,
-          expenseDate,
-          priority: "MEDIUM",
-        },
-        receipts,
-      ));
+      const res = await runAction(() =>
+        submitReimbursement(
+          {
+            title,
+            category,
+            amount: amt,
+            currency: "USD",
+            description,
+            expenseDate,
+            priority: "MEDIUM",
+          },
+          receipts,
+        ),
+      );
       if (!toastAction(res)) return;
-      toast.success("Claim submitted");
+      toast.success(t("workspace.reimbursements.submittedToast"));
       setOpen(false);
-      setTitle(""); setAmount(""); setDescription(""); setFiles([]);
+      setTitle("");
+      setAmount("");
+      setDescription("");
+      setFiles([]);
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> New claim</Button>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" /> {t("workspace.reimbursements.newClaim")}
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New reimbursement claim</DialogTitle>
+          <DialogTitle>{t("workspace.reimbursements.newClaim")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Title</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={100} />
+            <Label className="text-xs">{t("workspace.reimbursements.titleLabel")}</Label>
+            <Input
+              aria-label={t("workspace.reimbursements.titleLabel")}
+              placeholder={t("workspace.reimbursements.titlePlaceholder")}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              maxLength={100}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Category</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v as (typeof CATEGORIES)[number])}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Label className="text-xs">{t("workspace.reimbursements.category")}</Label>
+              <Select
+                value={category}
+                onValueChange={(v) => setCategory(v as (typeof CATEGORIES)[number])}
+              >
+                <SelectTrigger aria-label={t("workspace.reimbursements.category")}>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c === "OTHER" ? t("workspace.other") : enumLabel(c)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Amount (USD)</Label>
-              <Input type="number" step="0.01" min="0.01" max={MAX_REIMBURSEMENT_AMOUNT} value={amount} onChange={(e) => setAmount(e.target.value)} required className="font-mono" />
+              <Label className="text-xs">{t("workspace.reimbursements.amountUsd")}</Label>
+              <Input
+                aria-label={t("workspace.reimbursements.amountUsd")}
+                placeholder={t("workspace.reimbursements.amountPlaceholder")}
+                type="number"
+                step="0.01"
+                min="0.01"
+                max={MAX_REIMBURSEMENT_AMOUNT}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+                className="font-mono"
+              />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Expense date</Label>
-            <Input type="date" value={expenseDate} max={today} onChange={(e) => setExpenseDate(e.target.value)} required />
+            <Label className="text-xs">{t("workspace.reimbursements.expenseDate")}</Label>
+            <Input
+              aria-label={t("workspace.reimbursements.expenseDate")}
+              type="date"
+              value={expenseDate}
+              max={today}
+              onChange={(e) => setExpenseDate(e.target.value)}
+              required
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} required maxLength={500} />
+            <Label className="text-xs">
+              {t("workspace.reimbursements.descriptionLabel")}
+            </Label>
+            <Textarea
+              aria-label={t("workspace.reimbursements.descriptionLabel")}
+              placeholder={t("workspace.reimbursements.descriptionPlaceholder")}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              required
+              maxLength={500}
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Receipts (optional, up to {MAX_RECEIPTS}; PDF/PNG/JPG, 8 MB each)</Label>
+            <Label className="text-xs">
+              {t("workspace.reimbursements.receiptsLabel", { count: MAX_RECEIPTS })}
+            </Label>
             <Input
               type="file"
+              aria-label={t("workspace.reimbursements.receiptsLabel", {
+                count: MAX_RECEIPTS,
+              })}
               accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
               multiple
               disabled={files.length >= MAX_RECEIPTS}
@@ -167,15 +236,22 @@ export function ReimbursementDialog() {
             {files.length > 0 && (
               <ul className="space-y-1">
                 {files.map((f, i) => (
-                  <li key={`${f.name}-${i}`} className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
+                  <li
+                    key={`${f.name}-${i}`}
+                    className="flex items-center justify-between rounded-md border px-2 py-1 text-xs"
+                  >
                     <span className="flex min-w-0 items-center gap-1.5">
                       <Paperclip className="h-3 w-3 shrink-0" />
                       <span className="truncate">{f.name}</span>
-                      <span className="shrink-0 text-muted-foreground">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {(f.size / 1024 / 1024).toFixed(1)} MB
+                      </span>
                     </span>
                     <button
                       type="button"
-                      aria-label={`Remove ${f.name}`}
+                      aria-label={t("workspace.reimbursements.removeReceipt", {
+                        name: f.name,
+                      })}
                       onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
                     >
                       <X className="h-3 w-3" />
@@ -186,10 +262,12 @@ export function ReimbursementDialog() {
             )}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              {t("workspace.cancel")}
+            </Button>
             <Button type="submit" disabled={pending || !title || !amount || !description}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Submit
+              {t("workspace.submit")}
             </Button>
           </DialogFooter>
         </form>

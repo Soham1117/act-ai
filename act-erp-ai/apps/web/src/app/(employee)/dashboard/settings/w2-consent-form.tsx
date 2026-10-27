@@ -6,10 +6,12 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { runAction, toastAction } from "@/lib/toast-action";
+import { runAction } from "@/lib/toast-action";
 import { consentToElectronicW2, withdrawW2Consent } from "@/server/actions/employees";
+import { usePortalLanguage } from "@/components/portal-language";
 
 export function W2ConsentForm({ consented }: { consented: boolean }) {
+  const { t, toastAction } = usePortalLanguage();
   const router = useRouter();
   const [isConsented, setIsConsented] = useState(consented);
   const [pending, startTransition] = useTransition();
@@ -19,7 +21,7 @@ export function W2ConsentForm({ consented }: { consented: boolean }) {
       const res = await runAction(() => consentToElectronicW2());
       if (!toastAction(res)) return;
       setIsConsented(true);
-      toast.success("Electronic W-2 delivery enabled");
+      toast.success(t("account.w2.enabled"));
       router.refresh();
     });
   }
@@ -29,7 +31,7 @@ export function W2ConsentForm({ consented }: { consented: boolean }) {
       const res = await runAction(() => withdrawW2Consent());
       if (!toastAction(res)) return;
       setIsConsented(false);
-      toast.success("Reverted to paper W-2 delivery");
+      toast.success(t("account.w2.withdrawn"));
       router.refresh();
     });
   }
@@ -40,17 +42,17 @@ export function W2ConsentForm({ consented }: { consented: boolean }) {
         <div className="flex items-center gap-2" role="status" aria-live="polite">
           <Badge variant="success" className="gap-1 text-xs">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Consented — electronic delivery on
+            {t("account.consent.enabledBadge")}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          Your W-2 will be delivered through this system instead of on paper.
-          You can withdraw this at any time — a withdrawal takes effect
-          immediately and does not affect any W-2 already provided.
+          {t("account.w2.enabledDescription")}
         </p>
         <Button variant="outline" size="sm" onClick={withdraw} disabled={pending}>
           {pending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-          {pending ? "Withdrawing consent…" : "Withdraw consent — go back to paper"}
+          {pending
+            ? t("account.consent.withdrawing")
+            : t("account.consent.withdrawToPaper")}
         </Button>
       </div>
     );
@@ -59,23 +61,12 @@ export function W2ConsentForm({ consented }: { consented: boolean }) {
   return (
     <div className="space-y-3">
       <div className="space-y-2 text-xs text-muted-foreground">
-        <p>
-          By default, your W-2 (annual tax statement) is delivered on paper,
-          as required by federal law. You can instead choose to receive it
-          electronically through this system.
-        </p>
-        <p>
-          If you consent: you confirm you can access documents through this
-          site (you&apos;re doing so right now) and are able to print or save
-          your W-2 for your records. You may withdraw consent at any time in
-          this Settings page — after withdrawing, your next W-2 will be
-          delivered on paper. If you don&apos;t consent, or if your employment
-          ends, you&apos;ll receive your W-2 on paper regardless.
-        </p>
+        <p>{t("account.w2.defaultDescription")}</p>
+        <p>{t("account.w2.consentDescription")}</p>
       </div>
       <Button size="sm" onClick={give} disabled={pending}>
         {pending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-        {pending ? "Saving consent…" : "I consent to electronic W-2 delivery"}
+        {pending ? t("account.consent.saving") : t("account.w2.giveConsent")}
       </Button>
     </div>
   );

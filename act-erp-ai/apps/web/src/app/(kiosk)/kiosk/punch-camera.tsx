@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useKioskLanguage } from "./kiosk-language";
 import { CameraOff } from "lucide-react";
+import { getCenterSquareCrop } from "@/lib/kiosk-photo-crop";
 
 export type PunchCameraStatus = "idle" | "starting" | "on" | "off";
 
@@ -12,6 +14,8 @@ export type PunchCamera = {
   stop: () => void;
   /** JPEG data URL of the current frame, or null on any failure (never throws). */
   capture: () => Promise<string | null>;
+  /** Mirrored, center-cropped square JPEG for a profile photo. */
+  captureProfile: () => Promise<string | null>;
   /** Callback ref for the preview <video>. It can mount before or after start(). */
   setVideo: (el: HTMLVideoElement | null) => void;
   status: PunchCameraStatus;
@@ -90,17 +94,19 @@ export function usePunchCamera(): PunchCamera {
     })();
   }, [bind]);
 
+  const readyVideo = useCallback(async () => {
+    const began = Date.now();
+    for (;;) {
+      const v = elRef.current;
+      if (v && v.srcObject && v.readyState >= 2 && v.videoWidth > 0) return v;
+      if (!wantedRef.current || Date.now() - began > READY_WAIT_MS) return null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }, []);
+
   const capture = useCallback(async () => {
     try {
-      const began = Date.now();
-      // Wait for the first frame if the camera is still warming up.
-      for (;;) {
-        const v = elRef.current;
-        if (v && v.srcObject && v.readyState >= 2 && v.videoWidth > 0) break;
-        if (!wantedRef.current || Date.now() - began > READY_WAIT_MS) return null;
-        await new Promise((r) => setTimeout(r, 100));
-      }
-      const v = elRef.current;
+      const v = await readyVideo();
       if (!v) return null;
       const scale = Math.min(1, MAX_WIDTH / v.videoWidth);
       const canvas = document.createElement("canvas");
@@ -114,11 +120,32 @@ export function usePunchCamera(): PunchCamera {
     } catch {
       return null;
     }
-  }, []);
+  }, [readyVideo]);
+
+  const captureProfile = useCallback(async () => {
+    try {
+      const v = await readyVideo();
+      if (!v) return null;
+      const crop = getCenterSquareCrop(v.videoWidth, v.videoHeight);
+      const canvas = document.createElement("canvas");
+      canvas.width = 480;
+      canvas.height = 480;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(v, crop.x, crop.y, crop.width, crop.height, 0, 0, 480, 480);
+      const url = canvas.toDataURL("image/jpeg", 0.85);
+      if (!url.startsWith("data:image/jpeg")) return null;
+      return atob(url.slice(url.indexOf(",") + 1)).length < 400 * 1024 ? url : null;
+    } catch {
+      return null;
+    }
+  }, [readyVideo]);
 
   useEffect(() => release, [release]);
 
-  return { start, stop, capture, setVideo, status };
+  return { start, stop, capture, captureProfile, setVideo, status };
 }
 
 /** Small live preview for the confirm card. Shows "Camera off" if access failed. */
@@ -126,6 +153,7 @@ export function PunchCameraPreview({
   status,
   setVideo,
 }: Pick<PunchCamera, "status" | "setVideo">) {
+  const { t } = useKioskLanguage();
   const off = status === "off";
   return (
     <div className="mx-auto h-28 w-28 overflow-hidden rounded-xl border bg-muted shadow-sm">
@@ -139,8 +167,7 @@ export function PunchCameraPreview({
       />
       {off && (
         <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-[10px] text-muted-foreground">
-          <CameraOff className="h-5 w-5" />
-          Camera off
+          <CameraOff className="h-5 w-5" /> {t("Camera off")}{" "}
         </div>
       )}
     </div>

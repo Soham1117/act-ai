@@ -79,7 +79,11 @@ describe("humanizeUnexpectedError", () => {
     expect(failFromUnknown({ code: "P2002", meta: { target: ["username"] } })).toEqual({
       ok: false,
       error: expect.stringMatching(/username/i),
+      errorCode: "errors.conflict",
     });
-    expect(failFromUnknown(null).ok).toBe(false);
+    expect(failFromUnknown(null)).toMatchObject({
+      ok: false,
+      errorCode: "errors.unexpected",
+    });
   });
 });

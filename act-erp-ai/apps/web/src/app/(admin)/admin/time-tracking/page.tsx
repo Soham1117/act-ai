@@ -228,7 +228,7 @@ export default async function AdminTimeTrackingPage({
     ),
     safe(
       db.employee.findMany({
-        where: { employmentStatus: { in: ["ACTIVE", "ON_LEAVE", "TERMINATED"] } },
+        where: { employmentStatus: { in: ["ACTIVE", "ON_LEAVE", "TERMINATED", "INACTIVE"] } },
         orderBy: { name: "asc" },
         select: { id: true, name: true, employeeId: true, employmentStatus: true },
       }),

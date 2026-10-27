@@ -4,12 +4,18 @@ import { accessLevelFor, TERMINATION_GRACE_DAYS } from "./access";
 const now = new Date("2026-06-30T12:00:00Z");
 const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
 const emp = (
-  employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW",
+  employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW" | "INACTIVE",
   terminationDate: Date | null = null,
   updatedAt?: Date,
 ) => ({ employmentStatus, terminationDate, updatedAt });
 
 describe("accessLevelFor", () => {
+  it("inactive accounts stay read-only without a termination date or expiry", () => {
+    for (const role of ["EMPLOYEE", "ADMIN"] as const) {
+      expect(accessLevelFor({ role, employee: emp("INACTIVE", null, daysAgo(365)) }, now)).toBe("READ_ONLY");
+      expect(accessLevelFor({ role, employee: emp("ACTIVE", null, daysAgo(365)) }, now)).toBe("FULL");
+    }
+  });
   it("grace window is 60 days", () => expect(TERMINATION_GRACE_DAYS).toBe(60));
 
   it("active and on-leave employees are FULL", () => {

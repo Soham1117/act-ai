@@ -17,15 +17,26 @@ import { W2ConsentForm } from "./w2-consent-form";
 import { BenefitsConsentForm } from "./benefits-consent-form";
 import { env } from "@/lib/env";
 import { DEFAULT_KIOSK_PIN, isDefaultPin } from "@/lib/kiosk-pin";
+import { getPortalLanguage } from "@/lib/portal-i18n/server";
+import { PortalLanguageSwitch } from "@/components/portal-language";
 
-export const metadata = { title: "Settings" };
+export async function generateMetadata() {
+  const { t } = await getPortalLanguage();
+  return { title: t("account.settings.title") };
+}
 
 export default async function SettingsPage() {
   const user = await requireUser();
+  const { t, enumLabel } = await getPortalLanguage();
   const employeeRow = user.employeeId
     ? await db.employee.findUnique({
         where: { id: user.employeeId },
-        select: { personalEmail: true, w2ConsentAt: true, benefitsEConsentAt: true, kioskPinHash: true },
+        select: {
+          personalEmail: true,
+          w2ConsentAt: true,
+          benefitsEConsentAt: true,
+          kioskPinHash: true,
+        },
       })
     : null;
   const personalEmail = employeeRow?.personalEmail;
@@ -33,37 +44,50 @@ export default async function SettingsPage() {
   const onTemporaryPin = await isDefaultPin(employeeRow?.kioskPinHash);
   const canWrite = user.accessLevel === "FULL";
   const readOnlyNote = (
-    <p className="text-xs text-muted-foreground">
-      Your account is read-only, so this can&apos;t be changed right now.
-    </p>
+    <p className="text-xs text-muted-foreground">{t("account.settings.readOnly")}</p>
   );
   return (
     <>
-      <PageHeader title="Settings" description="Account, security, and appearance." />
+      <PageHeader
+        title={t("account.settings.title")}
+        description={t("account.settings.description")}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Account</CardTitle>
-            <CardDescription>{user.email ?? "(signs in with username)"}</CardDescription>
+            <CardTitle className="text-base">{t("account.settings.account")}</CardTitle>
+            <CardDescription>
+              {user.email ?? t("account.settings.usernameSignIn")}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Row label="Name" value={user.name} />
-            <Row label="Role" value={user.role === "ADMIN" ? "Admin" : "Employee"} />
-            <Row label="Employee ID" value={user.employeeId ?? "—"} mono />
+            <Row label={t("account.settings.name")} value={user.name} />
+            <Row label={t("account.settings.role")} value={enumLabel(user.role)} />
+            <Row
+              label={t("account.settings.employeeId")}
+              value={user.employeeId ?? "—"}
+              mono
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Appearance</CardTitle>
-            <CardDescription>Light / dark / system.</CardDescription>
+            <CardTitle className="text-base">
+              {t("account.settings.appearance")}
+            </CardTitle>
+            <CardDescription>
+              {t("account.settings.appearanceDescription")}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm">Theme</p>
-                <p className="text-xs text-muted-foreground">Default is dark.</p>
+                <p className="text-sm">{t("account.settings.theme")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("account.settings.themeDefault")}
+                </p>
               </div>
               <ThemeToggle />
             </div>
@@ -72,11 +96,8 @@ export default async function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Password</CardTitle>
-            <CardDescription>
-              Change your password. Requires the current one. You can do this even
-              when your account is read-only.
-            </CardDescription>
+            <CardTitle className="text-base">{t("account.settings.password")}</CardTitle>
+            <CardDescription>{t("account.settings.passwordDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <ChangePasswordForm />
@@ -86,27 +107,29 @@ export default async function SettingsPage() {
         {user.employeeId && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Kiosk PIN</CardTitle>
+              <CardTitle className="text-base">
+                {t("account.settings.kioskPin")}
+              </CardTitle>
               <CardDescription>
                 {onTemporaryPin
-                  ? `Your temporary PIN is ${DEFAULT_KIOSK_PIN}. Change it here to a private 4-digit PIN.`
-                  : "Change your kiosk PIN here. Use a private 4-digit PIN."}
+                  ? t("account.settings.temporaryPin", { pin: DEFAULT_KIOSK_PIN })
+                  : t("account.settings.changeKioskPin")}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              {canWrite ? <KioskPinForm /> : readOnlyNote}
-            </CardContent>
+            <CardContent>{canWrite ? <KioskPinForm /> : readOnlyNote}</CardContent>
           </Card>
         )}
 
         {user.employeeId && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Two-factor authentication</CardTitle>
+              <CardTitle className="text-base">
+                {t("account.settings.twoFactor")}
+              </CardTitle>
               <CardDescription>
                 {env.LOGIN_2FA_ENABLED === "true"
-                  ? "A 6-digit code is emailed here every time you sign in."
-                  : "Email verification is temporarily paused. Your saved address is optional."}
+                  ? t("account.settings.twoFactorEnabled")
+                  : t("account.settings.twoFactorPaused")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -125,8 +148,10 @@ export default async function SettingsPage() {
         {user.employeeId && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">W-2 delivery</CardTitle>
-              <CardDescription>Paper by default, unless you opt in.</CardDescription>
+              <CardTitle className="text-base">
+                {t("account.settings.w2Delivery")}
+              </CardTitle>
+              <CardDescription>{t("account.settings.paperDefaultOptIn")}</CardDescription>
             </CardHeader>
             <CardContent>
               {canWrite ? (
@@ -141,8 +166,10 @@ export default async function SettingsPage() {
         {user.employeeId && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Benefits document delivery</CardTitle>
-              <CardDescription>Paper by default, unless you opt in.</CardDescription>
+              <CardTitle className="text-base">
+                {t("account.settings.benefitsDelivery")}
+              </CardTitle>
+              <CardDescription>{t("account.settings.paperDefaultOptIn")}</CardDescription>
             </CardHeader>
             <CardContent>
               {canWrite ? (
@@ -155,11 +182,21 @@ export default async function SettingsPage() {
         )}
       </div>
 
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base">{t("common.language")}</CardTitle>
+          <CardDescription>{t("common.languageDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PortalLanguageSwitch />
+        </CardContent>
+      </Card>
+
       <p className="mt-6 text-xs text-muted-foreground">
         <Link href="/privacy" target="_blank" className="hover:underline">
-          Privacy notice
+          {t("account.settings.privacyNotice")}
         </Link>{" "}
-        — what we collect and why.
+        {t("account.settings.privacyDescription")}
       </p>
     </>
   );

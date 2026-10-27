@@ -21,6 +21,27 @@ const INVITE_TTL_DAYS = 7;
 const MAX_DOCS = 12;
 const MAX_TOTAL_DOC_BYTES = 40 * 1024 * 1024;
 
+const onboardingFieldLabels: Record<string, string> = {
+  name: "nombre",
+  email: "correo laboral",
+  username: "nombre de usuario",
+  personalEmail: "correo personal",
+  password: "contraseña",
+  phoneNumber: "teléfono",
+  dateOfBirth: "fecha de nacimiento",
+  gender: "género",
+  maritalStatus: "estado civil",
+  address: "dirección",
+  city: "ciudad",
+  state: "estado",
+  zipCode: "código postal",
+  nationality: "nacionalidad",
+  educationLevel: "nivel educativo",
+  ssnLast4: "últimos cuatro dígitos del Seguro Social",
+  emergencyName: "contacto de emergencia",
+  emergencyPhone: "teléfono de emergencia",
+};
+
 /* -------------------------------------------------------------------------- */
 /* Admin: invites                                                             */
 /* -------------------------------------------------------------------------- */
@@ -32,7 +53,11 @@ const inviteSchema = z.object({
   jobTitle: z.string().trim().max(120).optional().nullable(),
   employmentType: z.enum(["FULL_PART_TIME", "CONTRACT_HOURLY"]),
   compensationType: z.enum(["MONTHLY_SALARY", "HOURLY_RATE", "TOTAL_COMPENSATION"]),
-  compensationValue: z.coerce.number().min(0, "Pay can't be negative").optional().nullable(),
+  compensationValue: z.coerce
+    .number()
+    .min(0, "Pay can't be negative")
+    .optional()
+    .nullable(),
   dateOfHire: z.string().optional().nullable(),
 });
 
@@ -59,12 +84,16 @@ export async function createOnboardingInvite(
         where: { id: data.departmentId },
         select: { id: true },
       });
-      if (!dept) return fail("That department no longer exists. Refresh and pick another.");
+      if (!dept)
+        return fail(
+          "That department no longer exists. Refresh and pick another.",
+          "errors.onboarding.thatDepartmentNoLongerExistsRefresh_2fe3f",
+        );
     }
     let dateOfHire: Date | null = null;
     if (data.dateOfHire) {
       const c = checkDateOfHire(data.dateOfHire);
-      if (!c.ok) return fail(c.error);
+      if (!c.ok) return fail(c.error, "businessErrors.onboarding.invalidHireDate");
       dateOfHire = c.date;
     }
 
@@ -112,9 +141,15 @@ export async function revokeOnboardingInvite(id: string): Promise<ActionResult> 
       data: { status: "EXPIRED", expiresAt: new Date(0) },
     });
     if (res.count === 0) {
-      return fail("This invite was already used or revoked. Refresh the page.");
+      return fail(
+        "This invite was already used or revoked. Refresh the page.",
+        "errors.onboarding.thisInviteWasAlreadyUsedOr_5f4fa",
+      );
     }
-    await audit({ action: "onboarding.invite_revoke", resource: `OnboardingInvite:${id}` });
+    await audit({
+      action: "onboarding.invite_revoke",
+      resource: `OnboardingInvite:${id}`,
+    });
     revalidatePath("/admin/onboarding");
     return ok();
   } catch (err) {
@@ -174,7 +209,14 @@ export type OnboardingSubmit = {
   phoneNumber?: string | null;
   dateOfBirth?: string | null;
   gender: "MALE" | "FEMALE" | "OTHER";
-  maritalStatus?: "SINGLE" | "MARRIED" | "DIVORCED" | "WIDOWED" | "SEPARATED" | "OTHER" | null;
+  maritalStatus?:
+    | "SINGLE"
+    | "MARRIED"
+    | "DIVORCED"
+    | "WIDOWED"
+    | "SEPARATED"
+    | "OTHER"
+    | null;
   address?: string | null;
   city?: string | null;
   state?: string | null;
@@ -219,26 +261,35 @@ export async function submitOnboarding(
   const uploadedKeys: string[] = [];
   try {
     if (typeof token !== "string" || token.length < 8 || token.length > 100) {
-      return fail("This onboarding invite was not found. Ask your admin for a new invite link.");
+      return fail(
+        "This onboarding invite was not found. Ask your admin for a new invite link.",
+        "errors.onboarding.thisOnboardingInviteWasNotFound_77f61",
+      );
     }
     if (rateLimited(`onboard:${token}`, 15, 15 * 60_000)) {
-      return fail("Too many attempts. Wait a few minutes and try again.");
+      return fail(
+        "Too many attempts. Wait a few minutes and try again.",
+        "errors.onboarding.tooManyAttemptsWaitAFew_76d7a",
+      );
     }
 
     const invite = await db.onboardingInvite.findUnique({ where: { token } });
     if (!invite) {
       return fail(
         "This onboarding invite was not found. Ask your admin for a new invite link.",
+        "errors.onboarding.thisOnboardingInviteWasNotFound_77f61",
       );
     }
     if (invite.status !== "PENDING") {
       return fail(
         "This onboarding invite was already used. Sign in if you already finished, or ask your admin for a new invite.",
+        "errors.onboarding.thisOnboardingInviteWasAlreadyUsed_3d1a0",
       );
     }
     if (invite.expiresAt < new Date()) {
       return fail(
         "This onboarding invite has expired. Ask your admin to send a new invite link.",
+        "errors.onboarding.thisOnboardingInviteHasExpiredAsk_420fc",
       );
     }
 
@@ -246,14 +297,20 @@ export async function submitOnboarding(
     if (!parsed.success) {
       const first = parsed.error.issues[0];
       const where = first?.path.length ? `${first.path.join(".")}: ` : "";
-      return fail(`Check your details. ${where}${first?.message ?? "Some fields are invalid."}`);
+      const message = first?.message ?? "Some fields are invalid.";
+      const field = onboardingFieldLabels[String(first?.path[0] ?? "")] ?? "información";
+      return fail(
+        `Check your details. ${where}${message}`,
+        "businessErrors.onboarding.invalidFields",
+        { field },
+      );
     }
     const data = parsed.data;
 
     let dateOfBirth: Date | null = null;
     if (data.dateOfBirth) {
       const c = checkDateOfBirth(data.dateOfBirth);
-      if (!c.ok) return fail(c.error);
+      if (!c.ok) return fail(c.error, "businessErrors.onboarding.invalidBirthDate");
       dateOfBirth = c.date;
     }
 
@@ -272,15 +329,30 @@ export async function submitOnboarding(
         data.email && dupe.email === data.email
           ? "That work email already has an account. Sign in instead, or use a different email."
           : "That username is already taken. Pick another.",
+        data.email && dupe.email === data.email
+          ? "businessErrors.onboarding.duplicateAccount"
+          : "businessErrors.onboarding.duplicateUsername",
       );
     }
     if (data.email) {
-      const e = await db.employee.findUnique({ where: { email: data.email }, select: { id: true } });
-      if (e) return fail("That work email is already on an employee record. Use a different email.");
+      const e = await db.employee.findUnique({
+        where: { email: data.email },
+        select: { id: true },
+      });
+      if (e)
+        return fail(
+          "That work email is already on an employee record. Use a different email.",
+          "errors.onboarding.thatWorkEmailIsAlreadyOn_6182a",
+        );
     }
 
     // ---- validate every file before touching storage -------------------------
-    if (files.length > MAX_DOCS) return fail(`Upload at most ${MAX_DOCS} documents.`);
+    if (files.length > MAX_DOCS)
+      return fail(
+        `Upload at most ${MAX_DOCS} documents.`,
+        "businessErrors.onboarding.documentLimit",
+        { count: MAX_DOCS },
+      );
     const prepared: Array<{
       title: string;
       documentType: (typeof DOC_TYPES)[number];
@@ -289,10 +361,12 @@ export async function submitOnboarding(
     }> = [];
     let total = 0;
     const problems: string[] = [];
+    const problemLabels: string[] = [];
     for (const f of files) {
       const label = f.title?.trim() || f.fileName;
       if (!DOC_TYPES.includes(f.documentType)) {
         problems.push(`${label}: unknown document type.`);
+        problemLabels.push(label);
         continue;
       }
       const bytes = Buffer.from(f.base64 ?? "", "base64");
@@ -300,6 +374,7 @@ export async function submitOnboarding(
       const v = validateUpload("document", { name: f.fileName ?? "", bytes });
       if (!v.ok) {
         problems.push(`${label}: ${v.error}`);
+        problemLabels.push(label);
         continue;
       }
       prepared.push({
@@ -310,11 +385,15 @@ export async function submitOnboarding(
       });
     }
     if (total > MAX_TOTAL_DOC_BYTES) {
-      problems.push(`Documents are too large in total (max ${MAX_TOTAL_DOC_BYTES / (1024 * 1024)} MB).`);
+      problems.push(
+        `Documents are too large in total (max ${MAX_TOTAL_DOC_BYTES / (1024 * 1024)} MB).`,
+      );
     }
     if (problems.length) {
       return fail(
         `Nothing was submitted. Fix these files and try again: ${problems.join(" ")}`,
+        "businessErrors.onboarding.documentUpload",
+        { files: problemLabels.join(", ") || "adjuntos" },
       );
     }
 

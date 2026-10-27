@@ -18,3 +18,6 @@ build/
 # Local reference folders — never part of the deliverable
 relearn-new/
 relearn-old/
+
+SERVER_ACCESS.local.md
+*.pem

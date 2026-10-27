@@ -41,7 +41,7 @@ export async function broadcastNotification(
 
     if (recipients.length === 0) {
       return fail(
-        "No active employees matched your recipient filters. Pick different employees or departments and try again.",
+        "No active employees matched your recipient filters. Pick different employees or departments and try again.", "errors.notifications.noActiveEmployeesMatchedYourRecipient_d0ffd",
       );
     }
 
@@ -74,7 +74,7 @@ export async function markNotificationRead(notificationId: string): Promise<Acti
   const user = await requireUser();
   if (!user.employeeId) {
     return fail(
-      "Your account has no employee profile yet. Ask an admin to create one before you can manage notifications.",
+      "Your account has no employee profile yet. Ask an admin to create one before you can manage notifications.", "errors.notifications.yourAccountHasNoEmployeeProfile_2f20c",
     );
   }
   try {
@@ -94,7 +94,7 @@ export async function markAllNotificationsRead(): Promise<ActionResult> {
   const user = await requireUser();
   if (!user.employeeId) {
     return fail(
-      "Your account has no employee profile yet. Ask an admin to create one before you can manage notifications.",
+      "Your account has no employee profile yet. Ask an admin to create one before you can manage notifications.", "errors.notifications.yourAccountHasNoEmployeeProfile_2f20c",
     );
   }
   try {

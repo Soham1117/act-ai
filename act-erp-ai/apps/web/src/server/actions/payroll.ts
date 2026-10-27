@@ -56,7 +56,7 @@ export async function uploadPayrollDocument(
     const data = uploadSchema.parse(input);
 
     if (data.payPeriodEnd < data.payPeriodStart) {
-      return fail("The pay period end can't be before the period start.");
+      return fail("The pay period end can't be before the period start.", "errors.payroll.thePayPeriodEndCantBe_766c1");
     }
 
     const employee = await db.employee.findUnique({
@@ -64,7 +64,7 @@ export async function uploadPayrollDocument(
       select: { id: true, w2ConsentAt: true, employmentStatus: true, name: true },
     });
     if (!employee) {
-      return fail("That employee no longer exists. Refresh the page and pick someone else.");
+      return fail("That employee no longer exists. Refresh the page and pick someone else.", "errors.payroll.thatEmployeeNoLongerExistsRefresh_9a6e4");
     }
     if (employee.employmentStatus === "PENDING_REVIEW") {
       return fail(`${employee.name} hasn't been approved yet. Approve their onboarding before uploading payroll documents.`);
@@ -152,6 +152,8 @@ export async function uploadPayrollDocument(
     });
 
     await notifyEmployees([data.employeeId], {
+      translationKey: "notificationTemplates.payrollAvailable",
+      translationParams: { category: data.category, payPeriodEnd: data.payPeriodEnd },
       type: "PAYROLL",
       title: "New pay document available",
       message: `A new ${data.category} document for the pay period ending ${data.payPeriodEnd} is available in Payroll.`,
@@ -224,7 +226,7 @@ export async function deletePayrollDocument(id: string): Promise<ActionResult> {
   try {
     const doc = await db.payroll.findUnique({ where: { id } });
     if (!doc) {
-      return fail("That payroll document no longer exists. Refresh the page and try again.");
+      return fail("That payroll document no longer exists. Refresh the page and try again.", "errors.payroll.thatPayrollDocumentNoLongerExists_76790");
     }
     await db.payroll.delete({ where: { id } });
     await deleteFile("payroll", doc.fileName).catch(() => null);
@@ -371,7 +373,7 @@ export async function deletePayrollPeriod(id: string): Promise<ActionResult> {
   await requireAdmin();
   try {
     const existing = await db.payrollCalendar.findUnique({ where: { id } });
-    if (!existing) return fail("That pay period was already deleted. Refresh the page.");
+    if (!existing) return fail("That pay period was already deleted. Refresh the page.", "errors.payroll.thatPayPeriodWasAlreadyDeleted_910de");
     await db.payrollCalendar.delete({ where: { id } });
     await audit({
       action: "payroll.period.delete",
