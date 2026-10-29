@@ -14,5 +14,5 @@ cd "$ROOT"
 log "backup-push"
 "${COMPOSE[@]}" "${WALG_EXEC[@]}" postgres wal-g backup-push /var/lib/postgresql/data
 log "delete retain FULL 30"
-"${COMPOSE[@]}" "${WALG_EXEC[@]}" postgres wal-g delete retain FULL 30 --confirm || log "WARN: delete skipped (Object Lock or empty history)"
+"${COMPOSE[@]}" "${WALG_EXEC[@]}" postgres wal-g delete retain FULL 30 --confirm || log "WARN: delete best-effort failed (put-only IAM lacks GetObject for wal-g delete metadata; Object Lock handles retention)"
 log "OK"
