@@ -210,3 +210,21 @@ docker run --rm -v "${BROKEN}:/from:ro" -v "${LIVE}:/to" alpine:3.20 sh -c 'cp -
 First non-destructive drill (2026-10-29): `/home/ubuntu/act-releases/walg-drill-20261029T163548Z/walg-restore-test.log` — exit 0; `TimeEntry=105`; live `/api/health` ok. Restore IAM env was removed from the box after the run.
 
 When building `walg-restore.env` from an operator import file, strip CRLF (`sed 's/\r$//'`) before `docker --env-file` or wal-g will not see S3 storage.
+
+## Production acceptance (Task 7)
+
+**2026-10-29** — Lightsail prod (`3.134.179.142`, compose `/home/ubuntu/act-erp-ai/act-erp-ai`).
+
+| Check | Result |
+|-------|--------|
+| `archive_mode` | `on` |
+| `pg_stat_archiver.failed_count` | `0` (snapshot; `last_archived_time` 2026-10-29 ~16:40 UTC) |
+| `wal-g backup-list` | `base_...00000A` and `base_...00000F` (2026-10-29 ~16:09–16:12 UTC); daily cron `05:15` America/Chicago installed |
+| S3 Object Lock | GOVERNANCE default **30 days** (`get-object-lock-configuration`) |
+| Backup IAM `delete-object` | **AccessDenied** (put-only user) |
+| App / docs bucket isolation | No `act-persona-db-backups` or `WALG_*` in `apps/web/.env.prod`; Task 1 verified `act-persona-app` cannot list backup bucket |
+| Restore drill (≤7d) | `/home/ubuntu/act-releases/walg-drill-20261029T163548Z/walg-restore-test.log` — OK, `TimeEntry=105`; `infra/walg-restore.env` absent post-drill |
+| Public `/api/health` | `{"status":"ok"}` |
+| Punch smoke | **Skipped** — would create real prod clock events; verify manually if required |
+
+**Operator note:** Earlier same-day drill dirs under `/home/ubuntu/act-releases/walg-drill-20261029T16*` include failed attempts before the successful `163548Z` run; keep using that log for acceptance evidence.
