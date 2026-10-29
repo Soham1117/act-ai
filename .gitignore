@@ -21,3 +21,6 @@ relearn-old/
 
 SERVER_ACCESS.local.md
 *.pem
+
+.worktrees/
+
