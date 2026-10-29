@@ -55,7 +55,7 @@ aws s3api put-object-lock-configuration --bucket "$BUCKET" \
   }'
 
 aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
-  --lifecycle-configuration file://infra/aws/walg-bucket-lifecycle.json
+  --lifecycle-configuration file://act-erp-ai/infra/aws/walg-bucket-lifecycle.json
 ```
 
 Backup user:
@@ -64,7 +64,7 @@ Backup user:
 aws iam create-user --user-name act-persona-walg-backup
 aws iam put-user-policy --user-name act-persona-walg-backup \
   --policy-name act-persona-walg-put \
-  --policy-document file://infra/aws/walg-backup-put-policy.json
+  --policy-document file://act-erp-ai/infra/aws/walg-backup-put-policy.json
 aws iam create-access-key --user-name act-persona-walg-backup
 # Store key material only in infra/walg.env on the server (see table above).
 ```
@@ -75,7 +75,7 @@ Restore user (offline keys):
 aws iam create-user --user-name act-persona-walg-restore
 aws iam put-user-policy --user-name act-persona-walg-restore \
   --policy-name act-persona-walg-restore \
-  --policy-document file://infra/aws/walg-restore-policy.json
+  --policy-document file://act-erp-ai/infra/aws/walg-restore-policy.json
 aws iam create-access-key --user-name act-persona-walg-restore
 # Save in a password manager; do not deploy to Lightsail.
 ```
