@@ -32,13 +32,32 @@ export function PortalLanguageSwitch() {
   const { language, t } = usePortalLanguage();
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  return <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-2 text-xs" disabled={pending}
-    aria-label={t("common.changeLanguage")} onClick={() => startTransition(async () => {
-      const result = await setPortalLanguage(language === "en" ? "es" : "en");
-      if (!result.ok) { toast.error(t("common.languageSaveFailed")); return; }
-      router.refresh();
-    })}>
-    {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Languages className="h-3.5 w-3.5" />}
-    <span lang={language === "en" ? "es" : "en"}>{language === "en" ? "Español" : "English"}</span>
-  </Button>;
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-11 min-w-11 gap-1.5 px-2 text-xs md:h-8 md:min-w-0"
+      disabled={pending}
+      aria-label={t("common.changeLanguage")}
+      onClick={() =>
+        startTransition(async () => {
+          try {
+            const result = await setPortalLanguage(language === "en" ? "es" : "en");
+            if (!result.ok) {
+              toast.error(result.error || t("common.languageSaveFailed"));
+              return;
+            }
+            router.refresh();
+          } catch {
+            // Stale deploy / network: toast, never the route error boundary.
+            toast.error(t("common.languageSaveFailed"));
+          }
+        })
+      }
+    >
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Languages className="h-3.5 w-3.5" />}
+      <span className="hidden sm:inline" lang={language === "en" ? "es" : "en"}>{language === "en" ? "Español" : "English"}</span>
+    </Button>
+  );
 }

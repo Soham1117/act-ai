@@ -1,23 +1,18 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
 
-import { useIsMobile } from "@/hooks/use-mobile"
+import { MOBILE_BREAKPOINT, useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { usePortalLanguage } from "@/components/portal-language"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -40,6 +35,7 @@ type SidebarContextProps = {
   openMobile: boolean
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
+  mobileNavId: string
   toggleSidebar: () => void
 }
 
@@ -75,7 +71,13 @@ const SidebarProvider = React.forwardRef<
     ref
   ) => {
     const isMobile = useIsMobile()
+    const pathname = usePathname()
+    const mobileNavId = React.useId()
     const [openMobile, setOpenMobile] = React.useState(false)
+
+    React.useEffect(() => {
+      setOpenMobile(false)
+    }, [pathname])
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
@@ -96,12 +98,13 @@ const SidebarProvider = React.forwardRef<
       [setOpenProp, open]
     )
 
-    // Helper to toggle the sidebar.
+    // Prefer live viewport width over cached isMobile — DevTools device mode
+    // can disagree with the first paint / stale matchMedia state.
     const toggleSidebar = React.useCallback(() => {
-      return isMobile
-        ? setOpenMobile((open) => !open)
-        : setOpen((open) => !open)
-    }, [isMobile, setOpen, setOpenMobile])
+      const narrow =
+        typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT
+      return narrow ? setOpenMobile((open) => !open) : setOpen((open) => !open)
+    }, [setOpen, setOpenMobile])
 
     // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
@@ -131,9 +134,10 @@ const SidebarProvider = React.forwardRef<
         isMobile,
         openMobile,
         setOpenMobile,
+        mobileNavId,
         toggleSidebar,
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [state, open, setOpen, isMobile, openMobile, setOpenMobile, mobileNavId, toggleSidebar]
     )
 
     return (
@@ -148,7 +152,7 @@ const SidebarProvider = React.forwardRef<
               } as React.CSSProperties
             }
             className={cn(
-              "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
+              "group/sidebar-wrapper flex min-h-svh w-full flex-col md:flex-row has-[[data-variant=inset]]:bg-sidebar",
               className
             )}
             ref={ref}
@@ -182,7 +186,7 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+    const { state } = useSidebar()
 
     if (collapsible === "none") {
       return (
@@ -199,30 +203,7 @@ const Sidebar = React.forwardRef<
       )
     }
 
-    if (isMobile) {
-      return (
-        <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
-          <SheetContent
-            data-sidebar="sidebar"
-            data-mobile="true"
-            className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
-            style={
-              {
-                "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-              } as React.CSSProperties
-            }
-            side={side}
-          >
-            <SheetHeader className="sr-only">
-              <SheetTitle>Sidebar</SheetTitle>
-              <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-            </SheetHeader>
-            <div className="flex h-full w-full flex-col">{children}</div>
-          </SheetContent>
-        </Sheet>
-      )
-    }
-
+    // Desktop rail only (CSS-hidden below md). Mobile nav is SidebarMobileNav.
     return (
       <div
         ref={ref}
@@ -274,16 +255,18 @@ const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, isMobile, openMobile, open, mobileNavId } = useSidebar()
   const { t } = usePortalLanguage()
 
   return (
     <Button
       ref={ref}
       data-sidebar="trigger"
+      aria-expanded={isMobile ? openMobile : open}
+      aria-controls={isMobile ? mobileNavId : undefined}
       variant="ghost"
       size="icon"
-      className={cn("h-7 w-7", className)}
+      className={cn("h-11 w-11 md:h-7 md:w-7", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
@@ -335,7 +318,7 @@ const SidebarInset = React.forwardRef<
     <main
       ref={ref}
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background",
+        "relative flex w-full min-w-0 flex-1 flex-col bg-background",
         "md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
@@ -344,6 +327,42 @@ const SidebarInset = React.forwardRef<
   )
 })
 SidebarInset.displayName = "SidebarInset"
+
+/**
+ * Off-canvas mobile navigation drawer (below md). Opened by SidebarTrigger via
+ * openMobile; closes on route change, overlay tap, Escape, or the X button.
+ * Children should be a plain vertical list; do not reuse desktop SidebarMenu here.
+ */
+const SidebarMobileNav = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<"div">
+>(({ className, children, ...props }, ref) => {
+  const { openMobile, setOpenMobile, mobileNavId } = useSidebar()
+  const { t } = usePortalLanguage()
+
+  return (
+    <Sheet open={openMobile} onOpenChange={setOpenMobile}>
+      <SheetContent
+        ref={ref}
+        id={mobileNavId}
+        side="left"
+        data-sidebar="mobile-nav"
+        aria-describedby={undefined}
+        className={cn(
+          "flex w-[min(18rem,85vw)] flex-col gap-0 overflow-hidden bg-sidebar p-0 text-sidebar-foreground sm:max-w-none md:hidden",
+          className
+        )}
+        {...props}
+      >
+        <SheetTitle className="sr-only">{t("common.toggleSidebar")}</SheetTitle>
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+          {children}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+})
+SidebarMobileNav.displayName = "SidebarMobileNav"
 
 const SidebarInput = React.forwardRef<
   React.ElementRef<typeof Input>,
@@ -768,6 +787,7 @@ export {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  SidebarMobileNav,
   SidebarProvider,
   SidebarRail,
   SidebarSeparator,

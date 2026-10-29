@@ -502,7 +502,7 @@ export default async function EmployeeHomePage() {
             : t("home.currentStatus", { status: t("home.status.clockedOut") })
         }
         actions={
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto md:min-h-9">
             <Link href="/dashboard/time-tracking">
               <Clock className="mr-2 h-4 w-4" /> {t("home.viewTimesheet")}
             </Link>
@@ -547,7 +547,7 @@ export default async function EmployeeHomePage() {
 
       {/* Top row: weekly hours chart + today's shift */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="min-w-0 lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Activity className="h-4 w-4 text-primary" /> {t("home.hoursThisMonth")}
@@ -564,7 +564,7 @@ export default async function EmployeeHomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarDays className="h-4 w-4 text-primary" /> {t("home.today")}
@@ -616,7 +616,7 @@ export default async function EmployeeHomePage() {
 
       {/* Bottom row: upcoming shifts, action items, notifications */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -625,7 +625,7 @@ export default async function EmployeeHomePage() {
               </CardTitle>
               <CardDescription>{t("home.next7Days")}</CardDescription>
             </div>
-            <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
+            <Button asChild variant="ghost" size="sm" className="min-h-10 shrink-0 text-xs md:h-7 md:min-h-0">
               <Link href="/dashboard/schedule">
                 {t("home.viewAll")} <ChevronRight className="ml-0.5 h-3 w-3" />
               </Link>
@@ -661,7 +661,7 @@ export default async function EmployeeHomePage() {
                           weekday: "long",
                         }).format(s.date)}
                       </p>
-                      <p className="font-mono text-[11px] text-muted-foreground">
+                      <p className="break-words font-mono text-[11px] text-muted-foreground">
                         {s.startTime} → {s.endTime} · {s.jobCode}
                       </p>
                     </div>
@@ -672,7 +672,7 @@ export default async function EmployeeHomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <ClipboardList className="h-4 w-4 text-primary" /> {t("home.actionItems")}
@@ -709,7 +709,7 @@ export default async function EmployeeHomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -717,7 +717,7 @@ export default async function EmployeeHomePage() {
               </CardTitle>
               <CardDescription>{t("home.latestActivity")}</CardDescription>
             </div>
-            <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
+            <Button asChild variant="ghost" size="sm" className="min-h-10 shrink-0 text-xs md:h-7 md:min-h-0">
               <Link href="/dashboard/notifications">
                 {t("home.viewAll")} <ChevronRight className="ml-0.5 h-3 w-3" />
               </Link>
@@ -775,7 +775,7 @@ export default async function EmployeeHomePage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarCheck className="h-4 w-4 text-primary" />{" "}
@@ -788,7 +788,7 @@ export default async function EmployeeHomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TrendingUp className="h-4 w-4 text-primary" /> {t("home.hoursTrendTitle")}
@@ -802,7 +802,7 @@ export default async function EmployeeHomePage() {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Plane className="h-4 w-4 text-primary" /> {t("home.leaveBalance")}
@@ -818,7 +818,7 @@ export default async function EmployeeHomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Banknote className="h-4 w-4 text-primary" /> {t("home.paySnapshotTitle")}
@@ -832,7 +832,7 @@ export default async function EmployeeHomePage() {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Receipt className="h-4 w-4 text-primary" />{" "}
@@ -845,7 +845,7 @@ export default async function EmployeeHomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Clock className="h-4 w-4 text-primary" /> {t("home.punctualityTitle")}
@@ -876,7 +876,7 @@ function ActionItemRow({
     <li>
       <Link
         href={href}
-        className="flex items-center justify-between rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted"
+        className="flex min-h-11 items-center justify-between rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted md:min-h-0"
       >
         <span>{label}</span>
         <span className="flex items-center gap-1.5">
