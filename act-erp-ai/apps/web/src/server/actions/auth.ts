@@ -15,7 +15,12 @@ import { env } from "@/lib/env";
 import { accessLevelFor } from "@/lib/access";
 import { audit } from "@/lib/audit";
 
-export type LoginResult = { ok: true } | ActionFail;
+export type LoginResult =
+  | { ok: true; mustChangePassword: boolean }
+  | ActionFail;
+export type LoginChallengeResult =
+  | { ok: true; challengeId: string | null; mustChangePassword: boolean }
+  | ActionFail;
 
 const CHALLENGE_TTL_MS = 10 * 60_000;
 const GENERIC_ERROR = "Invalid email/username or password. Check both and try again.";
@@ -31,7 +36,7 @@ const GENERIC_ERROR = "Invalid email/username or password. Check both and try ag
 export async function requestLoginChallenge(
   identifier: string,
   password: string,
-): Promise<{ ok: true; challengeId: string | null } | ActionFail> {
+): Promise<LoginChallengeResult> {
   const id = identifier.trim().toLowerCase();
   if (!id || !password) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
 
@@ -49,6 +54,7 @@ export async function requestLoginChallenge(
       passwordHash: true,
       personalEmail: true,
       role: true,
+      mustChangePassword: true,
       employee: {
         select: {
           id: true,
@@ -63,8 +69,8 @@ export async function requestLoginChallenge(
   });
   if (!user?.passwordHash) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
 
-  const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
+  const passwordOk = await verifyPassword(password, user.passwordHash);
+  if (!passwordOk) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
 
   // Password was right: tell a former employee why they can't get in rather
   // than a misleading "invalid password". (Terminated accounts stay
@@ -81,7 +87,7 @@ export async function requestLoginChallenge(
     try {
       await signIn("credentials", { identifier: id, password, redirect: false });
       await applyPendingPortalLanguage(user.id);
-      return { ok: true, challengeId: null };
+      return { ok: true, challengeId: null, mustChangePassword: user.mustChangePassword };
     } catch (err) {
       if (err instanceof AuthError) return { ok: false, error: GENERIC_ERROR, errorCode: "errors.auth.invalidCredentials" };
       throw err;
@@ -125,7 +131,7 @@ export async function requestLoginChallenge(
     return { ok: false, error: "Could not send the sign-in code. Try again shortly.", errorCode: "errors.auth.login_ac2e8cd0" };
   }
 
-  return { ok: true, challengeId: challenge.id };
+  return { ok: true, challengeId: challenge.id, mustChangePassword: user.mustChangePassword };
 }
 
 /**
@@ -141,11 +147,18 @@ export async function verifyLoginChallenge(
   }
   try {
     await signIn("credentials", { challengeId, code, redirect: false });
+    let mustChangePassword = false;
     try {
-      const completed = await db.loginChallenge.findUnique({ where: { id: challengeId }, select: { userId: true } });
-      if (completed) await applyPendingPortalLanguage(completed.userId);
+      const completed = await db.loginChallenge.findUnique({
+        where: { id: challengeId },
+        select: { userId: true, user: { select: { mustChangePassword: true } } },
+      });
+      if (completed) {
+        mustChangePassword = completed.user.mustChangePassword;
+        await applyPendingPortalLanguage(completed.userId);
+      }
     } catch { console.error("[portal-language] post-login preference unavailable"); }
-    return { ok: true };
+    return { ok: true, mustChangePassword };
   } catch (err) {
     if (err instanceof AuthError) {
       return { ok: false, error: "Incorrect or expired code.", errorCode: "errors.auth.login_ffa8ce67" };

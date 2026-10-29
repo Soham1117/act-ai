@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUserForPasswordChange } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/logo";
 import { env } from "@/lib/env";
@@ -20,7 +20,8 @@ export default async function LoginPage({
   searchParams: SearchParams;
 }) {
   const { t } = await getPortalLanguage();
-  const user = await getSessionUser();
+  const user = await getSessionUserForPasswordChange();
+  if (user?.mustChangePassword) redirect("/change-password");
   if (user) {
     redirect(user.role === "ADMIN" ? "/admin" : "/dashboard");
   }

@@ -93,5 +93,6 @@ describe("forced-password authorization boundary", () => {
       id: "user-1",
       mustChangePassword: false,
     });
+    await expect(requireUser()).resolves.toMatchObject({ mustChangePassword: false });
   });
 });

@@ -66,7 +66,7 @@ export function LoginForm({
       }
       if (!res.challengeId) {
         router.refresh();
-        router.push(safeNext(next));
+        router.push(res.mustChangePassword ? "/change-password" : safeNext(next));
         return;
       }
       setChallengeId(res.challengeId);
@@ -84,7 +84,7 @@ export function LoginForm({
         return;
       }
       router.refresh();
-      router.push(safeNext(next));
+      router.push(res.mustChangePassword ? "/change-password" : safeNext(next));
     });
   }
 

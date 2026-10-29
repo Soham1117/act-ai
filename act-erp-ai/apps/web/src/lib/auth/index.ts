@@ -82,6 +82,10 @@ export const getSessionUserForPasswordChange = cache(async (): Promise<SessionUs
  * Standard protected-request boundary. A temporary-password session is valid
  * only long enough to replace that password or sign out, so direct route
  * handlers using this helper receive an explicit navigation response too.
+ *
+ * Login and `/` use getSessionUserForPasswordChange so they can send the
+ * browser to /change-password themselves. The login client also routes there
+ * from the mustChangePassword flag returned by the login actions.
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const user = await getSessionUserForPasswordChange();
@@ -93,6 +97,8 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
 export async function requireUser(): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  // Defense in depth if a caller used a password-change helper incorrectly.
+  if (user.mustChangePassword) redirect("/change-password");
   return user;
 }
 
