@@ -4,7 +4,7 @@ import { PDFDocument, PDFName, StandardFonts, rgb } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { db } from "./support/db";
 import { fakeS3Keys } from "./support/fake-s3";
-import { PERIOD_A, PT, sessionFor } from "./support/payroll-time";
+import { PT, sessionFor } from "./support/payroll-time";
 import { ADMIN_STATE, BASE_URL } from "./support/test-data";
 
 // All identities and check references belong to the synthetic e2e seed.
@@ -91,9 +91,15 @@ async function textPdf(lines: string[], pageCount = 1) {
 async function openUpload(page: Page) {
   await page.goto("/admin/payroll/import");
   await expect(page.getByRole("heading", { name: "Import pay stubs", exact: true })).toBeVisible();
-  await page.getByLabel("Pay period", { exact: true }).click();
-  await page.getByRole("option", { name: PERIOD_A.title, exact: true }).click();
+  // No pay period picker: periods come from the dates printed on each stub.
+  await expect(page.getByLabel("Pay period", { exact: true })).toHaveCount(0);
   return page.locator("body");
+}
+
+/** Clean pages are preselected and hidden behind "needs attention"; reveal every row. */
+async function showAll(dialog: Locator) {
+  await expect(dialog.getByText("Analyzing PDFs…", { exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: /^Show all \d+ pages$/ }).click();
 }
 
 async function drop(
@@ -105,6 +111,8 @@ async function drop(
   await dialog
     .getByLabel("PDF files", { exact: true })
     .setInputFiles({ name, mimeType: "application/pdf", buffer: bytes });
+  await expect(dialog.getByRole("button", { name: /^Show all \d+ pages$/ })).toBeVisible();
+  await showAll(dialog);
   await expect(dialog.getByRole("row", { name: new RegExp(`^Page .+ of ${name}$`) })).toHaveCount(
     pageCount,
   );
@@ -164,7 +172,7 @@ async function confirmSelected(dialog: Locator, count: number) {
   await dialog
     .getByRole("button", { name: `Save ${count} selected pages`, exact: true })
     .click();
-  await expect(dialog.getByText(/Import finished\./)).toBeVisible();
+  await expect(dialog.getByText(/Imported \d+ pages?/)).toBeVisible();
 }
 
 const docs = () =>
@@ -198,8 +206,7 @@ async function extractedText(bytes: Buffer) {
 }
 
 async function businessState() {
-  const [periods, employees, time] = await Promise.all([
-    db.payrollCalendar.findMany({ orderBy: { id: "asc" } }),
+  const [employees, time] = await Promise.all([
     db.employee.findMany({
       where: { employeeId: { in: IDS } },
       select: { id: true, employmentStatus: true },
@@ -211,7 +218,7 @@ async function businessState() {
       orderBy: { id: "asc" },
     }),
   ]);
-  return JSON.stringify({ periods, employees, time });
+  return JSON.stringify({ employees, time });
 }
 
 async function assertNoOverflow(page: Page, dialog: Locator) {
@@ -252,13 +259,14 @@ test("combined source saves isolated pages, enforces employee access, and skips 
       name: "Select page 1 of synthetic-combined-paystubs.pdf",
       exact: true,
     }),
-  ).not.toBeChecked();
+  ).toBeChecked();
   await expect(
     rowOf(dialog, 1).getByRole("checkbox", {
       name: "Reviewed page 1 of synthetic-combined-paystubs.pdf",
       exact: true,
     }),
-  ).not.toBeChecked();
+  ).toBeChecked();
+  await expect(dialog.getByText(/2 pages ready to import/)).toBeVisible();
   expect(await docs()).toHaveLength(0);
   expect(await fakeS3Keys()).toEqual(beforeKeys);
 
@@ -343,29 +351,25 @@ test("combined source saves isolated pages, enforces employee access, and skips 
   expect(await fakeS3Keys()).toEqual(afterKeys);
 });
 
-test("only explicitly reviewed selected pages publish, without changing pay periods or time", async ({
+test("only selected pages publish and the stub's own pay period is reused, without changing time", async ({
   page,
 }) => {
   const unchanged = await businessState();
+  const periodsBefore = await db.payrollCalendar.count();
   const dialog = await openUpload(page);
   await drop(dialog, await syntheticPdf([rex, ella]));
   expect(await docs()).toHaveLength(0);
   expect(await businessState()).toBe(unchanged);
-  await rowOf(dialog, 1)
+  // Clean pages arrive selected and reviewed; the admin can still drop one.
+  await rowOf(dialog, 2)
     .getByRole("checkbox", {
-      name: "Select page 1 of synthetic-combined-paystubs.pdf",
+      name: "Select page 2 of synthetic-combined-paystubs.pdf",
       exact: true,
     })
-    .check();
+    .uncheck();
   await expect(
     dialog.getByRole("button", { name: "Review selected (1)", exact: true }),
-  ).toBeDisabled();
-  await rowOf(dialog, 1)
-    .getByRole("checkbox", {
-      name: "Reviewed page 1 of synthetic-combined-paystubs.pdf",
-      exact: true,
-    })
-    .check();
+  ).toBeEnabled();
   await confirmSelected(dialog, 1);
   const saved = await docs();
   expect(saved).toHaveLength(1);
@@ -378,6 +382,31 @@ test("only explicitly reviewed selected pages publish, without changing pay peri
     }),
   ).not.toBeChecked();
   expect(await businessState()).toBe(unchanged);
+  // The stub's dates (03/01/2025 - 03/14/2025) match the seeded "PT Period A", so
+  // it is reused: no duplicate period is created. (Creation is covered by the
+  // paystub-periods unit tests.)
+  expect(await db.payrollCalendar.count()).toBe(periodsBefore);
+  expect(
+    await db.payrollCalendar.count({
+      where: { payPeriodStart: new Date("2025-03-01T00:00:00Z"), payPeriodEnd: new Date("2025-03-14T00:00:00Z") },
+    }),
+  ).toBe(1);
+});
+
+test("undo removes exactly the pages this import saved", async ({ page }) => {
+  const keysBefore = new Set(await fakeS3Keys());
+  const dialog = await openUpload(page);
+  await drop(dialog, await syntheticPdf([rex, ella]));
+  await confirmSelected(dialog, 2);
+  expect(await docs()).toHaveLength(2);
+  page.once("dialog", (confirm) => void confirm.accept());
+  await dialog.getByRole("button", { name: /^Undo this import \(2\)$/ }).click();
+  await expect(dialog.getByText(/Undone: removed 2 documents/)).toBeVisible();
+  expect(await docs()).toHaveLength(0);
+  expect((await fakeS3Keys()).filter((key) => !keysBefore.has(key))).toEqual([]);
+  expect(
+    await db.auditLog.count({ where: { action: "payroll.import.undo" } }),
+  ).toBeGreaterThan(0);
 });
 
 test("summaries, mixed identities, continuations and scans stay excluded; OCR is bounded", async ({
@@ -425,7 +454,7 @@ test("summaries, mixed identities, continuations and scans stay excluded; OCR is
   await dialog
     .getByRole("button", { name: "Use OCR for scanned pages", exact: true })
     .click();
-  await expect(dialog.getByRole("alert")).toContainText(/up to 10 scanned pages/i);
+  await expect(dialog.getByRole("alert").filter({ hasText: /up to 10 scanned pages/i })).toBeVisible();
   expect(await docs()).toHaveLength(0);
   expect(await fakeS3Keys()).toEqual(beforeKeys);
   expect(await businessState()).toBe(unchanged);
@@ -446,7 +475,7 @@ test("stale employee evidence requires a fresh review before retry succeeds", as
   await dialog
     .getByRole("button", { name: "Save 1 selected pages", exact: true })
     .click();
-  await expect(dialog.getByRole("alert")).toContainText(/roster|evidence|analy[sz]e/i);
+  await expect(dialog.getByRole("alert").filter({ hasText: /roster|evidence|analy[sz]e/i })).toBeVisible();
   expect(await docs()).toHaveLength(0);
   await dialog.getByRole("button", { name: "Analyze again", exact: true }).click();
   await expect(
@@ -482,8 +511,9 @@ test("separate sources reviewed together save both employees without stale dupli
       buffer: await syntheticPdf([ella]),
     },
   ]);
+  await expect(dialog.getByRole("button", { name: /^Show all \d+ pages$/ })).toBeVisible();
+  await showAll(dialog);
   await expect(dialog.getByRole("row", { name: /^Page / })).toHaveCount(2);
-  await expect(dialog.getByText("Analyzing PDFs…", { exact: true })).toHaveCount(0);
   expect(await docs()).toHaveLength(0);
   await selectReviewed(rowOf(dialog, 1, "rex-source.pdf"), 1, "rex-source.pdf");
   await selectReviewed(rowOf(dialog, 1, "ella-source.pdf"), 1, "ella-source.pdf");
@@ -559,7 +589,7 @@ test("concurrent admin confirmations retain one document, audit, notification an
         .click(),
     ]);
     for (const dialog of [firstDialog, secondDialog]) {
-      await expect(dialog.getByText(/Import finished\./)).toBeVisible();
+      await expect(dialog.getByText(/Imported \d+ pages?/)).toBeVisible();
       await expect(
         rowOf(dialog, 1, "same-concurrent-source.pdf").getByText(/^(SAVED|EXISTING)$/),
       ).toBeVisible();
@@ -585,7 +615,7 @@ test("concurrent admin confirmations retain one document, audit, notification an
           notification: { type: "PAYROLL", title: "New pay document available" },
         },
       }),
-    ).toBe(notificationsBefore + 1);
+    ).toBe(notificationsBefore); // stub is dated 2025: filed silently, no notification
     const retainedKeys = (await fakeS3Keys()).filter((key) => !keysBefore.has(key));
     expect(retainedKeys).toEqual([
       `${process.env.S3_BUCKET}/payroll/${saved[0].fileName}`,

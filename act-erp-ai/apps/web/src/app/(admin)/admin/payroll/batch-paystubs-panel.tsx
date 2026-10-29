@@ -16,17 +16,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { humanizeUnexpectedError } from "@/lib/action-result";
-import { bulkUpdatePaystubRows, canBulkReviewPaystub } from "@/lib/paystub-bulk-review";
+import { bulkUpdatePaystubRows, canBulkReviewPaystub, isCleanPaystubPage } from "@/lib/paystub-bulk-review";
 import type {
   BatchDecision,
   BatchPage,
   BatchPreview,
   BatchReceipt,
 } from "@/lib/paystub-import";
-import { confirmPaystubBatch, previewPaystubBatch } from "@/server/actions/paystub-batch";
+import { confirmPaystubBatch, previewPaystubBatch, undoPaystubBatch } from "@/server/actions/paystub-batch";
 
-type Period = { payPeriodStart: Date; payPeriodEnd: Date };
-type Employee = { id: string; name: string };
+type Employee = { id: string; name: string; inactive?: boolean };
+type LastImport = { documentIds: string[]; periodIds: string[]; undoable: boolean };
 type ReviewRow = {
   key: string;
   sourceId: string;
@@ -71,13 +71,11 @@ function MatchMark({ ok, label }: { ok: boolean; label: string }) {
 
 export function BatchPaystubsPanel({
   employees,
-  selectedPeriod,
   onClose,
   onSavingChange,
   onHasRowsChange,
 }: {
   employees: Employee[];
-  selectedPeriod: Period | null;
   onClose: () => void;
   onSavingChange: (saving: boolean) => void;
   onHasRowsChange: (hasRows: boolean) => void;
@@ -90,6 +88,9 @@ export function BatchPaystubsPanel({
   const [message, setMessage] = useState("");
   const [confirmation, setConfirmation] = useState<string[] | null>(null);
   const [finalChecked, setFinalChecked] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [lastImport, setLastImport] = useState<LastImport | null>(null);
+  const [undoing, setUndoing] = useState(false);
   const generation = useRef(0);
   const active = useRef(false);
   const previewWindows = useRef<Array<{ url: string; window: Window }>>([]);
@@ -147,12 +148,7 @@ export function BatchPaystubsPanel({
   function needsDateReason(row: ReviewRow) {
     return (
       row.start !== date(row.page.parsed?.payPeriodStart) ||
-      row.end !== date(row.page.parsed?.payPeriodEnd) ||
-      !!(
-        selectedPeriod &&
-        (row.start !== date(selectedPeriod.payPeriodStart) ||
-          row.end !== date(selectedPeriod.payPeriodEnd))
-      )
+      row.end !== date(row.page.parsed?.payPeriodEnd)
     );
   }
 
@@ -223,8 +219,10 @@ export function BatchPaystubsPanel({
             employeeId: page.match.employeeId ?? "",
             start: date(page.parsed?.payPeriodStart),
             end: date(page.parsed?.payPeriodEnd),
-            selected: false,
-            reviewed: false,
+            // Clean pages (high-confidence match, readable text, no duplicates) start
+            // selected and reviewed so only exceptions need a human.
+            selected: isCleanPaystubPage(page, result.pages),
+            reviewed: isCleanPaystubPage(page, result.pages),
             overrideReason: "",
             dateReason: "",
             duplicateMode: "KEEP" as const,
@@ -349,6 +347,24 @@ export function BatchPaystubsPanel({
     }
   }
 
+  async function undoLastImport() {
+    if (!lastImport?.undoable || undoing || saving) return;
+    if (!window.confirm(`Remove the ${lastImport.documentIds.length} pages saved by this import${lastImport.periodIds.length ? ` and the ${lastImport.periodIds.length} pay periods it created` : ""}? Employees already notified keep that notification.`)) return;
+    setUndoing(true);
+    try {
+      const result = await undoPaystubBatch({ documentIds: lastImport.documentIds, periodIds: lastImport.periodIds });
+      if (!result.ok) throw new Error(result.error);
+      setMessage(`Undone: removed ${result.removedDocuments} document${result.removedDocuments === 1 ? "" : "s"} and ${result.removedPeriods} pay period${result.removedPeriods === 1 ? "" : "s"}. Analyze the PDF again to re-import.`);
+      setLastImport(null);
+      setRows((current) => current.filter((row) => !row.receipt || row.receipt.status === "FAILED"));
+      router.refresh();
+    } catch (error) {
+      setMessage(humanizeUnexpectedError(error) ?? "Could not undo this import. Try again.");
+    } finally {
+      setUndoing(false);
+    }
+  }
+
   const pending = rows.filter((row) => !complete(row));
   const selectable = pending.filter((row) => canBulkReviewPaystub(row, skipped(row)));
   const selected = selectable.filter((row) => row.selected);
@@ -359,6 +375,11 @@ export function BatchPaystubsPanel({
   );
   const ready = pending.filter((row) => !problem(row));
   const failed = pending.filter((row) => row.receipt?.status === "FAILED");
+  const needsAttention = (row: ReviewRow) =>
+    row.receipt?.status === "FAILED" ||
+    (!complete(row) && !skipped(row) && (row.page.status !== "SUPPORTED" || !!problem(row)));
+  const attentionRows = rows.filter(needsAttention);
+  const visibleRows = showAll ? rows : attentionRows;
   const confirmationRows = confirmation
     ? rows.filter((row) => confirmation.includes(row.key))
     : [];
@@ -392,6 +413,10 @@ export function BatchPaystubsPanel({
     const run = ++generation.current;
     setSaving(true);
     onSavingChange(true);
+    const importedIds: string[] = [];
+    const createdPeriodIds: string[] = [];
+    const skippedPeriods: { start: string; end: string; reason: string }[] = [];
+    let replacedAny = false;
     try {
       for (const source of sources) {
         const chosen = confirmationRows.filter(
@@ -428,6 +453,10 @@ export function BatchPaystubsPanel({
           );
           if (run !== generation.current) return;
           if (!result.ok) throw new Error(result.error);
+          for (const item of result.results) if (item.status === "SAVED" && item.id) importedIds.push(item.id);
+          for (const item of result.periods.created) createdPeriodIds.push(item.id);
+          skippedPeriods.push(...result.periods.skipped);
+          if (chosen.some((row) => row.duplicateMode === "REPLACE")) replacedAny = true;
           setRows((current) =>
             current.map((row) => {
               if (!chosen.some((item) => item.key === row.key)) return row;
@@ -461,9 +490,22 @@ export function BatchPaystubsPanel({
           );
         }
       }
+      const savedCount = importedIds.length;
       setMessage(
-        "Import finished. Saved and existing pages are retained below. Retry only failed pages after reviewing any errors.",
+        `Imported ${savedCount} page${savedCount === 1 ? "" : "s"}` +
+          (createdPeriodIds.length ? `, created ${createdPeriodIds.length} pay period${createdPeriodIds.length === 1 ? "" : "s"}` : "") +
+          (skippedPeriods.length
+            ? `. ${skippedPeriods.length} period${skippedPeriods.length === 1 ? "" : "s"} need attention on the Payroll page: ${skippedPeriods.map((item) => `${item.start} to ${item.end} (${item.reason})`).join("; ")}`
+            : "") +
+          ". Retry only failed pages after reviewing any errors.",
       );
+      if (importedIds.length) {
+        setLastImport((current) => ({
+          documentIds: [...(current?.documentIds ?? []), ...importedIds],
+          periodIds: [...(current?.periodIds ?? []), ...createdPeriodIds],
+          undoable: (current?.undoable ?? true) && !replacedAny,
+        }));
+      }
       setConfirmation(null);
       setFinalChecked(false);
       // Refresh the payroll list while keeping receipts and failed rows in this dialog.
@@ -486,7 +528,7 @@ export function BatchPaystubsPanel({
           type="file"
           accept="application/pdf,.pdf"
           multiple
-          disabled={analyzing || saving || !selectedPeriod}
+          disabled={analyzing || saving}
           onChange={(event) => {
             void handleFiles(event.target.files);
             event.target.value = "";
@@ -557,6 +599,36 @@ export function BatchPaystubsPanel({
         </div>
       ))}
       {!!rows.length && (
+        <section
+          aria-label="Import summary"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 p-3 text-sm"
+        >
+          <p role="status" className="min-w-0 break-words">
+            <strong>{rows.filter((row) => !complete(row) && row.selected && !problem(row)).length}</strong> pages ready to import
+            {" · "}
+            <strong>{attentionRows.length}</strong> need attention
+            {rows.some((row) => skipped(row)) ? ` · ${rows.filter((row) => skipped(row)).length} already imported or skipped` : ""}
+            {rows.some((row) => row.receipt?.status === "SAVED") ? ` · ${rows.filter((row) => row.receipt?.status === "SAVED").length} saved` : ""}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {lastImport?.undoable && (
+              <Button type="button" size="sm" variant="outline" disabled={undoing || saving} onClick={() => void undoLastImport()}>
+                {undoing && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                Undo this import ({lastImport.documentIds.length})
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={() => setShowAll((value) => !value)}>
+              {showAll ? "Show only pages needing attention" : `Show all ${rows.length} pages`}
+            </Button>
+          </div>
+        </section>
+      )}
+      {!!rows.length && !visibleRows.length && (
+        <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+          Nothing needs attention. Review the summary above, then choose Review selected.
+        </p>
+      )}
+      {!!visibleRows.length && (
         <div className="min-w-0 space-y-2">
           <p className="text-xs text-muted-foreground md:hidden">
             Swipe horizontally to review all import columns.
@@ -597,7 +669,7 @@ export function BatchPaystubsPanel({
               </tr>
             </thead>
             <tbody className="divide-y">
-              {rows.map((row) => {
+              {visibleRows.map((row) => {
                 const locked = !!complete(row) || saving || analyzing;
                 const exact = row.page.duplicates.some((duplicate) => duplicate.exact);
                 const hasDuplicate =
@@ -723,11 +795,14 @@ export function BatchPaystubsPanel({
                               <SelectValue placeholder="Choose" />
                             </SelectTrigger>
                             <SelectContent>
-                              {employees.map((employee) => (
-                                <SelectItem key={employee.id} value={employee.id}>
-                                  {employee.name}
-                                </SelectItem>
-                              ))}
+                              {[...employees]
+                                .sort((a, b) => Number(!!a.inactive) - Number(!!b.inactive) || a.name.localeCompare(b.name))
+                                .map((employee) => (
+                                  <SelectItem key={employee.id} value={employee.id}>
+                                    {employee.name}
+                                    {employee.inactive ? " (inactive)" : ""}
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                           </Select>
                         ) : exact ? (
@@ -926,6 +1001,11 @@ export function BatchPaystubsPanel({
           <p className="text-sm font-medium">
             Confirm {confirmationRows.length} selected page
             {confirmationRows.length === 1 ? "" : "s"}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {new Set(confirmationRows.map((row) => row.employeeId)).size} employees ·{" "}
+            {new Set(confirmationRows.map((row) => `${row.start}|${row.end}`)).size} pay periods
+            (periods that do not exist yet are created from the stub dates).
           </p>
           <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
             {confirmationRows.map((row) => (

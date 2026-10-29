@@ -150,3 +150,46 @@ describe("matchEmployee", () => {
     ).toBe("jamie");
   });
 });
+
+describe("matchEmployee namesakes and aliases", () => {
+  const twins: EmployeeCandidate[] = [
+    { id: "old", name: "Jose Gonzalez", ssnLast4: "4321", employmentStatus: "ACTIVE" },
+    { id: "dup", name: "Jose Gonzalez", ssnLast4: null, employmentStatus: "INACTIVE" },
+  ];
+
+  it("prefers the one active employee over a deactivated namesake", () => {
+    expect(
+      matchEmployee(parsed({ employeeName: "Jose Gonzales", ssnLast4: null }), twins),
+    ).toMatchObject({ employeeId: "old", confidence: "medium" });
+    expect(
+      matchEmployee(parsed({ employeeName: "Jose Gonzales", ssnLast4: "4321" }), twins),
+    ).toMatchObject({ employeeId: "old", confidence: "high" });
+  });
+
+  it("stays ambiguous when two active employees share a name", () => {
+    const both = twins.map((e) => ({ ...e, employmentStatus: "ACTIVE" }));
+    expect(
+      matchEmployee(parsed({ employeeName: "Jose Gonzales", ssnLast4: null }), both),
+    ).toMatchObject({ employeeId: null, confidence: "low" });
+  });
+
+  it("never silently assigns a deactivated person's SSN to an active namesake", () => {
+    const people: EmployeeCandidate[] = [
+      { id: "gone", name: "Sam Roe", ssnLast4: "1212", employmentStatus: "TERMINATED" },
+      { id: "new", name: "Sam Roe", ssnLast4: "3434", employmentStatus: "ACTIVE" },
+    ];
+    expect(
+      matchEmployee(parsed({ employeeName: "Sam Roe", ssnLast4: "1212" }), people),
+    ).toMatchObject({ employeeId: null, confidence: "low" });
+  });
+
+  it("matches a remembered stub spelling", () => {
+    const roster2: EmployeeCandidate[] = [
+      { id: "ds", name: "Deepak S Pillai", ssnLast4: "5555", aliases: ["Deepak Somarajan"] },
+    ];
+    expect(
+      matchEmployee(parsed({ employeeName: "Deepak Somarajan", ssnLast4: "5555" }), roster2),
+    ).toMatchObject({ employeeId: "ds", confidence: "high" });
+  });
+});
+

@@ -12,6 +12,8 @@ type SaveInput = {
   replaceId?: string; replaceVersion?: string;
   expectedRosterHash?: string;
   sourcePageCount?: number;
+  /** Default true. Historical imports pass false so employees are not spammed. */
+  notify?: boolean;
 };
 const iso = (date: Date) => date.toISOString().slice(0, 10);
 export function payrollVersion(row: { id: string; fileSha256: string | null; uploadedAt: Date }): string {
@@ -83,7 +85,7 @@ export async function persistPayrollDocument(input: SaveInput): Promise<BatchRec
           overrideReason: input.decision?.overrideReason ?? null, dateReason: input.decision?.dateReason ?? null, duplicateMode: input.decision?.duplicateMode ?? "KEEP" } : {}),
       } } });
       // Atomic with the document: a retry never sends a second notification.
-      await tx.notification.create({ data: { type: "PAYROLL", title: "New pay document available", message: `A new ${input.category} document for the pay period ending ${input.payPeriodEnd} is available in Payroll.`, link: "/dashboard/payroll", translationKey: "notificationTemplates.payrollAvailable", translationParams: { category: input.category, payPeriodEnd: input.payPeriodEnd }, recipients: { create: { employeeId: input.employeeId } } } });
+      if (input.notify !== false) await tx.notification.create({ data: { type: "PAYROLL", title: "New pay document available", message: `A new ${input.category} document for the pay period ending ${input.payPeriodEnd} is available in Payroll.`, link: "/dashboard/payroll", translationKey: "notificationTemplates.payrollAvailable", translationParams: { category: input.category, payPeriodEnd: input.payPeriodEnd }, recipients: { create: { employeeId: input.employeeId } } } });
       return { pageNumber, status: "SAVED" as const, id: created.id, replaced: replacement ? 1 : 0 };
     });
     committed = result.status === "SAVED";

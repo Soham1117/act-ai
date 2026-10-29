@@ -10,19 +10,22 @@ export const metadata = { title: "Import pay stubs" };
 
 export default async function PaystubImportPage() {
   await requireAdmin();
-  const [calendarPeriods, employees] = await Promise.all([
-    db.payrollCalendar.findMany({ orderBy: { payDate: "desc" } }),
-    db.employee.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  const people = await db.employee.findMany({
+    where: { employmentStatus: { not: "PENDING_REVIEW" } },
+    select: { id: true, name: true, employmentStatus: true },
+    orderBy: { name: "asc" },
+  });
+  const employees = people.map((person) => ({
+    id: person.id,
+    name: person.name,
+    inactive: person.employmentStatus === "INACTIVE" || person.employmentStatus === "TERMINATED",
+  }));
 
   return (
     <>
       <PageHeader
         title="Import pay stubs"
-        description="Analyze PDFs, verify Name/SSN matches in the table, then save selected pages."
+        description="Upload the PDF. Pay periods come from the dates on each stub, and pages that match cleanly are preselected. Only exceptions need your attention."
         actions={
           <Button asChild size="sm" variant="outline">
             <Link href="/admin/payroll">
@@ -32,7 +35,7 @@ export default async function PaystubImportPage() {
           </Button>
         }
       />
-      <PaystubImportClient calendarPeriods={calendarPeriods} employees={employees} />
+      <PaystubImportClient employees={employees} />
     </>
   );
 }

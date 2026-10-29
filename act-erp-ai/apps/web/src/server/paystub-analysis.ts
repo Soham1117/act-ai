@@ -58,8 +58,12 @@ export async function analyzePayrollSource(file: SourceFile, ocr = false): Promi
   }
   const storedRoster = await db.employee.findMany({ where: { employmentStatus: { not: "PENDING_REVIEW" } }, select: { id: true, name: true, ssnLast4: true, privateDetails: true, employmentStatus: true }, orderBy: { id: "asc" } });
   const rosterHash = createHash("sha256").update(JSON.stringify(storedRoster)).digest("hex");
+  const aliasRows = await db.paystubNameAlias.findMany({ select: { employeeId: true, aliasName: true } });
+  const aliasesByEmployee = new Map<string, string[]>();
+  for (const row of aliasRows) aliasesByEmployee.set(row.employeeId, [...(aliasesByEmployee.get(row.employeeId) ?? []), row.aliasName]);
   const roster = await Promise.all(storedRoster.map(async row => ({
     id: row.id, name: row.name, ssnLast4: (await readEmployeePrivateDetails(row)).ssnLast4, employmentStatus: row.employmentStatus,
+    aliases: aliasesByEmployee.get(row.id) ?? [],
   })));
   const pages: BatchPage[] = [];
   for (const page of analyzed.pages) {

@@ -324,6 +324,7 @@ model Employee {
   eligibilityAssessments BenefitEligibilityAssessment[]
   privateNotes EmployeeNote[]
   hirePacketImports      HirePacketImport[]
+  paystubAliases         PaystubNameAlias[]
   onboardingPacket       OnboardingPacketSubmission?
 
   createdAt DateTime @default(now())
@@ -771,6 +772,24 @@ model HirePacketImport {
 
   @@index([employeeId, createdAt(sort: Desc)])
   @@index([status])
+}
+
+/// A stub spelling an admin confirmed belongs to this employee (for example
+/// "Jose Gonzales" -> Jose Gonzalez), so later imports match without asking.
+/// Only boosts name agreement; the SSN last 4 is still checked.
+model PaystubNameAlias {
+  id          String   @id @default(cuid())
+  /// Normalized stub name (see stubNameKey in lib/paystub-match.ts).
+  aliasKey    String
+  /// Original spelling shown to admins.
+  aliasName   String
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@unique([aliasKey, employeeId])
+  @@index([employeeId])
 }
 
 model PayrollCalendar {

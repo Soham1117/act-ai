@@ -14,3 +14,15 @@ export type BatchDecision = {
   duplicateMode: "KEEP" | "ADDITIONAL" | "REPLACE"; replaceId?: string; replaceVersion?: string;
 };
 export type BatchReceipt = { pageNumber: number; status: "SAVED" | "EXISTING" | "SKIPPED" | "FAILED"; id?: string; error?: string; warning?: string };
+export type BatchPeriodSummary = {
+  created: { id: string; start: string; end: string }[];
+  existing: number;
+  skipped: { start: string; end: string; reason: string }[];
+};
+/** Stubs older than this are filed silently; recent ones notify the employee. */
+export const PAYSTUB_NOTIFY_WINDOW_DAYS = 60;
+export function shouldNotifyForStub(payDateOrEnd: string, now: Date = new Date()): boolean {
+  const time = Date.parse(`${payDateOrEnd}T00:00:00Z`);
+  return Number.isFinite(time) && now.getTime() - time <= PAYSTUB_NOTIFY_WINDOW_DAYS * 86_400_000;
+}
+

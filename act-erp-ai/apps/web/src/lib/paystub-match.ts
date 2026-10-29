@@ -1,6 +1,22 @@
 import type { ParsedPaystub } from "./paystub-parser";
 
-export type EmployeeCandidate = { id: string; name: string; ssnLast4: string | null };
+export type EmployeeCandidate = {
+  id: string;
+  name: string;
+  ssnLast4: string | null;
+  /** EmploymentStatus; INACTIVE/TERMINATED are only chosen when no active person fits. */
+  employmentStatus?: string | null;
+  /** Stub spellings an admin has already confirmed for this employee. */
+  aliases?: string[];
+};
+
+const isActive = (e: EmployeeCandidate) =>
+  e.employmentStatus !== "INACTIVE" && e.employmentStatus !== "TERMINATED";
+
+/** Stable key for remembering how a stub spells a name. */
+export function stubNameKey(name: string): string {
+  return nameTokens(name).join(" ");
+}
 
 export type MatchResult = {
   employeeId: string | null;
@@ -128,15 +144,22 @@ export function matchEmployee(
     parsed.ssnLast4 && /^\d{4}$/.test(parsed.ssnLast4)
       ? roster.filter((e) => e.ssnLast4 === parsed.ssnLast4)
       : [];
-  const nameMatches = parsed.employeeName
-    ? roster.filter((e) => namesLikelyMatch(parsed.employeeName!, e.name))
+  let nameMatches = parsed.employeeName
+    ? roster.filter(
+        (e) =>
+          namesLikelyMatch(parsed.employeeName!, e.name) ||
+          (e.aliases ?? []).some((alias) => namesLikelyMatch(parsed.employeeName!, alias)),
+      )
     : [];
+  if (nameMatches.length > 1) {
+    // Namesakes: a lone active employee wins over deactivated duplicates.
+    const active = nameMatches.filter(isActive);
+    if (active.length === 1) nameMatches = active;
+  }
 
   if (ssnMatches.length === 1) {
     const candidate = ssnMatches[0];
-    const nameAgrees = parsed.employeeName
-      ? namesLikelyMatch(parsed.employeeName, candidate.name)
-      : false;
+    const nameAgrees = nameMatches.some((e) => e.id === candidate.id);
     if (nameAgrees && nameMatches.length === 1) {
       return result(candidate.id, "high", "SSN last 4 and name both match.", true, true);
     }

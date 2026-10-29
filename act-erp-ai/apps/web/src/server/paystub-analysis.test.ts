@@ -4,7 +4,7 @@ import { PDFDocument } from "pdf-lib";
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), destroy: vi.fn(), roster: vi.fn(), documents: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: { AUTH_SECRET: "synthetic-test-secret", AWS_REGION: "us-east-2" } }));
-vi.mock("@/lib/db", () => ({ db: { employee: { findMany: mocks.roster }, payroll: { findMany: mocks.documents } } }));
+vi.mock("@/lib/db", () => ({ db: { employee: { findMany: mocks.roster }, payroll: { findMany: mocks.documents }, paystubNameAlias: { findMany: async () => [] } } }));
 vi.mock("@/lib/storage", () => ({ uploadFile: vi.fn(), deleteFile: vi.fn() }));
 vi.mock("@aws-sdk/client-textract", () => ({
   TextractClient: class { send = mocks.send; destroy = mocks.destroy; },
