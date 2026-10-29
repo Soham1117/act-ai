@@ -99,7 +99,7 @@ docker run --rm -v "${LIVE_VOLUME}:/data" alpine:3.20 sh -c 'find /data -mindept
 
 CONTAINER="act-erp-walg-disaster-recover-$$"
 cleanup_container() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
-trap 'rm -f "$INNER" "$RUNLOG" "$WALG_RESTORE_ENV_FOR_DOCKER"; cleanup_container' EXIT
+trap 'rm -f "$INNER" "$WALG_RESTORE_ENV_FOR_DOCKER"; cleanup_container' EXIT
 
 log "backup-fetch $BACKUP_NAME + PITR into $LIVE_VOLUME"
 INNER="$(mktemp)"

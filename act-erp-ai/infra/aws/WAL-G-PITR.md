@@ -183,6 +183,26 @@ export WALG_RESTORE_ENV_FILE=/home/ubuntu/act-erp-ai/act-erp-ai/infra/walg-resto
 # Prefer: rm -f "$WALG_RESTORE_ENV_FILE" after success when possible
 ```
 
+### PITR failed — rollback
+
+If `walg-disaster-restore.sh` exits non-zero after the live volume was cleared or partially recovered, **do not** delete `${RELEASE}/walg-disaster-recover.log` — use it for forensics. Restore service from the aside copy (`act-erp-lite_pgdata-broken-<stamp>` from the same run).
+
+1. Stop app writes: `docker compose -f infra/docker-compose.prod-lite.yml stop web postgres`
+2. If live `pgdata` is empty or corrupt, remove it: `docker volume rm act-erp-lite_pgdata` (only when postgres is stopped and you are reverting to the broken copy)
+3. Recreate live volume and copy the broken aside back:
+
+```bash
+BROKEN=act-erp-lite_pgdata-broken-<stamp>   # from script log / release dir name
+LIVE=act-erp-lite_pgdata
+docker volume rm "$LIVE" 2>/dev/null || true
+docker volume create "$LIVE"
+docker run --rm -v "${BROKEN}:/from:ro" -v "${LIVE}:/to" alpine:3.20 sh -c 'cp -a /from/. /to/'
+```
+
+4. `docker compose -f infra/docker-compose.prod-lite.yml up -d postgres` — wait for `pg_isready`
+5. `docker compose -f infra/docker-compose.prod-lite.yml up -d web`
+6. Verify: `curl -fsS https://persona.americancompletiontools.com/api/health`
+
 ---
 
 ## Acceptance (Task 5)
