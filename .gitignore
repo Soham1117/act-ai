@@ -12,6 +12,11 @@ build/
 .env.local
 .env.*.local
 
+# Infra ops env on the server (*.example templates stay tracked)
+act-erp-ai/infra/postgres.env
+act-erp-ai/infra/walg.env
+act-erp-ai/infra/walg/walg.env
+
 # OS / editor
 .DS_Store
 
