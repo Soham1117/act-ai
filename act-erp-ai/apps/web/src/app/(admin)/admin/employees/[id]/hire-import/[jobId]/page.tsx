@@ -2,6 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/auth";
+import { readEmployeePrivateDetails } from "@/server/employee-private-data";
+import { safeHirePacketError } from "@/server/hire-packet-sensitive-data";
 import { Button } from "@/components/ui/button";
 import { HireImportReviewForm } from "./review-form";
 
@@ -10,13 +13,15 @@ export default async function HireImportReviewPage({
 }: {
   params: Promise<{ id: string; jobId: string }>;
 }) {
+  await requireAdmin();
   const { id: employeeId, jobId } = await params;
 
-  const [employee, job] = await Promise.all([
+  const [storedEmployee, job] = await Promise.all([
     db.employee.findUnique({
       where: { id: employeeId },
       select: {
         id: true,
+        privateDetails: true,
         name: true,
         phoneNumber: true,
         dateOfBirth: true,
@@ -38,7 +43,8 @@ export default async function HireImportReviewPage({
     db.hirePacketImport.findUnique({ where: { id: jobId } }),
   ]);
 
-  if (!employee || !job || job.employeeId !== employeeId) notFound();
+  if (!storedEmployee || !job || job.employeeId !== employeeId) notFound();
+  const employee = await readEmployeePrivateDetails(storedEmployee);
 
   const currentValues: Record<string, string | null> = {
     name: employee.name,
@@ -81,7 +87,7 @@ export default async function HireImportReviewPage({
         employeeId={employeeId}
         employeeName={employee.name}
         initialStatus={job.status}
-        initialError={job.errorMessage}
+        initialError={safeHirePacketError(job.errorMessage)}
         currentValues={currentValues}
       />
     </>

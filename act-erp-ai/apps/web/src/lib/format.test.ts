@@ -37,6 +37,13 @@ describe("formatDateOnly", () => {
     expect(formatDateOnly("2026-01-01")).toBe("Jan 1, 2026");
   });
 
+  it("keeps a DOB calendar day (UTC midnight) instead of shifting west of UTC", () => {
+    // Admin profile used to call toLocaleDateString() with no zone; in
+    // America/Chicago that rendered the previous calendar day vs My details.
+    expect(formatDateOnly("1999-11-17T00:00:00.000Z")).toBe("Nov 17, 1999");
+    expect(formatDateOnly("1999-11-17")).toBe("Nov 17, 1999");
+  });
+
   it("returns an em dash for null/undefined", () => {
     expect(formatDateOnly(null)).toBe("—");
     expect(formatDateOnly(undefined)).toBe("—");

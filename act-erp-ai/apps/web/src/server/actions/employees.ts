@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
+import { EMPLOYEE_PRIVATE_FIELDS, encryptEmployeePrivateDetails, prepareEmployeePrivateUpdate, readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -127,6 +129,12 @@ export async function createEmployee(
       hashPassword(DEFAULT_KIOSK_PIN),
     ]);
 
+    const recordId = randomUUID();
+    const privateWrite = await encryptEmployeePrivateDetails(recordId, {
+      personalEmail: data.personalEmail ?? null, ssnLast4: data.ssnLast4 ?? null,
+      phoneNumber: data.phoneNumber || null, address: combineAddressLines(data.address, data.address2),
+      city: data.city || null, state: data.state || null, zipCode: data.zipCode || null,
+    });
     const employee = await db.$transaction(async (tx) => {
       const employeeId = await generateEmployeeId(tx);
       let userId: string;
@@ -161,24 +169,19 @@ export async function createEmployee(
       }
       return tx.employee.create({
         data: {
+          id: recordId,
           employeeId,
           userId,
           name: data.name,
           email: data.email ?? null,
-          personalEmail: data.personalEmail ?? null,
-          ssnLast4: data.ssnLast4 ?? null,
           gender: data.gender,
           departmentId: data.departmentId || null,
           jobTitle: data.jobTitle || null,
-          phoneNumber: data.phoneNumber || null,
-          address: combineAddressLines(data.address, data.address2),
-          city: data.city || null,
-          state: data.state || null,
-          zipCode: data.zipCode || null,
           employmentType: data.employmentType,
           compensationType: data.compensationType,
           compensationValue: data.compensationValue ?? null,
           kioskPinHash,
+          ...privateWrite,
         },
       });
     });
@@ -269,7 +272,8 @@ export async function updateEmployee(
   await requireAdmin();
   try {
     const parsed = updateSchema.parse(input);
-    const existing = await db.employee.findUnique({ where: { id: employeeId } });
+    const storedEmployee = await db.employee.findUnique({ where: { id: employeeId } });
+    const existing = storedEmployee ? await readEmployeePrivateDetails(storedEmployee) : null;
     if (!existing) {
       return fail("That employee was not found. Refresh the page and try again.", "errors.employees.thatEmployeeWasNotFoundRefresh_88e26");
     }
@@ -330,11 +334,15 @@ export async function updateEmployee(
     if (primaryJobCodeId !== undefined) data.primaryJobCodeId = primaryJobCodeId;
 
     const nameChanged = typeof data.name === "string" && data.name !== existing.name;
+    const privateChanged = EMPLOYEE_PRIVATE_FIELDS.some(field => data[field] !== undefined);
+    const privateWrite = privateChanged
+      ? await prepareEmployeePrivateUpdate(storedEmployee!, data)
+      : {};
 
     const updated = await db.$transaction(async (tx) => {
       const row = await tx.employee.update({
-        where: { id: employeeId },
-        data: data as Prisma.EmployeeUncheckedUpdateInput,
+        where: { id: employeeId, updatedAt: existing.updatedAt },
+        data: { ...data, ...privateWrite } as Prisma.EmployeeUncheckedUpdateInput,
       });
       // The User row's name is what the session/topbar shows — keep in sync.
       if (nameChanged) {
@@ -843,9 +851,12 @@ export async function updateMyPersonalEmail(
     ) {
       return fail("Current password is incorrect. Re-enter it and try again.", "errors.employees.currentPasswordIsIncorrectReenterIt_1e015");
     }
+    const employee = await db.employee.findUnique({ where: { id: user.employeeId } });
+    if (!employee) return fail(NO_EMPLOYEE);
+    const privateWrite = await prepareEmployeePrivateUpdate(employee, { personalEmail: parsed.data || null });
     await db.employee.update({
-      where: { id: user.employeeId },
-      data: { personalEmail: parsed.data || null },
+      where: { id: user.employeeId, updatedAt: employee.updatedAt },
+      data: privateWrite,
     });
     await audit({
       action: "employee.personal_email_update",

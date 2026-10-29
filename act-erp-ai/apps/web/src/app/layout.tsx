@@ -31,8 +31,8 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: {
-    default: "ACT ERP",
-    template: "%s · ACT ERP",
+    default: "Persona",
+    template: "%s · Persona",
   },
   description:
     "American Completion Tools — internal workforce management platform.",

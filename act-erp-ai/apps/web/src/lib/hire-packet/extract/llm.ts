@@ -35,12 +35,16 @@ function parseJsonObject(raw: string): Record<string, string> | null {
 
 /**
  * Optional LLM pass for fields templates missed. Uses Claude when
- * ANTHROPIC_API_KEY (or CLAUDE_API_KEY) is set; otherwise returns existing proposals unchanged.
+ * HIRE_PACKET_LLM_ENABLED=true and an API key are set. Opt-in requires an
+ * approved external-processing policy; regex SSN redaction is not full PII removal.
  */
 export async function llmFillGaps(
   combinedText: string,
   existing: HirePacketProposals,
 ): Promise<HirePacketProposals> {
+  // An API key alone must never opt employees into external processing of OCR
+  // text. This separate server-side consent/configuration gate defaults off.
+  if (process.env.HIRE_PACKET_LLM_ENABLED !== "true") return existing;
   const apiKey = process.env.ANTHROPIC_API_KEY ?? process.env.CLAUDE_API_KEY;
   if (!apiKey) return existing;
 

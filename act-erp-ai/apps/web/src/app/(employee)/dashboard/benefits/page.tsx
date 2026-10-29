@@ -10,6 +10,7 @@ import {
   FileText,
 } from "lucide-react";
 import { db } from "@/lib/db";
+import { BenefitEligibilitySummary } from "@/components/benefit-eligibility-summary";
 import { requireUser } from "@/lib/auth";
 import { PageHeader, StatCard, EmptyState } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,6 +158,7 @@ export default async function EmployeeBenefitsPage() {
           title={t("records.benefits.title")}
           description={t("records.benefits.description")}
         />
+        <BenefitEligibilitySummary />
         <EmptyState
           icon={<HeartPulse className="h-6 w-6" />}
           title={t("records.benefits.emptyTitle")}
@@ -267,6 +269,7 @@ export default async function EmployeeBenefitsPage() {
         title={t("records.benefits.title")}
         description={t("records.benefits.descriptionCaveat")}
       />
+      <BenefitEligibilitySummary />
 
       {employee?.employmentStatus === "TERMINATED" && (
         <Card className="mb-4 border-amber-500/40 bg-amber-500/5">

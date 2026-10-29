@@ -1,3 +1,4 @@
+import { assertLegacyEmployeeScriptSafe } from "../src/lib/employee-script-guard";
 /**
  * Import the headerless TimeClock Plus employee export used in September 2026.
  *
@@ -215,6 +216,7 @@ function missingProfileData(
 }
 
 async function main() {
+  await assertLegacyEmployeeScriptSafe(db);
   const args = process.argv.slice(2);
   const apply = args.includes("--apply");
   const filePath = args.find((arg) => !arg.startsWith("--"));

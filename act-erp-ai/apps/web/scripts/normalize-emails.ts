@@ -1,3 +1,4 @@
+import { assertLegacyEmployeeScriptSafe } from "../src/lib/employee-script-guard";
 /**
  * One-off, idempotent: make every stored login identifier trimmed + lowercase.
  *
@@ -63,6 +64,7 @@ async function process_(
 }
 
 async function main() {
+  await assertLegacyEmployeeScriptSafe(db);
   console.log(apply ? "APPLYING changes\n" : "DRY RUN (no changes). Re-run with --apply to write.\n");
 
   const users = await db.user.findMany({

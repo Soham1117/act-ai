@@ -4,9 +4,9 @@ import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Banknote } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Banknote, Upload } from "lucide-react";
 import { CreatePayrollPeriodDialog } from "./create-period-dialog";
-import { UploadPaystubsDialog } from "./upload-paystubs-dialog";
 import { PeriodActions } from "./period-actions";
 import { PayrollDocumentActions } from "./document-actions";
 import { effectivePeriodStatus } from "@/lib/payroll-period";
@@ -21,7 +21,7 @@ export default async function AdminPayrollPage() {
     try { return await p; } catch { return fallback; }
   };
 
-  const [docs, docCount, rawCalendar, employees] = await Promise.all([
+  const [docs, docCount, rawCalendar] = await Promise.all([
     safe(
       db.payroll.findMany({
         orderBy: { uploadedAt: "desc" },
@@ -33,10 +33,6 @@ export default async function AdminPayrollPage() {
     safe(db.payroll.count(), 0),
     safe(
       db.payrollCalendar.findMany({ orderBy: { payDate: "desc" } }),
-      [],
-    ),
-    safe(
-      db.employee.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
       [],
     ),
   ]);
@@ -56,7 +52,12 @@ export default async function AdminPayrollPage() {
         description="Manage pay periods and upload pay stubs."
         actions={
           <div className="flex gap-2">
-            <UploadPaystubsDialog calendarPeriods={calendar} employees={employees} />
+            <Button asChild size="sm" variant="outline">
+              <Link href="/admin/payroll/import">
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+                Upload pay stubs
+              </Link>
+            </Button>
             <CreatePayrollPeriodDialog />
           </div>
         }

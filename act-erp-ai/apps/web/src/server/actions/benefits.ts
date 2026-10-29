@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { notifyEmployees } from "@/lib/notify";
@@ -425,7 +426,7 @@ export async function upsertEnrollment(
     const endDate = existing ? existing.endDate : null;
 
     const [employee, plan] = await Promise.all([
-      db.employee.findUnique({ where: { id: data.employeeId }, select: { ssnLast4: true } }),
+      db.employee.findUnique({ where: { id: data.employeeId }, select: { id: true, privateDetails: true, ssnLast4: true } }),
       db.benefitPlan.findUnique({
         where: { id: data.planId },
         select: { type: true, name: true, tiers: { select: { tier: true } } },
@@ -443,7 +444,7 @@ export async function upsertEnrollment(
     if (data.tier && plan.tiers.length > 0 && !plan.tiers.some((t) => t.tier === data.tier)) {
       return fail(`${plan.name} has no price for the ${tierLabel(data.tier)} tier. Add it to the plan first.`);
     }
-    const memberFail = failBadMemberId(data.memberId, employee.ssnLast4);
+    const memberFail = failBadMemberId(data.memberId, (await readEmployeePrivateDetails(employee)).ssnLast4);
     if (memberFail) return memberFail;
 
     const row = await db.$transaction(async (tx) => {
@@ -589,13 +590,13 @@ export async function changeEnrollmentTier(
 
     const employee = await db.employee.findUnique({
       where: { id: old.employeeId },
-      select: { ssnLast4: true },
+      select: { id: true, privateDetails: true, ssnLast4: true },
     });
     if (!employee) {
       return fail("That employee no longer exists. Refresh the page and try again.", "errors.benefits.thatEmployeeNoLongerExistsRefresh_dd3a1");
     }
     const memberId = data.memberId ?? old.memberId ?? undefined;
-    const memberFail = failBadMemberId(memberId, employee.ssnLast4);
+    const memberFail = failBadMemberId(memberId, (await readEmployeePrivateDetails(employee)).ssnLast4);
     if (memberFail) return memberFail;
 
     const created = await db.$transaction(async (tx) => {

@@ -61,6 +61,14 @@ describe("createsSupervisorCycle", () => {
 });
 
 describe("auditDiff", () => {
+  it("redacts every encrypted personal field instead of leaving readable audit copies", () => {
+    const fields = ["personalEmail", "phoneNumber", "address", "city", "state", "zipCode", "emergencyName", "emergencyPhone", "privateDetails"];
+    const before = Object.fromEntries(fields.map(field => [field, "old-private-value"]));
+    const after = Object.fromEntries(fields.map(field => [field, "new-private-value"]));
+    const diff = auditDiff(before, after);
+    for (const field of fields) expect(diff[field]).toBe("[changed]");
+    expect(JSON.stringify(diff)).not.toContain("private-value");
+  });
   it("records only changes and redacts SSN / DOB", () => {
     const d = auditDiff(
       { jobTitle: "A", ssnLast4: "1234", dateOfBirth: new Date("2000-01-01"), city: "X" },

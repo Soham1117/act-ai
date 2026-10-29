@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { encryptEmployeePrivateDetails } from "@/server/employee-private-data";
 import { requireAdmin } from "@/lib/auth";
 import { hashPassword } from "@/lib/auth/password";
 import { uploadFile, deleteFile } from "@/lib/storage";
@@ -16,6 +18,28 @@ import { generateEmployeeId } from "@/lib/employee-create";
 import { DEFAULT_KIOSK_PIN } from "@/lib/kiosk-pin";
 import { optionalNormalizedEmail, optionalNormalizedUsername } from "@/lib/identity";
 import { checkDateOfBirth, checkDateOfHire } from "@/lib/employee-validation";
+import {
+  ONBOARDING_CONSENT_VERSION,
+  BACKGROUND_CHECK_CONSENT_TEXT,
+  DRUG_ALCOHOL_CONSENT_TEXT,
+  DIRECT_DEPOSIT_ACK_TEXT,
+  buildHandbookAckText,
+  packetPayloadSchema,
+  type OnboardingPacketPayload,
+} from "@/lib/onboarding-packet";
+import { handbookReceiptText } from "@/lib/onboarding-checklist";
+import {
+  assertDraftSize,
+  onboardingDraftSchema,
+  sanitizeDraftFields,
+  type OnboardingDraft,
+} from "@/lib/onboarding-draft";
+
+import { encryptSensitiveJson } from "@/server/sensitive-data";
+import {
+  encryptOnboardingPacketFields,
+  onboardingDraftContext,
+} from "@/server/onboarding-sensitive-data";
 
 const INVITE_TTL_DAYS = 7;
 const MAX_DOCS = 12;
@@ -138,7 +162,13 @@ export async function revokeOnboardingInvite(id: string): Promise<ActionResult> 
   try {
     const res = await db.onboardingInvite.updateMany({
       where: { id, status: "PENDING" },
-      data: { status: "EXPIRED", expiresAt: new Date(0) },
+      data: {
+        status: "EXPIRED",
+        expiresAt: new Date(0),
+        draftJson: Prisma.DbNull,
+        draftStep: null,
+        draftUpdatedAt: null,
+      },
     });
     if (res.count === 0) {
       return fail(
@@ -152,6 +182,81 @@ export async function revokeOnboardingInvite(id: string): Promise<ActionResult> 
     });
     revalidatePath("/admin/onboarding");
     return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Public: draft (resume mid-wizard)                                          */
+/* -------------------------------------------------------------------------- */
+
+export type OnboardingDraftInput = {
+  step: number;
+  fields: Record<string, unknown>;
+};
+
+/** Public: save in-progress hire packet (never stores password). */
+export async function saveOnboardingDraft(
+  token: string,
+  input: OnboardingDraftInput,
+): Promise<ActionResult<{ savedAt: string }>> {
+  // Use request start time, never a client-provided time or KMS completion time.
+  const saveStartedAt = new Date();
+  try {
+    if (typeof token !== "string" || token.length < 8 || token.length > 100) {
+      return fail(
+        "This onboarding invite was not found. Ask your admin for a new invite link.",
+        "errors.onboarding.thisOnboardingInviteWasNotFound_77f61",
+      );
+    }
+    if (rateLimited(`onboard-draft:${token}`, 60, 60_000)) {
+      return fail(
+        "Too many draft saves. Wait a moment and continue.",
+        "errors.onboarding.draftRateLimit",
+      );
+    }
+
+    const invite = await db.onboardingInvite.findUnique({
+      where: { token },
+      select: { id: true, status: true, expiresAt: true },
+    });
+    if (!invite || invite.status !== "PENDING" || invite.expiresAt < new Date()) {
+      return fail(
+        "This onboarding invite is no longer open.",
+        "errors.onboarding.inviteNotOpen",
+      );
+    }
+
+    const draft: OnboardingDraft = onboardingDraftSchema.parse({
+      step: input.step,
+      fields: sanitizeDraftFields(input.fields ?? {}),
+      savedAt: saveStartedAt.toISOString(),
+    });
+    assertDraftSize(draft);
+
+    const encryptedDraft = await encryptSensitiveJson(draft, onboardingDraftContext(invite.id));
+    // KMS may finish out of order. Never overwrite newer answers or a closed draft.
+    const saved = await db.onboardingInvite.updateMany({
+      where: {
+        id: invite.id,
+        status: "PENDING",
+        expiresAt: { gt: new Date() },
+        OR: [
+          { draftUpdatedAt: null },
+          { draftUpdatedAt: { lt: saveStartedAt } },
+        ],
+      },
+      data: {
+        draftJson: encryptedDraft,
+        draftStep: draft.step,
+        draftUpdatedAt: saveStartedAt,
+      },
+    });
+    if (saved.count !== 1) {
+      return fail("Draft was not saved. Try saving again.");
+    }
+    return ok({ savedAt: draft.savedAt! });
   } catch (err) {
     return failFromUnknown(err);
   }
@@ -193,6 +298,7 @@ const submitSchema = z
     ssnLast4: z.string().regex(/^\d{4}$/, "Enter the last 4 digits of your SSN"),
     emergencyName: z.string().trim().max(120).optional().nullable(),
     emergencyPhone: z.string().trim().max(40).optional().nullable(),
+    packet: packetPayloadSchema,
   })
   .refine((v) => v.email || v.username, {
     message: "Provide either a work email or a username",
@@ -226,6 +332,7 @@ export type OnboardingSubmit = {
   ssnLast4: string;
   emergencyName?: string | null;
   emergencyPhone?: string | null;
+  packet: OnboardingPacketPayload;
 };
 
 const DOC_TYPES = ["PERSONAL", "ONBOARDING", "BENEFITS", "TRAINING"] as const;
@@ -306,6 +413,17 @@ export async function submitOnboarding(
       );
     }
     const data = parsed.data;
+    const packet = data.packet;
+    if (
+      packet.drugAlcohol.textVersion !== ONBOARDING_CONSENT_VERSION ||
+      packet.background.textVersion !== ONBOARDING_CONSENT_VERSION ||
+      packet.directDeposit.textVersion !== ONBOARDING_CONSENT_VERSION
+    ) {
+      return fail(
+        "Consent text was updated. Refresh the page and re-acknowledge before submitting.",
+        "errors.onboarding.consentVersionMismatch",
+      );
+    }
 
     let dateOfBirth: Date | null = null;
     if (data.dateOfBirth) {
@@ -397,6 +515,47 @@ export async function submitOnboarding(
       );
     }
 
+    // Protect all packet sections before uploads or database writes. No plaintext fallback.
+    const handbookStored = {
+      ...packet.handbook,
+      acknowledgmentText: buildHandbookAckText(
+        packet.handbook.title,
+        packet.handbook.versionNumber ?? null,
+      ),
+      consentTexts: {
+        drugAlcohol: DRUG_ALCOHOL_CONSENT_TEXT,
+        background: BACKGROUND_CHECK_CONSENT_TEXT,
+        directDeposit: DIRECT_DEPOSIT_ACK_TEXT,
+      },
+    };
+    const acceptedAt = new Date().toISOString();
+    const encryptedPacket = await encryptOnboardingPacketFields(invite.id, {
+      application: packet.application,
+      drugAlcohol: {
+        ...packet.drugAlcohol,
+        legalText: DRUG_ALCOHOL_CONSENT_TEXT,
+        acceptedAt,
+      },
+      background: {
+        ...packet.background,
+        legalText: BACKGROUND_CHECK_CONSENT_TEXT,
+        acceptedAt,
+      },
+      directDeposit: {
+        ...packet.directDeposit,
+        legalText: DIRECT_DEPOSIT_ACK_TEXT,
+        acceptedAt,
+      },
+      handbook: handbookStored,
+    });
+
+    const employeeRecordId = randomUUID();
+    const privateWrite = await encryptEmployeePrivateDetails(employeeRecordId, {
+      personalEmail: data.personalEmail ?? null, phoneNumber: data.phoneNumber || null,
+      dateOfBirth, address: data.address || null, city: data.city || null,
+      state: data.state || null, zipCode: data.zipCode || null, ssnLast4: data.ssnLast4,
+      emergencyName: data.emergencyName || null, emergencyPhone: data.emergencyPhone || null,
+    });
     const [passwordHash, kioskPinHash] = await Promise.all([
       hashPassword(data.password),
       hashPassword(DEFAULT_KIOSK_PIN),
@@ -414,6 +573,9 @@ export async function submitOnboarding(
     }
 
     const employee = await db.$transaction(async (tx) => {
+      // Serialize template assignment with invite completion. Existing punch,
+      // kiosk, and employee-account approval behavior is unchanged.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`onboarding-owner:invite:${invite.id}`}))`;
       // Atomic claim: only one submission can move the invite off PENDING.
       const claim = await tx.onboardingInvite.updateMany({
         where: { id: invite.id, status: "PENDING", expiresAt: { gt: new Date() } },
@@ -445,24 +607,15 @@ export async function submitOnboarding(
       });
       const emp = await tx.employee.create({
         data: {
+          id: employeeRecordId,
           employeeId,
           userId: user.id,
           name: data.name,
           email: data.email ?? null,
-          personalEmail: data.personalEmail ?? null,
           gender: data.gender,
           maritalStatus: data.maritalStatus ?? null,
-          phoneNumber: data.phoneNumber || null,
-          dateOfBirth,
-          address: data.address || null,
-          city: data.city || null,
-          state: data.state || null,
-          zipCode: data.zipCode || null,
           nationality: data.nationality || null,
           educationLevel: data.educationLevel || null,
-          ssnLast4: data.ssnLast4,
-          emergencyName: data.emergencyName || null,
-          emergencyPhone: data.emergencyPhone || null,
           // Admin-decided terms from the invite:
           departmentId: deptId,
           jobTitle: invite.jobTitle,
@@ -472,6 +625,7 @@ export async function submitOnboarding(
           compensationValue: invite.compensationValue,
           employmentStatus: "PENDING_REVIEW",
           kioskPinHash,
+          ...privateWrite,
         },
       });
       for (const s of stored) {
@@ -487,9 +641,70 @@ export async function submitOnboarding(
           },
         });
       }
+
+      await tx.onboardingPacketSubmission.create({
+        data: {
+          inviteId: invite.id,
+          employeeId: emp.id,
+          consentVersion: ONBOARDING_CONSENT_VERSION,
+          ...encryptedPacket,
+        },
+      });
+
+      // Attach invite checklist to the new employee, then record handbook receipt
+      // when the hire acknowledged an assigned handbook template.
+      const checklistItems = await tx.onboardingChecklistItem.findMany({
+        where: { inviteId: invite.id },
+        include: { version: { include: { document: true } }, acknowledgment: true },
+      });
+      await tx.onboardingChecklistItem.updateMany({
+        where: { inviteId: invite.id },
+        data: { employeeId: emp.id, inviteId: null },
+      });
+
+      const handbookItemId = packet.handbook.checklistItemId ?? null;
+      if (handbookItemId) {
+        const item = checklistItems.find((i) => i.id === handbookItemId);
+        if (
+          item &&
+          item.itemType === "HANDBOOK" &&
+          !item.acknowledgment &&
+          item.versionId === (packet.handbook.versionId ?? item.versionId)
+        ) {
+          await tx.handbookAcknowledgment.create({
+            data: {
+              checklistItemId: item.id,
+              employeeId: emp.id,
+              versionId: item.versionId,
+              acknowledgmentText: handbookReceiptText(
+                item.title,
+                item.version.version,
+              ),
+              method: "ELECTRONIC",
+              actorId: user.id,
+            },
+          });
+          await tx.onboardingChecklistItem.update({
+            where: { id: item.id },
+            data: {
+              employeeId: emp.id,
+              inviteId: null,
+              status: "SUBMITTED",
+              reviewedAt: null,
+              reviewedById: null,
+            },
+          });
+        }
+      }
+
       await tx.onboardingInvite.update({
         where: { id: invite.id },
-        data: { completedByEmployeeId: emp.id },
+        data: {
+          completedByEmployeeId: emp.id,
+          draftJson: Prisma.DbNull,
+          draftStep: null,
+          draftUpdatedAt: null,
+        },
       });
       return { ...emp, loginUserId: user.id };
     });
@@ -503,6 +718,7 @@ export async function submitOnboarding(
         email: data.email ?? null,
         username: data.username ?? null,
         documents: stored.length,
+        packet: true,
         status: "PENDING_REVIEW",
       },
     });

@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { sendLoginCode } from "@/lib/email";
 import { rateLimited } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
+import { readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { ok, fail, type ActionResult, type ActionFail } from "@/lib/action-result";
 import { env } from "@/lib/env";
 import { accessLevelFor } from "@/lib/access";
@@ -50,6 +51,8 @@ export async function requestLoginChallenge(
       role: true,
       employee: {
         select: {
+          id: true,
+          privateDetails: true,
           personalEmail: true,
           employmentStatus: true,
           terminationDate: true,
@@ -87,7 +90,10 @@ export async function requestLoginChallenge(
 
   // Employee.personalEmail takes priority; User.personalEmail is the
   // fallback for admin/system accounts with no Employee record at all.
-  const to = user.employee?.personalEmail ?? user.personalEmail;
+  const employeePersonalEmail = user.employee
+    ? (await readEmployeePrivateDetails(user.employee)).personalEmail
+    : null;
+  const to = employeePersonalEmail ?? user.personalEmail;
   if (!to) {
     // Password was right, but 2FA has nowhere to send a code. Deliberately
     // NOT the generic error — this is a real account-setup gap, not a wrong

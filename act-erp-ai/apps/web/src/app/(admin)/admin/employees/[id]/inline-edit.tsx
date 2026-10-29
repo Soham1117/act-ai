@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Pencil, Loader2, Save, X, Camera } from "lucide-react";
 import { toast } from "sonner";
@@ -18,7 +19,13 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { updateEmployee, updateEmployeeProfilePic } from "@/server/actions/employees";
 import { runAction, toastAction } from "@/lib/toast-action";
-import { formatCurrency, formatMoneyInput, parseMoneyInput } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDateOnly,
+  formatMoneyInput,
+  formatSSNLast4,
+  parseMoneyInput,
+} from "@/lib/format";
 
 const NONE = "__none__";
 
@@ -226,6 +233,7 @@ type PersonalValues = {
   state: string;
   zipCode: string;
   phoneNumber: string;
+  ssnLast4: string;
   emergencyName: string;
   emergencyPhone: string;
 };
@@ -233,12 +241,11 @@ type PersonalValues = {
 export function PersonalEditableCard({
   employeeId,
   initial,
-  ssnMasked,
 }: {
   employeeId: string;
   initial: PersonalValues;
-  ssnMasked: string;
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState(initial);
@@ -248,6 +255,11 @@ export function PersonalEditableCard({
   }
 
   function save() {
+    const ssn = form.ssnLast4.replace(/\D/g, "");
+    if (ssn !== "" && !/^\d{4}$/.test(ssn)) {
+      toast.error("SSN must be exactly the last 4 digits.");
+      return;
+    }
     startTransition(async () => {
       const res = await runAction(() => updateEmployee(employeeId, {
         gender: form.gender,
@@ -261,12 +273,14 @@ export function PersonalEditableCard({
         state: form.state || null,
         zipCode: form.zipCode || null,
         phoneNumber: form.phoneNumber || null,
+        ssnLast4: ssn === "" ? null : ssn,
         emergencyName: form.emergencyName || null,
         emergencyPhone: form.emergencyPhone || null,
       }));
       if (!toastAction(res)) return;
       toast.success("Saved");
       setEditing(false);
+      router.refresh();
     });
   }
 
@@ -286,7 +300,7 @@ export function PersonalEditableCard({
           <ViewField label="Marital status" value={initial.maritalStatus} />
           <ViewField
             label="DOB"
-            value={initial.dateOfBirth ? new Date(initial.dateOfBirth).toLocaleDateString() : null}
+            value={initial.dateOfBirth ? formatDateOnly(initial.dateOfBirth) : null}
           />
           <ViewField label="Nationality" value={initial.nationality} />
           <ViewField label="Education" value={initial.educationLevel} />
@@ -296,7 +310,7 @@ export function PersonalEditableCard({
             label="City / State / Zip"
             value={[initial.city, initial.state, initial.zipCode].filter(Boolean).join(", ") || null}
           />
-          <ViewField label="SSN" value={ssnMasked} mono />
+          <ViewField label="SSN" value={formatSSNLast4(initial.ssnLast4 || null)} mono />
           <ViewField
             label="Emergency contact"
             value={
@@ -341,6 +355,12 @@ export function PersonalEditableCard({
           <EditField label="City" value={form.city} onChange={(v) => set("city", v)} />
           <EditField label="State" value={form.state} onChange={(v) => set("state", v)} />
           <EditField label="Zip" value={form.zipCode} onChange={(v) => set("zipCode", v)} />
+          <EditField
+            label="SSN — last 4 only"
+            value={form.ssnLast4}
+            onChange={(v) => set("ssnLast4", v.replace(/\D/g, "").slice(0, 4))}
+            placeholder="6789"
+          />
           <EditField label="Emergency name" value={form.emergencyName} onChange={(v) => set("emergencyName", v)} />
           <EditField label="Emergency phone" value={form.emergencyPhone} onChange={(v) => set("emergencyPhone", v)} />
         </>
@@ -380,6 +400,7 @@ export function EmploymentEditableCard({
   supervisors: Option[];
   terminationInfo: { date: string | null; reason: string | null };
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState({
@@ -408,6 +429,7 @@ export function EmploymentEditableCard({
       if (!toastAction(res)) return;
       toast.success("Saved");
       setEditing(false);
+      router.refresh();
     });
   }
 
@@ -435,14 +457,14 @@ export function EmploymentEditableCard({
           <ViewField label="Supervisor" value={initialSupervisorName} />
           <ViewField
             label="Date of hire"
-            value={initial.dateOfHire ? new Date(initial.dateOfHire).toLocaleDateString() : null}
+            value={initial.dateOfHire ? formatDateOnly(initial.dateOfHire) : null}
           />
           <ViewField label="Type" value={initial.employmentType.replace("_", " / ")} />
           <ViewField label="Work email" value={initial.workEmail} />
           <ViewField label="Work phone" value={initial.workPhoneNumber} />
           <ViewField
             label="Termination date"
-            value={terminationInfo.date ? new Date(terminationInfo.date).toLocaleDateString() : null}
+            value={terminationInfo.date ? formatDateOnly(terminationInfo.date) : null}
           />
           <ViewField label="Termination reason" value={terminationInfo.reason} />
           <div className="col-span-2">

@@ -39,5 +39,21 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
+# PDF.js is a serverExternalPackage: Next traces pdf.mjs but not the sibling
+# worker it imports at runtime. Place the worker beside every traced pdf.mjs
+# so paystub / hire-packet text extraction works in this slim image.
+COPY --from=build /app/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs /tmp/pdf.worker.mjs
+RUN set -eu; \
+    found=0; \
+    for f in $(find /app -type f \( -path '*/pdfjs-dist/*/legacy/build/pdf.mjs' -o -path '*/pdfjs-dist/legacy/build/pdf.mjs' \)); do \
+      cp /tmp/pdf.worker.mjs "$(dirname "$f")/pdf.worker.mjs"; \
+      found=1; \
+    done; \
+    test "$found" = 1; \
+    rm -f /tmp/pdf.worker.mjs; \
+    # Drop incomplete package trees that would shadow the traced pdfjs-dist.
+    if [ -d /app/node_modules/pdfjs-dist ] && [ ! -f /app/node_modules/pdfjs-dist/package.json ]; then \
+      rm -rf /app/node_modules/pdfjs-dist; \
+    fi
 EXPOSE 3000
 CMD ["node", "server.js"]

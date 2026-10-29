@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { PageHeader } from "@/components/page-header";
 import {
   Card,
@@ -32,6 +33,8 @@ export default async function SettingsPage() {
     ? await db.employee.findUnique({
         where: { id: user.employeeId },
         select: {
+          id: true,
+          privateDetails: true,
           personalEmail: true,
           w2ConsentAt: true,
           benefitsEConsentAt: true,
@@ -39,7 +42,7 @@ export default async function SettingsPage() {
         },
       })
     : null;
-  const personalEmail = employeeRow?.personalEmail;
+  const personalEmail = employeeRow ? (await readEmployeePrivateDetails(employeeRow)).personalEmail : null;
   // Only name the temporary PIN while it is still the one in use.
   const onTemporaryPin = await isDefaultPin(employeeRow?.kioskPinHash);
   const canWrite = user.accessLevel === "FULL";

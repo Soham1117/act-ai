@@ -1,6 +1,13 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
+// Require a concrete key ARN, rather than an alias that can later point to a
+// different key. Supports regional and multi-Region KMS key IDs.
+const kmsKeyArn = z.string().regex(
+  /^arn:aws(?:-[a-z]+)*:kms:[a-z0-9-]+:\d{12}:key\/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|mrk-[0-9a-f]{32})$/,
+  "Use the full AWS KMS key ARN, not a key alias or key ID.",
+);
+
 export const env = createEnv({
   server: {
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -13,8 +20,17 @@ export const env = createEnv({
     LOGIN_2FA_ENABLED: z.enum(["true", "false"]).default("true"),
     // AWS / storage / queue (Phase 3). Endpoint set for LocalStack/MinIO locally.
     AWS_REGION: z.string().default("us-east-2"),
+    HIRE_PACKET_LLM_ENABLED: z.enum(["true", "false"]).default("false"),
     AWS_ENDPOINT_URL: z.string().url().optional(),
     S3_BUCKET: z.string().min(1),
+    // Optional during the staged KMS rollout. Encryption writers validate that
+    // their required key is configured before accepting sensitive data.
+    S3_KMS_KEY_ARN: kmsKeyArn.optional(),
+    SENSITIVE_DATA_KMS_KEY_ARN: kmsKeyArn.optional(),
+    SENSITIVE_DATA_KMS_PREVIOUS_KEY_ARNS: z.string().optional(),
+    SENSITIVE_DATA_REQUIRE_ENCRYPTED: z.enum(["true", "false"]).default("false"),
+    // Local/test only: 32-byte hex Raw AES master. Rejected when NODE_ENV=production.
+    SENSITIVE_DATA_DEV_MASTER_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
     // Login-code delivery. Microsoft Graph is preferred in production so
     // employee recipients never need to be individually verified. SES stays
     // available for local/testing and as an operational fallback.
@@ -57,8 +73,14 @@ export const env = createEnv({
     AUTH_SECRET: process.env.AUTH_SECRET,
     LOGIN_2FA_ENABLED: process.env.LOGIN_2FA_ENABLED,
     AWS_REGION: process.env.AWS_REGION,
+    HIRE_PACKET_LLM_ENABLED: process.env.HIRE_PACKET_LLM_ENABLED,
     AWS_ENDPOINT_URL: process.env.AWS_ENDPOINT_URL,
     S3_BUCKET: process.env.S3_BUCKET,
+    S3_KMS_KEY_ARN: process.env.S3_KMS_KEY_ARN,
+    SENSITIVE_DATA_KMS_KEY_ARN: process.env.SENSITIVE_DATA_KMS_KEY_ARN,
+    SENSITIVE_DATA_KMS_PREVIOUS_KEY_ARNS: process.env.SENSITIVE_DATA_KMS_PREVIOUS_KEY_ARNS,
+    SENSITIVE_DATA_REQUIRE_ENCRYPTED: process.env.SENSITIVE_DATA_REQUIRE_ENCRYPTED,
+    SENSITIVE_DATA_DEV_MASTER_KEY: process.env.SENSITIVE_DATA_DEV_MASTER_KEY,
     EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
     SES_FROM_EMAIL: process.env.SES_FROM_EMAIL,
     MICROSOFT_TENANT_ID: process.env.MICROSOFT_TENANT_ID,

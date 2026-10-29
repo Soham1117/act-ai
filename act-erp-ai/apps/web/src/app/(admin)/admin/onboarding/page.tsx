@@ -55,6 +55,12 @@ export default async function OnboardingPage() {
         actions={<OnboardingActions departments={departments} />}
       />
 
+      <div className="mb-4 text-sm">
+        <Link href="/admin/onboarding/checklists" className="text-primary hover:underline">
+          Manage document checklists and handbook receipts
+        </Link>
+      </div>
+
       {pendingHires.length > 0 && (
         <Card className="mb-4 border-amber-500/50 bg-amber-500/5">
           <CardHeader className="pb-2">
@@ -131,7 +137,12 @@ export default async function OnboardingPage() {
                         View employee
                       </Link>
                     )}
-                    {isPending && <RowActions inviteId={i.id} token={i.token} />}
+                    {isPending && (
+                      <div className="flex items-center gap-3">
+                        <Link href={`/admin/onboarding/checklists?invite=${i.id}`} className="text-xs text-primary hover:underline">Checklist</Link>
+                        <RowActions inviteId={i.id} token={i.token} />
+                      </div>
+                    )}
                   </li>
                 );
               })}

@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, Eye, FileText } from "lucide-react";
 import { UploadDocumentBulkDialog } from "@/components/upload-document-bulk-dialog";
 import { DeleteDocumentButton } from "@/components/delete-document-button";
+import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Documents" };
 
@@ -64,7 +65,7 @@ export default async function AdminDocumentsPage() {
       <PageHeader
         title="Documents"
         description="Upload and manage employee files."
-        actions={<UploadDocumentBulkDialog employees={employees} />}
+        actions={<div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/admin/documents/company">Company library</Link></Button><UploadDocumentBulkDialog employees={employees} /></div>}
       />
       <div className="grid gap-3 sm:grid-cols-5">
         {TYPES.map((t) => (

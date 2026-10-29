@@ -1,5 +1,8 @@
 import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,10 +12,18 @@ import { PlanDialog } from "./plan-dialog";
 import { RollForwardDialog } from "./roll-forward-dialog";
 import { DeactivatePlanButton } from "./deactivate-plan-button";
 import { MarkVerifiedButton } from "./mark-verified-button";
+import { PlanMetadataEditor } from "./plan-metadata-editor";
 
 export const metadata = { title: "Benefits" };
 
 export default async function AdminBenefitsPage() {
+  await requireAdmin();
+  const resources = await db.companyDocumentVersion.findMany({
+    where: { status: "APPROVED", purpose: "BENEFIT_RESOURCE", document: { category: "BENEFITS", isArchived: false } },
+    include: { document: { select: { title: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  const resourceOptions = resources.map((resource) => ({ id: resource.id, label: `${resource.document.title} · version ${resource.version}` }));
   const [plans, openEnrollments] = await Promise.all([
     db.benefitPlan.findMany({
       include: {
@@ -80,7 +91,8 @@ export default async function AdminBenefitsPage() {
         title="Benefits"
         description="Plan catalog for the medical/dental/vision/401(k) mirror. Per-employee enrollment happens on each employee's detail page."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild><Link href="/admin/benefits/eligibility">Eligibility review</Link></Button>
             <MarkVerifiedButton />
             <PlanDialog />
           </div>
@@ -180,6 +192,12 @@ export default async function AdminBenefitsPage() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-3">
+                        {p.planCode && <span className="font-mono text-xs">{p.planCode}</span>}
+                        {p.planDesignation && <Badge variant="secondary">{p.planDesignation === "BASE" ? "Base plan" : "Buy-up plan"}</Badge>}
+                        <PlanMetadataEditor plan={{ id: p.id, type: p.type, planCode: p.planCode, planDesignation: p.planDesignation, resourceVersionId: p.resourceVersionId, updatedAt: p.updatedAt.toISOString() }} resources={resourceOptions} />
+                        {p.resourceVersionId && resources.some((resource) => resource.id === p.resourceVersionId) && <Link className="text-xs underline underline-offset-4" href={`/api/company-documents/${p.resourceVersionId}/file`} target="_blank" rel="noreferrer">Open approved resource</Link>}
+                      </div>
                       {p.type !== "RETIREMENT_401K" && p.tiers.length > 0 && (
                         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                           {p.tiers.map((t) => {

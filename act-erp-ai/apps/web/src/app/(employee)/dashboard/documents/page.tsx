@@ -63,6 +63,12 @@ export default async function MyDocumentsPage() {
         }
       />
 
+      <div className="mb-4 text-sm">
+        <Link href="/dashboard/onboarding" className="text-primary hover:underline">
+          {locale.startsWith("es") ? "Abrir lista de incorporación y recibos del manual" : "Open onboarding checklist and handbook receipts"}
+        </Link>
+      </div>
+
       <Tabs defaultValue="ALL" className="space-y-4">
         <TabsList>
           <TabsTrigger value="ALL">

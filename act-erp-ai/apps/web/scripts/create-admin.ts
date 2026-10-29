@@ -14,14 +14,17 @@
  *   --with-employee  also create a linked Employee record (EMP-YYYY-NNNN) so this
  *                    admin gets in-app notifications (e.g. "new hire awaiting
  *                    approval") and appears in the employee list. Skipped if the
- *                    user already has one.
+ *                    user already has one. When KMS is configured, employee
+ *                    personalEmail is sealed into privateDetails (never plaintext).
  *
  * Re-running bumps tokenVersion, which signs out that user's existing sessions.
  */
+import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { nextEmployeeIdFrom } from "../src/lib/employee-create";
 import { DEFAULT_KIOSK_PIN } from "../src/lib/kiosk-pin";
+import { encryptEmployeePrivateDetails } from "../src/server/employee-private-data";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -114,6 +117,12 @@ async function main() {
   if (args.withEmployee && !user.employee) {
     const kioskPinHash = await bcrypt.hash(DEFAULT_KIOSK_PIN, 12);
     const year = new Date().getFullYear();
+    const recordId = randomUUID();
+    // Employee personalEmail lives under KMS when a key is configured. User.personalEmail
+    // remains the auth-side delivery address for bootstrap admins without an Employee row.
+    const privateWrite = personalEmail
+      ? await encryptEmployeePrivateDetails(recordId, { personalEmail })
+      : {};
     employeeId = await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('employee-id-seq'))`;
       const existing = await tx.employee.findMany({
@@ -126,16 +135,17 @@ async function main() {
       );
       await tx.employee.create({
         data: {
+          id: recordId,
           employeeId: id,
           userId: user.id,
           name,
           email,
-          personalEmail: personalEmail ?? null,
           gender: "OTHER",
           employmentType: "FULL_PART_TIME",
           compensationType: "MONTHLY_SALARY",
           dateOfHire: new Date(),
           kioskPinHash,
+          ...privateWrite,
         },
       });
       return id;

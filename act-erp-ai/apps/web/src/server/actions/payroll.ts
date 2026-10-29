@@ -4,17 +4,20 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { requireAdmin } from "@/lib/auth";
-import { uploadFile, deleteFile } from "@/lib/storage";
-import { parsePaystub } from "@/lib/paystub-parser";
+import { deleteFile } from "@/lib/storage";
+import { parsePaystub, analyzePayrollPdfForGuard } from "@/lib/paystub-parser";
+import { PDFDocument } from "pdf-lib";
+import { parseDateOnly } from "@/lib/time-rules";
+import { analyzePayrollSource, semanticPaystubHash, sourcePageKey, splitPaystubPage } from "@/server/paystub-analysis";
+import { persistPayrollDocument, payrollVersion } from "@/server/paystub-persistence";
 import { matchEmployee, type MatchResult } from "@/lib/paystub-match";
 import type { ParsedPaystub } from "@/lib/paystub-parser";
 import { validateUpload } from "@/lib/upload-validation";
-import { notifyEmployees } from "@/lib/notify";
 import { audit } from "@/lib/audit";
 import {
   derivePeriodStatus,
-  PAYROLL_DUPLICATE_PREFIX,
   validatePeriodDates,
 } from "@/lib/payroll-period";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
@@ -30,21 +33,18 @@ const uploadSchema = z.object({
   payPeriodEnd: dateStr,
   /** Replace an existing matching document instead of refusing. */
   overwrite: z.boolean().optional(),
+  replaceId: z.string().optional(),
+  replaceVersion: z.string().optional(),
 });
-
-// IRS Treas. Reg. 31.6051-1: a W-2 can only be furnished electronically with
-// the employee's affirmative, electronically-confirmed consent — and they
-// must be able to withdraw it. Without consent on file, a W-2 must go out on
-// paper; it must not be uploaded here at all. Matches on category name
-// (case/punctuation-insensitive) since category is otherwise freeform.
-const W2_CATEGORY_ALIASES = new Set(["w-2", "w2", "form w-2", "form w2"]);
-function isW2Category(category: string): boolean {
-  return W2_CATEGORY_ALIASES.has(category.trim().toLowerCase());
-}
 
 /** Pay stubs are PDF-only; other payroll categories (W-2, bonus letters…) may be any allowed document. */
 function isPaystubCategory(category: string): boolean {
   return /pay\s*-?\s*stub|paystub/i.test(category);
+}
+
+function refreshPayrollDocuments() {
+  try { revalidatePath("/admin/payroll"); revalidatePath("/dashboard/payroll"); }
+  catch { console.error("[payroll] saved document cache refresh failed"); }
 }
 
 export async function uploadPayrollDocument(
@@ -54,125 +54,43 @@ export async function uploadPayrollDocument(
   const admin = await requireAdmin();
   try {
     const data = uploadSchema.parse(input);
-
-    if (data.payPeriodEnd < data.payPeriodStart) {
-      return fail("The pay period end can't be before the period start.", "errors.payroll.thePayPeriodEndCantBe_766c1");
-    }
-
-    const employee = await db.employee.findUnique({
-      where: { id: data.employeeId },
-      select: { id: true, w2ConsentAt: true, employmentStatus: true, name: true },
-    });
-    if (!employee) {
-      return fail("That employee no longer exists. Refresh the page and pick someone else.", "errors.payroll.thatEmployeeNoLongerExistsRefresh_9a6e4");
-    }
-    if (employee.employmentStatus === "PENDING_REVIEW") {
-      return fail(`${employee.name} hasn't been approved yet. Approve their onboarding before uploading payroll documents.`);
-    }
-
-    if (isW2Category(data.category) && !employee.w2ConsentAt) {
-      return fail(
-        "This employee hasn't consented to electronic W-2 delivery (IRS Treas. Reg. 31.6051-1). " +
-          "Deliver their W-2 on paper instead — it cannot be uploaded here without consent on file.",
-      );
-    }
-
-    const v = validateUpload(isPaystubCategory(data.category) ? "paystub" : "document", {
-      name: file.name,
-      bytes: file.bytes,
-    });
+    if (!parseDateOnly(data.payPeriodStart) || !parseDateOnly(data.payPeriodEnd) || data.payPeriodEnd < data.payPeriodStart) return fail("Enter a valid pay period start and end.");
+    const v = validateUpload(isPaystubCategory(data.category) ? "paystub" : "document", file);
     if (!v.ok) return fail(v.error);
-
-    const periodEnd = new Date(`${data.payPeriodEnd}T00:00:00.000Z`);
-    const periodStart = new Date(`${data.payPeriodStart}T00:00:00.000Z`);
-
-    const duplicates = await db.payroll.findMany({
-      where: {
-        employeeId: data.employeeId,
-        OR: [
-          { category: data.category, payPeriodEnd: periodEnd },
-          { fileSha256: v.sha256 },
-        ],
-      },
-      select: { id: true, title: true, fileName: true },
-    });
-    if (duplicates.length > 0 && !data.overwrite) {
-      return fail(
-        `${PAYROLL_DUPLICATE_PREFIX} ${employee.name} already has "${duplicates[0]!.title}" for this category and pay period (or an identical file). ` +
-          "Choose Replace to overwrite it, or remove this file.",
-      );
+    // Inspect all pages independent of the category label. A renamed combined
+    // paystub or multi-employee summary must never reach one employee's record.
+    if (v.ext === "pdf") {
+      const analysis = await analyzePayrollPdfForGuard(file.bytes);
+      const recognized = analysis.pages.some((page) => page.status === "SUPPORTED");
+      const unsafeReport = analysis.pages.some((page) => /summar(?:y|ies)|register|multiple|more than one|multi.employee/i.test(page.reason ?? ""));
+      if (unsafeReport || (recognized && analysis.pageCount !== 1)) return fail("Combined paystubs and payroll summaries cannot be uploaded to one employee. Use the reviewed paystub batch flow.");
+      if (recognized && !isPaystubCategory(data.category)) return fail("This PDF is an employee paystub. Use the Pay Stub category and reviewed batch flow.");
+      if (isPaystubCategory(data.category)) {
+        const page = analysis.pages[0];
+        if (analysis.pageCount !== 1 || page?.status !== "SUPPORTED") return fail("Use the reviewed paystub batch flow to analyze this PDF. Unsupported or scanned pages cannot be published without review.");
+        // Single supported stubs use the same review and persistence service.
+        const preview = await analyzePayrollSource(file);
+        const reviewed = preview.pages[0];
+        if (reviewed.match.confidence !== "high" || reviewed.match.employeeId !== data.employeeId || reviewed.parsed?.payPeriodStart !== data.payPeriodStart || reviewed.parsed?.payPeriodEnd !== data.payPeriodEnd) return fail("This employee or pay period needs explicit review. Use the paystub batch flow.");
+        if (data.overwrite && (!data.replaceId || !data.replaceVersion)) return fail("Select the specific document to replace in the reviewed batch flow.");
+        const source = await PDFDocument.load(file.bytes);
+        const result = await persistPayrollDocument({ actor: admin, sourcePageCount: 1, expectedRosterHash: preview.rosterHash, employeeId: data.employeeId, title: data.title, description: data.description, category: data.category, payPeriodStart: data.payPeriodStart, payPeriodEnd: data.payPeriodEnd, bytes: await splitPaystubPage(source, 1), fileType: "application/pdf", safeName: "paystub-page-1.pdf", replaceId: data.replaceId, replaceVersion: data.replaceVersion, provenance: { sourceSha256: preview.sourceHash, sourceFileName: v.safeFileName, sourcePage: 1, importKey: sourcePageKey(preview.sourceHash, 1), semanticHash: semanticPaystubHash(reviewed), payDate: reviewed.parsed?.payDate ?? null, checkReference: reviewed.parsed?.checkNumber ?? null } });
+        refreshPayrollDocuments();
+        return ok({ id: result.id!, replaced: result.replaced ?? 0 });
+      }
     }
-
-    const path = `${data.employeeId}/${data.payPeriodEnd}-${Date.now()}-${v.safeFileName}`;
-    const { key } = await uploadFile("payroll", path, file.bytes, { contentType: v.contentType });
-
-    let doc;
-    try {
-      doc = await db.$transaction(async (tx) => {
-        const created = await tx.payroll.create({
-          data: {
-            employeeId: data.employeeId,
-            title: data.title,
-            description: data.description ?? null,
-            category: data.category,
-            fileName: path,
-            fileType: v.contentType,
-            // Legacy column — reads go through /api/payroll/[id]/file, never this.
-            fileUrl: key,
-            fileSha256: v.sha256,
-            payPeriodStart: periodStart,
-            payPeriodEnd: periodEnd,
-            uploadedById: admin.id,
-            uploaderEmployeeId: admin.employeeId ?? null,
-          },
-        });
-        if (duplicates.length > 0) {
-          await tx.payroll.deleteMany({ where: { id: { in: duplicates.map((d) => d.id) } } });
-        }
-        return created;
-      });
-    } catch (err) {
-      await deleteFile("payroll", path).catch(() => null);
-      throw err;
-    }
-
-    for (const old of duplicates) {
-      await deleteFile("payroll", old.fileName).catch(() => null);
-    }
-
-    await audit({
-      action: duplicates.length > 0 ? "payroll.document.replace" : "payroll.document.upload",
-      resource: `Payroll:${doc.id}`,
-      diff: {
-        employeeId: data.employeeId,
-        category: data.category,
-        payPeriodEnd: data.payPeriodEnd,
-        replacedIds: duplicates.map((d) => d.id),
-      },
-    });
-
-    await notifyEmployees([data.employeeId], {
-      translationKey: "notificationTemplates.payrollAvailable",
-      translationParams: { category: data.category, payPeriodEnd: data.payPeriodEnd },
-      type: "PAYROLL",
-      title: "New pay document available",
-      message: `A new ${data.category} document for the pay period ending ${data.payPeriodEnd} is available in Payroll.`,
-      link: "/dashboard/payroll",
-    });
-
-    revalidatePath("/admin/payroll");
-    revalidatePath("/dashboard/payroll");
-    return ok({ id: doc.id, replaced: duplicates.length });
-  } catch (err) {
-    return failFromUnknown(err);
-  }
+    if (data.overwrite && (!data.replaceId || !data.replaceVersion)) return fail("Select the specific document to replace; a whole period cannot be overwritten.");
+    const result = await persistPayrollDocument({ actor: admin, employeeId: data.employeeId, title: data.title, category: data.category, description: data.description, payPeriodStart: data.payPeriodStart, payPeriodEnd: data.payPeriodEnd, bytes: file.bytes, fileType: v.contentType, safeName: v.safeFileName, replaceId: data.replaceId, replaceVersion: data.replaceVersion });
+    refreshPayrollDocuments();
+    return ok({ id: result.id!, replaced: result.replaced ?? 0 });
+  } catch (error) { return failFromUnknown(error); }
 }
 
 export type PaystubPreview = {
   fileName: string;
   parsed: ParsedPaystub | null;
   match: MatchResult;
-  duplicateOf: { id: string; title: string } | null;
+  duplicateOf: { id: string; title: string; version: string; employeeId: string; payPeriodEnd: string } | null;
 };
 
 /**
@@ -186,12 +104,16 @@ export type PaystubPreview = {
 export async function previewPaystub(
   file: { name: string; type: string; bytes: ArrayBuffer },
   category = "Pay Stub",
+  selection?: { employeeId: string; payPeriodEnd: string },
 ): Promise<PaystubPreview> {
   await requireAdmin();
 
-  const roster = await db.employee.findMany({
-    select: { id: true, name: true, ssnLast4: true },
+  const storedRoster = await db.employee.findMany({
+    select: { id: true, name: true, ssnLast4: true, privateDetails: true },
   });
+  const roster = await Promise.all(storedRoster.map(async row => ({
+    id: row.id, name: row.name, ssnLast4: (await readEmployeePrivateDetails(row)).ssnLast4,
+  })));
 
   let parsed: ParsedPaystub | null = null;
   try {
@@ -202,23 +124,26 @@ export async function previewPaystub(
 
   const match = parsed
     ? matchEmployee(parsed, roster)
-    : ({ employeeId: null, confidence: "none", reason: "Couldn't read this file automatically." } as MatchResult);
+    : ({ employeeId: null, confidence: "none", reason: "Couldn't read this file automatically.", nameOk: false, ssnOk: false } as MatchResult);
 
   let duplicateOf: PaystubPreview["duplicateOf"] = null;
-  if (match.employeeId) {
+  const candidateId = selection?.employeeId ?? match.employeeId;
+  const candidateEnd = selection?.payPeriodEnd ?? parsed?.payPeriodEnd;
+  if (selection && (!roster.some((employee) => employee.id === selection.employeeId) || !parseDateOnly(selection.payPeriodEnd))) throw new Error("Choose a valid employee and pay period before checking duplicates.");
+  if (candidateId) {
     const sha = createHash("sha256").update(new Uint8Array(file.bytes)).digest("hex");
     const or: Array<Record<string, unknown>> = [{ fileSha256: sha }];
-    if (parsed?.payPeriodEnd) {
-      or.push({ category, payPeriodEnd: new Date(`${parsed.payPeriodEnd}T00:00:00.000Z`) });
+    if (candidateEnd) {
+      or.push({ category, payPeriodEnd: new Date(`${candidateEnd}T00:00:00.000Z`) });
     }
     const existing = await db.payroll.findFirst({
-      where: { employeeId: match.employeeId, OR: or },
-      select: { id: true, title: true },
+      where: { employeeId: candidateId, OR: or },
+      select: { id: true, title: true, fileSha256: true, uploadedAt: true, employeeId: true, payPeriodEnd: true },
     });
-    if (existing) duplicateOf = existing;
+    if (existing) duplicateOf = { id: existing.id, title: existing.title, version: payrollVersion(existing), employeeId: existing.employeeId, payPeriodEnd: existing.payPeriodEnd.toISOString().slice(0, 10) };
   }
 
-  return { fileName: file.name, parsed, match, duplicateOf };
+  return { fileName: file.name, parsed: parsed ? { ...parsed, netPay: null } : null, match, duplicateOf };
 }
 
 export async function deletePayrollDocument(id: string): Promise<ActionResult> {

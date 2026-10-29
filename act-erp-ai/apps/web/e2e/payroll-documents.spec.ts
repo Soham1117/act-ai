@@ -20,8 +20,10 @@ const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
 // ──────────────────────────────────────────────────────────────────────
 // Admin: upload dialog
+// Pay-stub import moved to /admin/payroll/import (table review). Covered by
+// e2e/paystub-batch.spec.ts. These legacy Confirm & upload cases are skipped.
 // ──────────────────────────────────────────────────────────────────────
-test.describe("admin payroll documents: upload", () => {
+test.describe.skip("admin payroll documents: upload", () => {
   test.use({ storageState: ADMIN_STATE });
 
   async function openUpload(page: Page) {

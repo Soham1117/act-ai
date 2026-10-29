@@ -1,3 +1,4 @@
+import { assertLegacyEmployeeScriptSafe } from "../src/lib/employee-script-guard";
 /**
  * Seeds 30 days of dense, realistic demo data for American Completion Tools
  * (oilfield completion-tools manufacturer), ending TODAY.
@@ -18,7 +19,7 @@ import bcrypt from "bcryptjs";
 
 const db = new PrismaClient();
 
-// ── Seeded RNG (mulberry32) so re-generated data is stable-ish ────────
+// â”€â”€ Seeded RNG (mulberry32) so re-generated data is stable-ish â”€â”€â”€â”€â”€â”€â”€â”€
 let __seed = 20260715;
 const rnd = () => {
   __seed |= 0;
@@ -49,7 +50,7 @@ const D = (v: number) => new Prisma.Decimal(v.toFixed(2));
 /** Clamp a computed timestamp so it never lands in the future. */
 const pastCap = (d: Date) => (d.getTime() > NOW.getTime() ? addMin(NOW, -randInt(10, 600)) : d);
 
-// ── Org blueprint ─────────────────────────────────────────────────────
+// â”€â”€ Org blueprint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DEPARTMENTS = [
   { name: "Manufacturing", code: "MFG", description: "CNC machining, welding and assembly of completion tools" },
   { name: "Engineering", code: "ENG", description: "Completion tool design, drafting and product engineering" },
@@ -126,18 +127,19 @@ type Emp = {
 };
 
 async function main() {
-  console.log("→ seed-30-days. NOW =", NOW.toISOString());
+  await assertLegacyEmployeeScriptSafe(db);
+  console.log("â†’ seed-30-days. NOW =", NOW.toISOString());
 
   const marker = await db.auditLog.findFirst({ where: { action: MARKER_ACTION } });
   if (marker) {
-    console.log("✓ marker 'seed.30days' already present — DB is seeded. Exiting.");
+    console.log("âœ“ marker 'seed.30days' already present â€” DB is seeded. Exiting.");
     return;
   }
 
   const adminUser = await db.user.findUnique({ where: { email: "admin@actools.com" } });
-  if (!adminUser) throw new Error("admin@actools.com not found — create the admin first.");
+  if (!adminUser) throw new Error("admin@actools.com not found â€” create the admin first.");
 
-  // ── 1. Departments + JobCodes (only if missing) ─────────────────────
+  // â”€â”€ 1. Departments + JobCodes (only if missing) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const deptByName = new Map<string, string>();
   for (const d of DEPARTMENTS) {
     const row = await db.department.upsert({
@@ -154,7 +156,7 @@ async function main() {
       create: {
         code: jc.code, title: jc.title, rate: jc.rate.toFixed(2),
         departmentId: deptByName.get(jc.dept), isActive: true,
-        description: `${jc.title} — ${jc.dept}`,
+        description: `${jc.title} â€” ${jc.dept}`,
       },
       update: {},
     });
@@ -162,7 +164,7 @@ async function main() {
   }
   console.log(`   Departments: ${deptByName.size}, JobCodes: ${jobCodeByCode.size}`);
 
-  // ── 2. Admin employee record (approver) ─────────────────────────────
+  // â”€â”€ 2. Admin employee record (approver) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let adminEmp = await db.employee.findUnique({ where: { userId: adminUser.id } });
   if (!adminEmp) {
     adminEmp = await db.employee.create({
@@ -189,7 +191,7 @@ async function main() {
     });
   }
 
-  // ── 3. Employees + User accounts (reuse if enough already exist) ────
+  // â”€â”€ 3. Employees + User accounts (reuse if enough already exist) â”€â”€â”€â”€
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
   const existingCount = await db.employee.count({
     where: { employmentStatus: { in: ["ACTIVE", "ON_LEAVE"] }, id: { not: adminEmp.id } },
@@ -280,7 +282,7 @@ async function main() {
   const working = employees.filter(e => !e.onLeave);
   const earlyDepts = new Set(["Manufacturing", "Field Services"]);
 
-  // ── 4. Schedules + ScheduledWork + TimeEntries (−30d … +7d) ─────────
+  // â”€â”€ 4. Schedules + ScheduledWork + TimeEntries (âˆ’30d â€¦ +7d) â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let schedC = 0, swC = 0, teC = 0;
   for (let i = -30; i <= 7; i++) {
     const day = addDays(TODAY, i);
@@ -308,7 +310,7 @@ async function main() {
             approvedById: adminEmp.id, approvalDate: addMin(clockOut, randInt(600, 2400)),
             jobCode: emp.jobCode, rate: D(emp.rate), source: "KIOSK",
             kioskSlug: "plant-floor", kioskLabel: "Plant Floor Kiosk",
-            timesheetNotes: "Saturday overtime — rush order",
+            timesheetNotes: "Saturday overtime â€” rush order",
             createdAt: clockOut,
             breaks: { create: [{ startTime: at(day, 10, 0), endTime: at(day, 10, 30), durationMin: 30, type: "BREAK" }] },
           },
@@ -351,7 +353,7 @@ async function main() {
       if (!isPast && !isToday) continue; // future: schedule only
       if (missed) continue;
 
-      // Punctuality: 80% within ±10 min, ~10% late 15–45, ~10% early.
+      // Punctuality: 80% within Â±10 min, ~10% late 15â€“45, ~10% early.
       const roll = rnd();
       const offsetMin = roll < 0.8 ? randInt(-10, 8) : roll < 0.9 ? randInt(15, 45) : randInt(-25, -11);
       const clockIn = addMin(schedStart, offsetMin);
@@ -386,7 +388,7 @@ async function main() {
           });
           teC++;
         } else if (r < 0.6) {
-          // Completed early/short shift — ends at or before the "as of" anchor.
+          // Completed early/short shift â€” ends at or before the "as of" anchor.
           const breakMin = randInt(30, 45);
           const maxSpan = Math.round((asOf.getTime() - clockIn.getTime()) / 60000) - randInt(0, 45);
           const spanMin = Math.max(240, Math.min(maxSpan, randInt(390, 480)));
@@ -407,14 +409,14 @@ async function main() {
         continue;
       }
 
-      // Past weekday, worked. Occasional 10–11h overtime day.
+      // Past weekday, worked. Occasional 10â€“11h overtime day.
       const ot = chance(0.07);
       const breakMin = randInt(30, 60);
-      const workMin = ot ? randInt(600, 660) : randInt(450, 555); // 7.5–9.25h, OT 10–11h
+      const workMin = ot ? randInt(600, 660) : randInt(450, 555); // 7.5â€“9.25h, OT 10â€“11h
       const clockOut = addMin(clockIn, workMin + breakMin);
       const lunchStart = at(day, early ? 11 : 12, randInt(0, 30));
       const apprAt = addMin(clockOut, randInt(240, 2880));
-      // Approval can't post-date "now" — very recent entries stay pending.
+      // Approval can't post-date "now" â€” very recent entries stay pending.
       const approved = (i < -3 ? true : chance(0.55)) && apprAt.getTime() <= NOW.getTime();
       await db.timeEntry.create({
         data: {
@@ -428,7 +430,7 @@ async function main() {
           source: early ? (chance(0.7) ? "KIOSK" : "WEB") : chance(0.12) ? "AUTO" : "WEB",
           kioskSlug: early && chance(0.7) ? "plant-floor" : null,
           kioskLabel: early && chance(0.7) ? "Plant Floor Kiosk" : null,
-          timesheetNotes: ot ? pick(["Stayed late to finish packer sub run", "Overtime — expedite order for Permian customer", "Covered second shift start"]) : null,
+          timesheetNotes: ot ? pick(["Stayed late to finish packer sub run", "Overtime â€” expedite order for Permian customer", "Covered second shift start"]) : null,
           createdAt: clockOut,
           breaks: { create: [{ startTime: lunchStart, endTime: addMin(lunchStart, breakMin), durationMin: breakMin, type: "LUNCH" }] },
         },
@@ -438,7 +440,7 @@ async function main() {
   }
   console.log(`   Schedules: +${schedC}, ScheduledWork: +${swC}, TimeEntries: +${teC}`);
 
-  // ── 5. Leave requests (past 30d + upcoming approved) ────────────────
+  // â”€â”€ 5. Leave requests (past 30d + upcoming approved) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const onLeaveEmps = employees.filter(e => e.onLeave);
   let lvC = 0;
   // Current leave for the two ON_LEAVE employees.
@@ -447,7 +449,7 @@ async function main() {
       data: {
         employeeId: onLeaveEmps[0].id, leaveType: "MATERNITY",
         startDate: addDays(TODAY, -12), endDate: addDays(TODAY, 47), totalDays: 42,
-        noticeDays: 30, description: "Maternity leave — return date confirmed with HR.",
+        noticeDays: 30, description: "Maternity leave â€” return date confirmed with HR.",
         status: "APPROVED", reviewerId: adminEmp.id,
         reviewedAt: addDays(TODAY, -20), reviewNotes: "Approved per policy. Congratulations!",
         createdAt: addDays(TODAY, -35),
@@ -460,7 +462,7 @@ async function main() {
       data: {
         employeeId: onLeaveEmps[1].id, leaveType: "FAMILY",
         startDate: addDays(TODAY, -4), endDate: addDays(TODAY, 5), totalDays: 8,
-        noticeDays: 10, description: "Family emergency out of state — will check email when possible.",
+        noticeDays: 10, description: "Family emergency out of state â€” will check email when possible.",
         status: "APPROVED", reviewerId: adminEmp.id,
         reviewedAt: addDays(TODAY, -6), reviewNotes: "Approved. Accounts covered by Vanessa.",
         createdAt: addDays(TODAY, -8),
@@ -470,11 +472,11 @@ async function main() {
   }
   const leaveDescriptions: Record<string, string[]> = {
     VACATION: ["Family trip to Gulf Shores booked months back.", "Using banked vacation before Q3 rush.", "Long weekend at the lake house."],
-    SICK: ["Flu — doctor's note available on request.", "Dental surgery + recovery day.", "Migraine, staying off the shop floor."],
+    SICK: ["Flu â€” doctor's note available on request.", "Dental surgery + recovery day.", "Migraine, staying off the shop floor."],
     PERSONAL: ["Closing on a house, need the day for paperwork.", "DMV + personal errands, half-week off.", "Moving apartments."],
     FAMILY: ["Kid's school event and doctor visit.", "Helping parents relocate to Fort Worth.", "Family reunion out of state."],
     BEREAVEMENT: ["Funeral for a family member in Oklahoma."],
-    EMERGENCY: ["Burst pipe at home — insurance adjuster visit."],
+    EMERGENCY: ["Burst pipe at home â€” insurance adjuster visit."],
   };
   const leaveTypes = ["VACATION", "VACATION", "SICK", "SICK", "PERSONAL", "FAMILY", "BEREAVEMENT", "EMERGENCY"] as const;
   const takenByEmp = new Map<string, { taken: number; approved: number; rejected: number }>();
@@ -504,7 +506,7 @@ async function main() {
         status,
         reviewerId: status === "PENDING" ? null : adminEmp.id,
         reviewedAt: status === "PENDING" ? null : addDays(createdAt, randInt(1, 3)),
-        reviewNotes: status === "APPROVED" ? pick(["Approved — coverage arranged.", "OK, enjoy.", "Approved, please update the shift board."]) : status === "REJECTED" ? pick(["Overlaps plant shutdown week — please pick other dates.", "Two techs already out that week."]) : null,
+        reviewNotes: status === "APPROVED" ? pick(["Approved â€” coverage arranged.", "OK, enjoy.", "Approved, please update the shift board."]) : status === "REJECTED" ? pick(["Overlaps plant shutdown week â€” please pick other dates.", "Two techs already out that week."]) : null,
         createdAt,
       },
     });
@@ -522,10 +524,10 @@ async function main() {
         employeeId: emp.id, leaveType: pick(["VACATION", "PERSONAL", "FAMILY"] as const),
         startDate: start, endDate: addDays(start, days - 1), totalDays: days,
         noticeDays: randInt(7, 21),
-        description: pick(["Pre-approved summer vacation.", "Out-of-state wedding.", "College visit with daughter.", "Cabin trip — booked in spring."]),
+        description: pick(["Pre-approved summer vacation.", "Out-of-state wedding.", "College visit with daughter.", "Cabin trip â€” booked in spring."]),
         status: "APPROVED", reviewerId: adminEmp.id,
         reviewedAt: addDays(TODAY, -randInt(1, 6)),
-        reviewNotes: "Approved in advance — calendar updated.",
+        reviewNotes: "Approved in advance â€” calendar updated.",
         createdAt: addDays(TODAY, -randInt(3, 12)),
       },
     });
@@ -542,7 +544,7 @@ async function main() {
         employeeId: emp.id, leaveType: pick(["VACATION", "SICK", "PERSONAL"] as const),
         startDate: start, endDate: addDays(start, days - 1), totalDays: days,
         noticeDays: randInt(5, 20),
-        description: pick(["Requesting time off for a medical procedure.", "Vacation days before they expire.", "Personal matters — flexible on exact dates."]),
+        description: pick(["Requesting time off for a medical procedure.", "Vacation days before they expire.", "Personal matters â€” flexible on exact dates."]),
         status: "PENDING", createdAt: addDays(TODAY, -randInt(0, 3)),
       },
     });
@@ -562,23 +564,23 @@ async function main() {
   }
   console.log(`   LeaveRequests: +${lvC}`);
 
-  // ── 6. General requests (all 12 types, 0–90 days back) ──────────────
+  // â”€â”€ 6. General requests (all 12 types, 0â€“90 days back) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const reqSpecs: Array<{ type: Prisma.RequestCreateInput["type"]; title: string; description: string; daysAgo: number; final: "COMPLETED" | "REJECTED" | "PROCESSING" | "PENDING" }> = [
     { type: "EQUIPMENT_REQUEST", title: "Replacement torque wrench (3/4\" drive)", description: "Current unit reads 8% low against the calibration master. Need a certified replacement for the packer assembly cell.", daysAgo: 82, final: "COMPLETED" },
-    { type: "TRAINING_REQUEST", title: "API 6A inspector certification", description: "Requesting enrollment in the API 6A course in Houston next quarter — directly applicable to wellhead QA sign-offs.", daysAgo: 74, final: "COMPLETED" },
+    { type: "TRAINING_REQUEST", title: "API 6A inspector certification", description: "Requesting enrollment in the API 6A course in Houston next quarter â€” directly applicable to wellhead QA sign-offs.", daysAgo: 74, final: "COMPLETED" },
     { type: "ACCESS_REQUEST", title: "ERP payroll module access", description: "Covering payroll prep while Denise is at the HR conference. Need read-write for two pay periods.", daysAgo: 66, final: "COMPLETED" },
     { type: "LOCATION_CHANGE", title: "Transfer to Midland service center", description: "Family is relocating to Midland in the fall. Requesting transfer to the west Texas field services team.", daysAgo: 58, final: "REJECTED" },
     { type: "PROJECT_REQUEST", title: "Join HPHT frac plug redesign project", description: "I have 3 years of elastomer testing background and would like to contribute to the HPHT seal stack redesign.", daysAgo: 52, final: "COMPLETED" },
     { type: "TEAM_REQUEST", title: "Add second-shift assembly floater", description: "Second shift keeps borrowing my assembler mid-run. Requesting a dedicated floater for the cell.", daysAgo: 45, final: "REJECTED" },
     { type: "PAYROLL_INQUIRY", title: "Missing Saturday overtime on last check", description: "Worked the June 13 rush order Saturday but the OT premium isn't on my stub. Kiosk punches should confirm.", daysAgo: 30, final: "COMPLETED" },
-    { type: "DOCUMENT_REQUEST", title: "Employment verification letter", description: "Need a letter for a mortgage refinance — please address it to Lone Star Credit Union.", daysAgo: 24, final: "COMPLETED" },
-    { type: "SCHEDULE_CHANGE", title: "Move to 4x10 schedule", description: "Childcare falls through on Fridays starting August. Happy to run Mon–Thu 10-hour days instead.", daysAgo: 18, final: "PROCESSING" },
+    { type: "DOCUMENT_REQUEST", title: "Employment verification letter", description: "Need a letter for a mortgage refinance â€” please address it to Lone Star Credit Union.", daysAgo: 24, final: "COMPLETED" },
+    { type: "SCHEDULE_CHANGE", title: "Move to 4x10 schedule", description: "Childcare falls through on Fridays starting August. Happy to run Monâ€“Thu 10-hour days instead.", daysAgo: 18, final: "PROCESSING" },
     { type: "DETAILS_CHANGE", title: "Address + emergency contact update", description: "Moved to 4421 Oak Ridge Dr, Burleson TX 76028. Emergency contact is now my brother (817-555-0182).", daysAgo: 12, final: "COMPLETED" },
-    { type: "LEAVE_REQUEST", title: "Extend approved vacation by one day", description: "Return flight from Denver got moved — requesting one extra day tacked onto my approved vacation.", daysAgo: 9, final: "PROCESSING" },
-    { type: "EQUIPMENT_REQUEST", title: "Steel-toe boot allowance renewal", description: "Annual boot allowance — current pair has a split sole. Receipt to follow through reimbursements.", daysAgo: 6, final: "PENDING" },
-    { type: "ACCESS_REQUEST", title: "Badge access to NDT bay after hours", description: "Magnetic particle inspections keep spilling past 17:00 — need badge access until 20:00 weekdays.", daysAgo: 4, final: "PENDING" },
+    { type: "LEAVE_REQUEST", title: "Extend approved vacation by one day", description: "Return flight from Denver got moved â€” requesting one extra day tacked onto my approved vacation.", daysAgo: 9, final: "PROCESSING" },
+    { type: "EQUIPMENT_REQUEST", title: "Steel-toe boot allowance renewal", description: "Annual boot allowance â€” current pair has a split sole. Receipt to follow through reimbursements.", daysAgo: 6, final: "PENDING" },
+    { type: "ACCESS_REQUEST", title: "Badge access to NDT bay after hours", description: "Magnetic particle inspections keep spilling past 17:00 â€” need badge access until 20:00 weekdays.", daysAgo: 4, final: "PENDING" },
     { type: "TRAINING_REQUEST", title: "CNC 5-axis programming course", description: "Haas just released the new 5-axis post for our UMC-750. Requesting the two-day programming course in Dallas.", daysAgo: 3, final: "PENDING" },
-    { type: "OTHER", title: "Standing desk for drafting station", description: "Back trouble after long CAD sessions — requesting a sit/stand converter for my drafting station.", daysAgo: 2, final: "PENDING" },
+    { type: "OTHER", title: "Standing desk for drafting station", description: "Back trouble after long CAD sessions â€” requesting a sit/stand converter for my drafting station.", daysAgo: 2, final: "PENDING" },
     { type: "PAYROLL_INQUIRY", title: "401k deduction looks doubled", description: "This period's 401k deduction is exactly 2x my election. Can accounting check the import?", daysAgo: 1, final: "PENDING" },
   ];
   let reqC = 0;
@@ -588,7 +590,7 @@ async function main() {
     createdAt.setHours(randInt(8, 16), randInt(0, 59), 0, 0);
     const decided = s.final === "COMPLETED" || s.final === "REJECTED";
     const processingAt = pastCap(addMin(createdAt, randInt(4, 48) * 60));
-    const decidedAt = pastCap(addMin(createdAt, randInt(24, 120) * 60)); // 1–5 days
+    const decidedAt = pastCap(addMin(createdAt, randInt(24, 120) * 60)); // 1â€“5 days
     const history: Prisma.RequestStatusHistoryCreateWithoutRequestInput[] = [
       { status: "PENDING", note: "Request submitted.", updatedById: emp.id, updatedAt: createdAt },
     ];
@@ -598,7 +600,7 @@ async function main() {
     if (decided) {
       history.push({
         status: s.final,
-        note: s.final === "COMPLETED" ? pick(["Done — see notes.", "Approved and processed.", "Completed, confirmation sent by email."]) : pick(["Not feasible this quarter.", "Denied — see admin notes."]),
+        note: s.final === "COMPLETED" ? pick(["Done â€” see notes.", "Approved and processed.", "Completed, confirmation sent by email."]) : pick(["Not feasible this quarter.", "Denied â€” see admin notes."]),
         updatedById: adminEmp.id, updatedAt: decidedAt,
       });
     }
@@ -606,7 +608,7 @@ async function main() {
       data: {
         employeeId: emp.id, type: s.type, title: s.title, description: s.description,
         status: s.final,
-        adminNotes: decided ? (s.final === "REJECTED" ? "Reviewed with department lead — cannot accommodate right now; revisit next quarter." : "Handled by admin — closed out.") : null,
+        adminNotes: decided ? (s.final === "REJECTED" ? "Reviewed with department lead â€” cannot accommodate right now; revisit next quarter." : "Handled by admin â€” closed out.") : null,
         reviewerId: s.final === "PENDING" ? null : adminEmp.id,
         createdAt,
         updatedAt: decided ? decidedAt : s.final === "PROCESSING" ? processingAt : createdAt,
@@ -617,32 +619,32 @@ async function main() {
   }
   console.log(`   Requests: +${reqC}`);
 
-  // ── 7. Reimbursements (90 days, weighted to last 30) ────────────────
+  // â”€â”€ 7. Reimbursements (90 days, weighted to last 30) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const reimbSpecs: Array<{ title: string; category: Prisma.ReimbursementCreateInput["category"]; amount: number; description: string; tags: string[] }> = [
-    { title: "Mileage — Eagle Ford well site visit", category: "TRAVEL", amount: 214.5, description: "312 miles round trip to customer pad near Kenedy TX for on-site packer retrieval support.", tags: ["mileage", "field"] },
-    { title: "Hotel — 3 nights, Midland field job", category: "ACCOMMODATION", amount: 487.2, description: "Fairfield Inn Midland during completion string installation for Concho pad.", tags: ["field", "hotel"] },
-    { title: "PPE — FR coveralls and gloves", category: "EQUIPMENT", amount: 268.75, description: "Two sets of FR coveralls plus impact gloves for wireline work, per site HSE requirements.", tags: ["ppe", "safety"] },
-    { title: "Calibration training — micrometer & bore gauge", category: "TRAINING", amount: 395.0, description: "One-day metrology calibration workshop at TMAC Fort Worth for the inspection lab.", tags: ["quality"] },
-    { title: "Fuel — service truck, Permian run", category: "FUEL", amount: 176.4, description: "Diesel for the F-350 service truck, two-day run to Midland and back.", tags: ["field", "truck"] },
-    { title: "Customer lunch — Baker Hughes buyers", category: "MEALS", amount: 96.3, description: "Lunch with two procurement contacts to review Q3 blanket PO for hammer unions.", tags: ["sales"] },
-    { title: "Overnight shipping — seal stack samples", category: "OTHER", amount: 88.9, description: "Overnight two elastomer seal stacks to customer engineering for HPHT qualification.", tags: ["shipping"] },
+    { title: "Mileage â€” Eagle Ford well site visit", category: "TRAVEL", amount: 214.5, description: "312 miles round trip to customer pad near Kenedy TX for on-site packer retrieval support.", tags: ["mileage", "field"] },
+    { title: "Hotel â€” 3 nights, Midland field job", category: "ACCOMMODATION", amount: 487.2, description: "Fairfield Inn Midland during completion string installation for Concho pad.", tags: ["field", "hotel"] },
+    { title: "PPE â€” FR coveralls and gloves", category: "EQUIPMENT", amount: 268.75, description: "Two sets of FR coveralls plus impact gloves for wireline work, per site HSE requirements.", tags: ["ppe", "safety"] },
+    { title: "Calibration training â€” micrometer & bore gauge", category: "TRAINING", amount: 395.0, description: "One-day metrology calibration workshop at TMAC Fort Worth for the inspection lab.", tags: ["quality"] },
+    { title: "Fuel â€” service truck, Permian run", category: "FUEL", amount: 176.4, description: "Diesel for the F-350 service truck, two-day run to Midland and back.", tags: ["field", "truck"] },
+    { title: "Customer lunch â€” Baker Hughes buyers", category: "MEALS", amount: 96.3, description: "Lunch with two procurement contacts to review Q3 blanket PO for hammer unions.", tags: ["sales"] },
+    { title: "Overnight shipping â€” seal stack samples", category: "OTHER", amount: 88.9, description: "Overnight two elastomer seal stacks to customer engineering for HPHT qualification.", tags: ["shipping"] },
     { title: "Digital calipers (8 in) replacement", category: "EQUIPMENT", amount: 189.0, description: "Replacement Mitutoyo calipers for the receiving inspection bench.", tags: ["quality", "tools"] },
-    { title: "OSHA 30 recertification", category: "TRAINING", amount: 295.0, description: "OSHA 30-hour general industry refresher — card expires next month.", tags: ["safety"] },
-    { title: "Hotel — API Spec Q1 audit prep, Houston", category: "ACCOMMODATION", amount: 342.6, description: "Two nights near the registrar's office for audit preparation sessions.", tags: ["quality", "audit"] },
-    { title: "Booth supplies — Permian Basin oil show", category: "OFFICE_SUPPLIES", amount: 154.2, description: "Banner stand, literature racks and giveaways for the Odessa trade show booth.", tags: ["marketing"] },
-    { title: "Mileage — Cleburne heat-treat vendor", category: "TRAVEL", amount: 64.8, description: "Round trips to the heat-treat vendor to expedite mandrel batch #4417.", tags: ["mileage"] },
-    { title: "Team safety lunch — 500 days no LTI", category: "MEALS", amount: 412.0, description: "BBQ lunch for the plant floor celebrating 500 days without a lost-time incident.", tags: ["safety", "team"] },
+    { title: "OSHA 30 recertification", category: "TRAINING", amount: 295.0, description: "OSHA 30-hour general industry refresher â€” card expires next month.", tags: ["safety"] },
+    { title: "Hotel â€” API Spec Q1 audit prep, Houston", category: "ACCOMMODATION", amount: 342.6, description: "Two nights near the registrar's office for audit preparation sessions.", tags: ["quality", "audit"] },
+    { title: "Booth supplies â€” Permian Basin oil show", category: "OFFICE_SUPPLIES", amount: 154.2, description: "Banner stand, literature racks and giveaways for the Odessa trade show booth.", tags: ["marketing"] },
+    { title: "Mileage â€” Cleburne heat-treat vendor", category: "TRAVEL", amount: 64.8, description: "Round trips to the heat-treat vendor to expedite mandrel batch #4417.", tags: ["mileage"] },
+    { title: "Team safety lunch â€” 500 days no LTI", category: "MEALS", amount: 412.0, description: "BBQ lunch for the plant floor celebrating 500 days without a lost-time incident.", tags: ["safety", "team"] },
     { title: "H2S monitor calibration gas", category: "EQUIPMENT", amount: 132.5, description: "Cal-gas cylinder for the four-gas monitors used on sour service jobs.", tags: ["field", "safety"] },
-    { title: "Flight — customer failure review, OKC", category: "TRAVEL", amount: 428.9, description: "Round-trip DFW–OKC for the on-site RCA of a returned bridge plug.", tags: ["engineering"] },
+    { title: "Flight â€” customer failure review, OKC", category: "TRAVEL", amount: 428.9, description: "Round-trip DFWâ€“OKC for the on-site RCA of a returned bridge plug.", tags: ["engineering"] },
     { title: "Prescription safety glasses", category: "MEDICAL", amount: 218.0, description: "ANSI Z87.1 prescription safety glasses, shop floor requirement.", tags: ["ppe"] },
     { title: "SolidWorks training add-on module", category: "TRAINING", amount: 675.0, description: "Advanced surfacing module for the drafting team's seat, needed for the new mandrel profiles.", tags: ["engineering"] },
-    { title: "Fuel + parking — downtown bank & vendor runs", category: "FUEL", amount: 47.25, description: "Weekly errand runs: bank deposits, notary, and pickup at fastener vendor.", tags: ["admin"] },
+    { title: "Fuel + parking â€” downtown bank & vendor runs", category: "FUEL", amount: 47.25, description: "Weekly errand runs: bank deposits, notary, and pickup at fastener vendor.", tags: ["admin"] },
   ];
   let reimbC = 0;
   for (let k = 0; k < reimbSpecs.length; k++) {
     const s = reimbSpecs[k];
     const emp = pick(working);
-    // Weighted: first 12 in last 30 days, rest 31–90 days back.
+    // Weighted: first 12 in last 30 days, rest 31â€“90 days back.
     const daysAgo = k < 12 ? randInt(0, 29) : randInt(31, 88);
     const createdAt = addDays(NOW, -daysAgo);
     createdAt.setHours(randInt(8, 17), randInt(0, 59), 0, 0);
@@ -660,7 +662,7 @@ async function main() {
     ];
     if (status !== "PENDING") history.push({ status: "UNDER_REVIEW", note: "Reviewing receipt and coding.", updatedById: adminEmp.id, updatedAt: addMin(createdAt, randInt(4, 24) * 60) });
     if (status === "APPROVED" || status === "PAID" || status === "REJECTED") {
-      history.push({ status: status === "REJECTED" ? "REJECTED" : "APPROVED", note: status === "REJECTED" ? "Missing itemized receipt — please resubmit." : "Approved for next payment run.", updatedById: adminEmp.id, updatedAt: reviewedAt! });
+      history.push({ status: status === "REJECTED" ? "REJECTED" : "APPROVED", note: status === "REJECTED" ? "Missing itemized receipt â€” please resubmit." : "Approved for next payment run.", updatedById: adminEmp.id, updatedAt: reviewedAt! });
     }
     if (status === "PAID") history.push({ status: "PAID", note: "Paid via ACH with payroll run.", updatedById: adminEmp.id, updatedAt: paidDate! });
     await db.reimbursement.create({
@@ -670,7 +672,7 @@ async function main() {
         status, priority: s.amount > 400 ? "HIGH" : "MEDIUM", tags: s.tags,
         reviewerId: status === "PENDING" ? null : adminEmp.id,
         reviewedAt, approvalDate,
-        reviewNotes: status === "REJECTED" ? "Card statement isn't sufficient — need the itemized receipt." : status === "PENDING" ? null : "Coded to department expense account.",
+        reviewNotes: status === "REJECTED" ? "Card statement isn't sufficient â€” need the itemized receipt." : status === "PENDING" ? null : "Coded to department expense account.",
         paidDate, paidAmount: status === "PAID" ? D(s.amount) : null,
         createdAt, updatedAt: paidDate ?? reviewedAt ?? createdAt,
         history: { create: history },
@@ -680,20 +682,20 @@ async function main() {
   }
   console.log(`   Reimbursements: +${reimbC}`);
 
-  // ── 8. Notifications ────────────────────────────────────────────────
+  // â”€â”€ 8. Notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const allEmpIds = [...employees.map(e => e.id), adminEmp.id];
   const deptIds = (dept: string) => employees.filter(e => e.deptName === dept).map(e => e.id);
   const notifSpecs: Array<{ type: Prisma.NotificationCreateInput["type"]; title: string; message: string; priority: Prisma.NotificationCreateInput["priority"]; daysAgo: number; recipients: string[] }> = [
     { type: "PAYROLL", title: "Timesheets due Friday noon", message: "Reminder: all timesheets for the current bi-weekly period must be submitted and approved by Friday 12:00 so payroll can process Monday.", priority: "HIGH", daysAgo: 1, recipients: allEmpIds },
-    { type: "ANNOUNCEMENT", title: "500 days without a lost-time incident", message: "The plant hit 500 days LTI-free this week. BBQ lunch on the company Thursday — thank you for keeping each other safe.", priority: "MEDIUM", daysAgo: 3, recipients: allEmpIds },
-    { type: "POLICY", title: "Updated PPE policy — shop floor", message: "Cut-resistant gloves are now required for all forging and saw operations. New stock is at the supervisor stations; sign the acknowledgment by end of week.", priority: "URGENT", daysAgo: 5, recipients: [...deptIds("Manufacturing"), ...deptIds("Quality Assurance")] },
-    { type: "COMPANY", title: "New CNC lathe arriving in Bay 3", message: "The new Haas ST-35Y lands week after next. Bay 3 will be re-striped over the weekend — keep the aisle clear starting Friday.", priority: "MEDIUM", daysAgo: 8, recipients: deptIds("Manufacturing") },
+    { type: "ANNOUNCEMENT", title: "500 days without a lost-time incident", message: "The plant hit 500 days LTI-free this week. BBQ lunch on the company Thursday â€” thank you for keeping each other safe.", priority: "MEDIUM", daysAgo: 3, recipients: allEmpIds },
+    { type: "POLICY", title: "Updated PPE policy â€” shop floor", message: "Cut-resistant gloves are now required for all forging and saw operations. New stock is at the supervisor stations; sign the acknowledgment by end of week.", priority: "URGENT", daysAgo: 5, recipients: [...deptIds("Manufacturing"), ...deptIds("Quality Assurance")] },
+    { type: "COMPANY", title: "New CNC lathe arriving in Bay 3", message: "The new Haas ST-35Y lands week after next. Bay 3 will be re-striped over the weekend â€” keep the aisle clear starting Friday.", priority: "MEDIUM", daysAgo: 8, recipients: deptIds("Manufacturing") },
     { type: "PAYROLL", title: "Direct deposit lands one day early", message: "Because of the bank holiday, this period's direct deposits will post Thursday instead of Friday. No action needed.", priority: "MEDIUM", daysAgo: 11, recipients: allEmpIds },
-    { type: "ANNOUNCEMENT", title: "Q3 all-hands — customer wins & roadmap", message: "Join us Friday 3 PM in the training room for Q3 kickoff: two new frac plug qualifications, the Midland expansion, and service award announcements.", priority: "HIGH", daysAgo: 14, recipients: allEmpIds },
-    { type: "POLICY", title: "Vacation blackout — API audit week", message: "Heads up: the API Spec Q1 surveillance audit is scheduled in six weeks. QA and Manufacturing leads, please avoid approving PTO for audit week.", priority: "HIGH", daysAgo: 18, recipients: [...deptIds("Quality Assurance"), ...deptIds("Manufacturing")] },
-    { type: "COMPANY", title: "Welcome our summer interns", message: "Two engineering interns from UT Arlington start Monday — they'll be shadowing the drafting team and helping with the test-stand data logger.", priority: "LOW", daysAgo: 22, recipients: allEmpIds },
-    { type: "ANNOUNCEMENT", title: "Parking lot repaving — use east lot", message: "The main lot gets repaved Wednesday–Thursday. Park in the east gravel lot; the shuttle golf cart runs 6:30–8:30 AM.", priority: "MEDIUM", daysAgo: 26, recipients: allEmpIds },
-    { type: "OTHER", title: "Benefits open enrollment opens Aug 1", message: "Open enrollment for medical/dental/vision runs Aug 1–15. HR will hold two info sessions; packets go out next week.", priority: "MEDIUM", daysAgo: 29, recipients: allEmpIds },
+    { type: "ANNOUNCEMENT", title: "Q3 all-hands â€” customer wins & roadmap", message: "Join us Friday 3 PM in the training room for Q3 kickoff: two new frac plug qualifications, the Midland expansion, and service award announcements.", priority: "HIGH", daysAgo: 14, recipients: allEmpIds },
+    { type: "POLICY", title: "Vacation blackout â€” API audit week", message: "Heads up: the API Spec Q1 surveillance audit is scheduled in six weeks. QA and Manufacturing leads, please avoid approving PTO for audit week.", priority: "HIGH", daysAgo: 18, recipients: [...deptIds("Quality Assurance"), ...deptIds("Manufacturing")] },
+    { type: "COMPANY", title: "Welcome our summer interns", message: "Two engineering interns from UT Arlington start Monday â€” they'll be shadowing the drafting team and helping with the test-stand data logger.", priority: "LOW", daysAgo: 22, recipients: allEmpIds },
+    { type: "ANNOUNCEMENT", title: "Parking lot repaving â€” use east lot", message: "The main lot gets repaved Wednesdayâ€“Thursday. Park in the east gravel lot; the shuttle golf cart runs 6:30â€“8:30 AM.", priority: "MEDIUM", daysAgo: 26, recipients: allEmpIds },
+    { type: "OTHER", title: "Benefits open enrollment opens Aug 1", message: "Open enrollment for medical/dental/vision runs Aug 1â€“15. HR will hold two info sessions; packets go out next week.", priority: "MEDIUM", daysAgo: 29, recipients: allEmpIds },
   ];
   let notifC = 0;
   for (const s of notifSpecs) {
@@ -718,7 +720,7 @@ async function main() {
   }
   console.log(`   Notifications: +${notifC}`);
 
-  // ── 9. Payroll calendar (bi-weekly: 6 completed + current + next) ───
+  // â”€â”€ 9. Payroll calendar (bi-weekly: 6 completed + current + next) â”€â”€â”€
   // Current period: started 9 days ago, ends in 4 days.
   const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   let pcC = 0;
@@ -731,9 +733,9 @@ async function main() {
     if (exists) continue;
     await db.payrollCalendar.create({
       data: {
-        title: `Bi-weekly · ${fmt(start)} – ${fmt(end)}, ${end.getFullYear()}`,
+        title: `Bi-weekly Â· ${fmt(start)} â€“ ${fmt(end)}, ${end.getFullYear()}`,
         payPeriodStart: start, payPeriodEnd: end, payDate, status,
-        notes: p === 0 ? "Current period — timesheet approvals due by Friday noon." : null,
+        notes: p === 0 ? "Current period â€” timesheet approvals due by Friday noon." : null,
         createdById: adminUser.id,
       },
     });
@@ -741,7 +743,7 @@ async function main() {
   }
   console.log(`   PayrollCalendar: +${pcC}`);
 
-  // ── 10. Audit log (~150 rows over 30 days) ──────────────────────────
+  // â”€â”€ 10. Audit log (~150 rows over 30 days) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const auditActions: Array<{ action: string; resource: string; adminOnly: boolean }> = [
     { action: "auth.login", resource: "User", adminOnly: false },
     { action: "auth.login", resource: "User", adminOnly: false },
@@ -788,7 +790,7 @@ async function main() {
   await db.auditLog.createMany({ data: auditRows });
   console.log(`   AuditLog: +${auditRows.length}`);
 
-  // ── 11. Idempotency marker ──────────────────────────────────────────
+  // â”€â”€ 11. Idempotency marker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   await db.auditLog.create({
     data: {
       actorId: adminUser.id, actorEmail: adminUser.email,
@@ -796,7 +798,7 @@ async function main() {
       diff: { employees: employees.length, timeEntries: teC, schedules: schedC, scheduledWork: swC, leaves: lvC, requests: reqC, reimbursements: reimbC, notifications: notifC },
     },
   });
-  console.log("✓ done — marker written (delete AuditLog action 'seed.30days' to allow re-seeding)");
+  console.log("âœ“ done â€” marker written (delete AuditLog action 'seed.30days' to allow re-seeding)");
 }
 
 main()

@@ -93,7 +93,7 @@ export function createsSupervisorCycle(
   return false;
 }
 
-const SENSITIVE_FIELDS = new Set(["ssnLast4", "dateOfBirth"]);
+const SENSITIVE_FIELDS = new Set(["ssnLast4", "dateOfBirth", "personalEmail", "phoneNumber", "address", "city", "state", "zipCode", "emergencyName", "emergencyPhone", "privateDetails"]);
 
 /**
  * Field-level diff for the audit log: only changed fields, old -> new, with

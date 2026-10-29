@@ -19,7 +19,7 @@ export default function PrivacyPage() {
           <p className="text-sm text-muted-foreground">
             American Completion Tools · ACT Persona (internal HR/payroll system)
             <br />
-            Last updated: August 2026
+            Last updated: October 28, 2026
           </p>
         </div>
 
@@ -29,9 +29,10 @@ export default function PrivacyPage() {
             <p>To administer employment, we collect and store:</p>
             <ul className="list-disc space-y-1 pl-5">
               <li>Name, contact information, and address</li>
-              <li>The <strong>last 4 digits only</strong> of your Social Security Number — we never collect or store the full number</li>
+              <li>The <strong>last 4 digits only</strong> of your Social Security Number in structured employee fields</li>
               <li>Time clock records, schedules, and leave/reimbursement requests</li>
               <li>Payroll documents you or an admin upload (pay stubs, and — only if you&apos;ve separately consented — your W-2)</li>
+              <li>Uploaded employment forms and tax records may contain additional sensitive identifiers. Company compliance archives and private HR notes are restricted to administrators; employee-owned documents remain accessible only to that employee and administrators</li>
               <li>Your personal email, used only to send sign-in verification codes</li>
               <li>A profile photo, if one is uploaded</li>
               <li>An audit log of account and record changes (who did what, and when)</li>

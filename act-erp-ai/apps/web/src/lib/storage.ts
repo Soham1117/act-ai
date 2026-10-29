@@ -42,7 +42,14 @@ export async function uploadFile(
       Key: key,
       Body: body,
       ContentType: options.contentType,
-      CacheControl: "3600",
+      CacheControl: "private, no-store",
+      ...(env.S3_KMS_KEY_ARN
+        ? {
+            ServerSideEncryption: "aws:kms" as const,
+            SSEKMSKeyId: env.S3_KMS_KEY_ARN,
+            BucketKeyEnabled: true,
+          }
+        : {}),
     }),
   );
   // Objects are private. Do NOT persist a presigned URL anywhere (DB, logs) —

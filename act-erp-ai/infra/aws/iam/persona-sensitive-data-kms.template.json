@@ -1,0 +1,89 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "ACT Persona sensitive-data key. Review runtime identity and bucket before deploying.",
+  "Parameters": {
+    "RuntimePrincipalArn": {
+      "Type": "String",
+      "Description": "Exact IAM role or dedicated IAM user ARN used by the Lightsail web process. Never the account root.",
+      "AllowedPattern": "arn:aws:iam::[0-9]{12}:(role|user)/.+"
+    },
+    "StorageBucketName": {
+      "Type": "String",
+      "Description": "Existing private S3 bucket used by Persona uploads.",
+      "AllowedPattern": "[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]"
+    }
+  },
+  "Resources": {
+    "SensitiveDataKey": {
+      "Type": "AWS::KMS::Key",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Description": "ACT Persona onboarding JSON and private documents",
+        "EnableKeyRotation": true,
+        "KeySpec": "SYMMETRIC_DEFAULT",
+        "KeyUsage": "ENCRYPT_DECRYPT",
+        "KeyPolicy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "EnableAccountIAMAdministration",
+              "Effect": "Allow",
+              "Principal": { "AWS": { "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root" } },
+              "Action": "kms:*",
+              "Resource": "*"
+            },
+            {
+              "Sid": "OnboardingRuntimeUseOnly",
+              "Effect": "Allow",
+              "Principal": { "AWS": { "Ref": "RuntimePrincipalArn" } },
+              "Action": ["kms:GenerateDataKey", "kms:Decrypt"],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "kms:EncryptionContext:app": "act-persona",
+                  "kms:EncryptionContext:purpose": [
+                    "onboarding-draft", "onboarding-packet", "employee-private-details",
+                    "hire-packet-import", "employee-note", "employee-note-revision"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "PrivateStorageRuntimeUseThroughS3",
+              "Effect": "Allow",
+              "Principal": { "AWS": { "Ref": "RuntimePrincipalArn" } },
+              "Action": ["kms:GenerateDataKey", "kms:Decrypt"],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "kms:ViaService": { "Fn::Sub": "s3.${AWS::Region}.amazonaws.com" },
+                  "kms:CallerAccount": { "Ref": "AWS::AccountId" }
+                },
+                "StringLike": {
+                  "kms:EncryptionContext:aws:s3:arn": [
+                    { "Fn::Sub": "arn:${AWS::Partition}:s3:::${StorageBucketName}" },
+                    { "Fn::Sub": "arn:${AWS::Partition}:s3:::${StorageBucketName}/*" }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "SensitiveDataKeyAlias": {
+      "Type": "AWS::KMS::Alias",
+      "Properties": {
+        "AliasName": "alias/act-persona-sensitive-data",
+        "TargetKeyId": { "Ref": "SensitiveDataKey" }
+      }
+    }
+  },
+  "Outputs": {
+    "KeyArn": {
+      "Description": "Set SENSITIVE_DATA_KMS_KEY_ARN and optionally S3_KMS_KEY_ARN to this ARN.",
+      "Value": { "Fn::GetAtt": ["SensitiveDataKey", "Arn"] }
+    }
+  }
+}

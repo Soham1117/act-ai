@@ -1,6 +1,7 @@
 "use server";
 
 import { after } from "next/server";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -8,10 +9,15 @@ import { requireAdmin } from "@/lib/auth";
 import { uploadFile, deleteFile } from "@/lib/storage";
 import { validateUpload } from "@/lib/upload-validation";
 import { audit } from "@/lib/audit";
-import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
+import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { claimAndProcessHirePacketJob } from "@/lib/hire-packet/process-job";
 import { HIRE_JOB_STALE_MS, type HirePacketProposals } from "@/lib/hire-packet/types";
 import { updateEmployee } from "@/server/actions/employees";
+import {
+  encryptHirePacketFields,
+  decryptHirePacketFields,
+  safeHirePacketError,
+} from "@/server/hire-packet-sensitive-data";
 
 export async function uploadHirePacketZip(
   employeeId: string,
@@ -30,8 +36,14 @@ export async function uploadHirePacketZip(
       return fail("That employee was not found. Refresh the page and try again.");
     }
 
+    // Generate the opaque binding before touching storage or the job table.
+    // Storing encrypted empty results also preflights KMS permissions.
+    const id = randomUUID();
+    const encrypted = await encryptHirePacketFields(id, { proposedFields: {}, fileResults: [] });
     const job = await db.hirePacketImport.create({
       data: {
+        id,
+        ...encrypted,
         employeeId,
         uploadedById: admin.id,
         status: "PENDING",
@@ -51,27 +63,26 @@ export async function uploadHirePacketZip(
     await audit({
       action: "hire_packet.upload",
       resource: `HirePacketImport:${job.id}`,
-      diff: { employeeId, zipFileName: v.safeFileName },
+      diff: { employeeId },
     });
 
-    const id = job.id;
     after(async () => {
       try {
         await claimAndProcessHirePacketJob(id);
-      } catch (err) {
-        console.error("hire-packet process failed:", id, err);
+      } catch {
+        console.error("[hire-packet] Background processing failed", { jobId: id });
       }
     });
 
     revalidatePath(`/admin/employees/${employeeId}`);
     return ok({ jobId: job.id });
-  } catch (err) {
+  } catch {
     // Don't leave a PENDING job pointing at a zip that never uploaded.
     if (jobId) {
       await db.hirePacketImport.delete({ where: { id: jobId } }).catch(() => undefined);
     }
     if (storagePath) await deleteFile("documents", storagePath).catch(() => undefined);
-    return failFromUnknown(err);
+    return fail("The hire-packet request could not be completed. Please try again.");
   }
 }
 
@@ -97,7 +108,7 @@ export async function retryHirePacketImport(jobId: string): Promise<ActionResult
           { status: "PROCESSING", updatedAt: { lt: new Date(Date.now() - HIRE_JOB_STALE_MS) } },
         ],
       },
-      data: { status: "PENDING", errorMessage: null },
+      data: { status: "PENDING", processingToken: null, errorMessage: null },
     });
     if (reset.count === 0) {
       return fail("This import can't be retried right now (it is running, finished, or cancelled).");
@@ -106,14 +117,14 @@ export async function retryHirePacketImport(jobId: string): Promise<ActionResult
     after(async () => {
       try {
         await claimAndProcessHirePacketJob(jobId);
-      } catch (err) {
-        console.error("hire-packet retry failed:", jobId, err);
+      } catch {
+        console.error("[hire-packet] Background retry failed", { jobId });
       }
     });
     revalidatePath(`/admin/employees/${job.employeeId}/hire-import/${jobId}`);
     return ok();
-  } catch (err) {
-    return failFromUnknown(err);
+  } catch {
+    return fail("The hire-packet request could not be completed. Please try again.");
   }
 }
 
@@ -150,16 +161,17 @@ export async function getHirePacketImportStatus(
     const stuck =
       job.status === "PROCESSING" &&
       Date.now() - job.updatedAt.getTime() > HIRE_JOB_STALE_MS;
+    const protectedFields = await decryptHirePacketFields(job.id, job);
     return ok({
       status: job.status,
       stuck,
-      errorMessage: job.errorMessage,
-      proposedFields: (job.proposedFields as HirePacketProposals | null) ?? null,
-      fileResults: job.fileResults,
+      errorMessage: safeHirePacketError(job.errorMessage),
+      proposedFields: protectedFields.proposedFields,
+      fileResults: protectedFields.fileResults,
       employeeId: job.employeeId,
     });
-  } catch (err) {
-    return failFromUnknown(err);
+  } catch {
+    return fail("The hire-packet request could not be completed. Please try again.");
   }
 }
 
@@ -181,7 +193,8 @@ export async function applyHirePacketImport(
       return fail("This import is not ready to apply. Wait for processing to finish or start a new import.");
     }
 
-    const proposals = (job.proposedFields as HirePacketProposals | null) ?? {};
+    const { proposedFields } = await decryptHirePacketFields(job.id, job);
+    const proposals = proposedFields ?? {};
     const payload: Record<string, unknown> = {};
 
     for (const key of selectedFields) {
@@ -211,8 +224,8 @@ export async function applyHirePacketImport(
     revalidatePath(`/admin/employees/${job.employeeId}/hire-import/${jobId}`);
     revalidatePath("/dashboard/documents");
     return ok();
-  } catch (err) {
-    return failFromUnknown(err);
+  } catch {
+    return fail("The hire-packet request could not be completed. Please try again.");
   }
 }
 
@@ -224,12 +237,13 @@ export async function cancelHirePacketImport(jobId: string): Promise<ActionResul
     if (job.status === "APPLIED") {
       return fail("This import was already applied and cannot be cancelled.");
     }
-    await db.hirePacketImport.update({
-      where: { id: jobId },
-      data: { status: "CANCELLED" },
+    const cancelled = await db.hirePacketImport.updateMany({
+      where: { id: jobId, status: { not: "APPLIED" } },
+      data: { status: "CANCELLED", processingToken: null },
     });
+    if (cancelled.count !== 1) return fail("This import was already applied and cannot be cancelled.");
     return ok();
-  } catch (err) {
-    return failFromUnknown(err);
+  } catch {
+    return fail("The hire-packet request could not be completed. Please try again.");
   }
 }

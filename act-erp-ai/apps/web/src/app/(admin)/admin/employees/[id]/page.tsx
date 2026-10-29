@@ -13,6 +13,7 @@ import {
   PenLine,
 } from "lucide-react";
 import { db } from "@/lib/db";
+import { readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { requireAdmin } from "@/lib/auth";
 import { readOnlyUntil } from "@/lib/employee-validation";
 import { LeaveBalanceSummary } from "@/components/leave-balance-summary";
@@ -29,7 +30,7 @@ import {
   formatPhone,
   formatHours,
   getAvatarUrl,
-  formatSSNLast4,
+  businessDateOnly,
 } from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
@@ -49,6 +50,11 @@ import { BenefitsCard } from "./benefits-card";
 import { HirePacketImportButton } from "./hire-packet-import-button";
 import { AccessCard } from "./access-card";
 import { PendingHireActions } from "../pending-hire-actions";
+import { EmployeeNotesPanel } from "./employee-notes-panel";
+import { getEmployeeNotes } from "@/server/actions/employee-notes";
+import { OnboardingPacketPanel } from "@/components/onboarding-packet-panel";
+import { decryptOnboardingPacketFields } from "@/server/onboarding-sensitive-data";
+import { audit } from "@/lib/audit";
 
 export default async function EmployeeDetailPage({
   params,
@@ -57,7 +63,7 @@ export default async function EmployeeDetailPage({
 }) {
   const { id } = await params;
   const admin = await requireAdmin();
-  const employee = await db.employee
+  const storedEmployee = await db.employee
     .findUnique({
       where: { id },
       include: {
@@ -97,11 +103,12 @@ export default async function EmployeeDetailPage({
     })
     .catch(() => null);
 
-  if (!employee) notFound();
+  if (!storedEmployee) notFound();
+  const employee = await readEmployeePrivateDetails(storedEmployee);
 
   const leaveBalances = await loadLeaveBalances(employee.id).catch(() => null);
 
-  const [departments, supervisors, jobCodes, activePlans] = await Promise.all([
+  const [departments, supervisors, jobCodes, activePlans, onboardingPacket] = await Promise.all([
     db.department.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
@@ -121,7 +128,32 @@ export default async function EmployeeDetailPage({
       include: { tiers: true },
       orderBy: [{ type: "asc" }, { name: "asc" }],
     }),
+    db.onboardingPacketSubmission.findUnique({
+      where: { employeeId: id },
+      select: {
+        inviteId: true,
+        consentVersion: true,
+        submittedAt: true,
+        application: true,
+        drugAlcohol: true,
+        background: true,
+        directDeposit: true,
+        handbook: true,
+      },
+    }),
   ]);
+
+  const readablePacket = onboardingPacket
+    ? await decryptOnboardingPacketFields(onboardingPacket.inviteId, onboardingPacket)
+    : null;
+  if (readablePacket) {
+    await audit({
+      action: "onboarding.packet_view",
+      resource: `Employee:${employee.id}`,
+      actor: { id: admin.id, email: admin.email ?? null },
+      diff: { bankDetailsMasked: true },
+    });
+  }
 
   const planOptions = activePlans.map((p) => ({
     id: p.id,
@@ -214,9 +246,9 @@ export default async function EmployeeDetailPage({
       {employee.employmentStatus === "TERMINATED" && employee.terminationDate && (
         <Card className="mb-4 border-destructive/40 bg-destructive/5">
           <CardContent className="p-4 text-xs text-muted-foreground">
-            Terminated {employee.terminationDate.toLocaleDateString()}
+            Terminated {formatDateOnly(employee.terminationDate)}
             {employee.terminationReason ? ` (${employee.terminationReason})` : ""}. Read-only
-            sign-in until {readOnlyUntil(employee.terminationDate).toLocaleDateString()}, then
+            sign-in until {formatDateOnly(readOnlyUntil(employee.terminationDate))}, then
             they can no longer sign in. Records and documents are kept.
           </CardContent>
         </Card>
@@ -290,10 +322,12 @@ export default async function EmployeeDetailPage({
           <TabsList className="flex-wrap">
             <TabsTrigger value="basic">Basic info</TabsTrigger>
             <TabsTrigger value="work">Work</TabsTrigger>
+            <TabsTrigger value="notes">Employee notes</TabsTrigger>
             <TabsTrigger value="time-clock">Time clock</TabsTrigger>
             <TabsTrigger value="leave">Leave</TabsTrigger>
             <TabsTrigger value="payroll">Payroll</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="hire-packet">Hire packet</TabsTrigger>
             <TabsTrigger value="benefits">Benefits</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
             <TabsTrigger value="training">Training</TabsTrigger>
@@ -302,11 +336,10 @@ export default async function EmployeeDetailPage({
           <TabsContent value="basic">
             <PersonalEditableCard
               employeeId={employee.id}
-              ssnMasked={formatSSNLast4(employee.ssnLast4)}
               initial={{
                 gender: employee.gender,
                 maritalStatus: employee.maritalStatus ?? "",
-                dateOfBirth: employee.dateOfBirth?.toISOString() ?? "",
+                dateOfBirth: employee.dateOfBirth?.toISOString().slice(0, 10) ?? "",
                 nationality: employee.nationality ?? "",
                 educationLevel: employee.educationLevel ?? "",
                 address: employee.address ?? "",
@@ -314,6 +347,7 @@ export default async function EmployeeDetailPage({
                 state: employee.state ?? "",
                 zipCode: employee.zipCode ?? "",
                 phoneNumber: employee.phoneNumber ?? "",
+                ssnLast4: employee.ssnLast4 ?? "",
                 emergencyName: employee.emergencyName ?? "",
                 emergencyPhone: employee.emergencyPhone ?? "",
               }}
@@ -328,14 +362,14 @@ export default async function EmployeeDetailPage({
               departments={departments}
               supervisors={supervisors}
               terminationInfo={{
-                date: employee.terminationDate?.toISOString() ?? null,
+                date: employee.terminationDate?.toISOString().slice(0, 10) ?? null,
                 reason: employee.terminationReason,
               }}
               initial={{
                 jobTitle: employee.jobTitle ?? "",
                 position: employee.position ?? "",
                 jobDescription: employee.jobDescription ?? "",
-                dateOfHire: employee.dateOfHire?.toISOString() ?? "",
+                dateOfHire: employee.dateOfHire?.toISOString().slice(0, 10) ?? "",
                 employmentType: employee.employmentType,
                 workEmail: employee.workEmail ?? "",
                 workPhoneNumber: employee.workPhoneNumber ?? "",
@@ -386,6 +420,10 @@ export default async function EmployeeDetailPage({
                 ))}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="notes">
+            <PrivateEmployeeNotes employeeId={employee.id} />
           </TabsContent>
 
           <TabsContent value="time-clock">
@@ -473,8 +511,8 @@ export default async function EmployeeDetailPage({
                             {l.leaveType.replace(/_/g, " ")} · {Number(l.totalDays)}d
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {l.startDate.toLocaleDateString()} →{" "}
-                            {l.endDate.toLocaleDateString()}
+                            {formatDateOnly(l.startDate)} →{" "}
+                            {formatDateOnly(l.endDate)}
                           </p>
                         </div>
                         <Badge
@@ -519,8 +557,8 @@ export default async function EmployeeDetailPage({
                         <div className="min-w-0">
                           <p className="truncate font-medium">{p.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {p.payPeriodStart.toLocaleDateString()} →{" "}
-                            {p.payPeriodEnd.toLocaleDateString()}
+                            {formatDateOnly(p.payPeriodStart)} →{" "}
+                            {formatDateOnly(p.payPeriodEnd)}
                           </p>
                         </div>
                         <a
@@ -547,6 +585,17 @@ export default async function EmployeeDetailPage({
               allowedTypes={["PERSONAL", "ONBOARDING"]}
               defaultType="PERSONAL"
             />
+          </TabsContent>
+
+          <TabsContent value="hire-packet">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Digital new-hire packet</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <OnboardingPacketPanel packet={readablePacket} />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="benefits" className="space-y-4">
@@ -681,6 +730,12 @@ function DocumentSection({
       </CardContent>
     </Card>
   );
+}
+
+async function PrivateEmployeeNotes({ employeeId }: { employeeId: string }) {
+  const result = await getEmployeeNotes(employeeId);
+  if (!result.ok) return <p role="alert" className="text-sm text-destructive">{result.error}</p>;
+  return <EmployeeNotesPanel employeeId={employeeId} notes={result.notes} today={businessDateOnly().toISOString().slice(0, 10)} />;
 }
 
 function Row({

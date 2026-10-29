@@ -8,6 +8,7 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { db } from "../db";
+import { readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { rateLimited } from "../rate-limit";
 import { hashPassword as hashPersonaPassword, verifyPassword as verifyPersonaPassword } from "../auth/password";
 import { accessLevelFor } from "../access";
@@ -198,7 +199,7 @@ function signingConfig(overrides: Partial<SigningConfig> = {}): SigningConfig {
   };
 }
 
-function userFromPrisma(row: {
+async function userFromPrisma(row: {
   id: string;
   email: string | null;
   name: string;
@@ -206,19 +207,22 @@ function userFromPrisma(row: {
   personalEmail: string | null;
   role: "ADMIN" | "EMPLOYEE";
   employee: {
+    id: string;
+    privateDetails: unknown;
     personalEmail: string | null;
     employmentStatus: "ACTIVE" | "ON_LEAVE" | "TERMINATED" | "PENDING_REVIEW" | "INACTIVE";
     terminationDate: Date | null;
     updatedAt: Date;
   } | null;
-}): IdentityUserRecord {
+}): Promise<IdentityUserRecord> {
+  const employeePersonalEmail = row.employee ? (await readEmployeePrivateDetails(row.employee)).personalEmail : null;
   return {
     id: row.id,
     email: row.email,
     name: row.name,
     passwordHash: row.passwordHash,
     personalEmail: row.personalEmail,
-    employeePersonalEmail: row.employee?.personalEmail ?? null,
+    employeePersonalEmail,
     // Same rule as the ERP sign-in: refuse once access is NONE (terminated past
     // the 60-day grace window). Terminated-within-grace and pending-review
     // accounts are still read-only users, not refused here.
@@ -235,6 +239,8 @@ const identityUserSelect = {
   role: true,
   employee: {
     select: {
+      id: true,
+      privateDetails: true,
       personalEmail: true,
       employmentStatus: true,
       terminationDate: true,
@@ -275,7 +281,7 @@ const prismaIdentityStore: IdentityStore = {
   },
 
   async finishChallenge({ challengeId, otp, now, verifyCode }) {
-    return db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       const row = await tx.loginChallenge.findUnique({
         where: { id: challengeId },
         include: { user: { select: identityUserSelect } },
@@ -321,10 +327,12 @@ const prismaIdentityStore: IdentityStore = {
           id: row.id,
           identityNonce: row.identityNonce,
           identityMfaRequired: row.identityMfaRequired,
-          user: userFromPrisma(row.user),
+          user: row.user,
         },
       } as const;
     });
+    if (result.status !== "success") return result;
+    return { ...result, challenge: { ...result.challenge, user: await userFromPrisma(result.challenge.user) } };
   },
 };
 

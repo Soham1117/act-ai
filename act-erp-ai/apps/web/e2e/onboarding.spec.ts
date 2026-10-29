@@ -46,7 +46,7 @@ async function makeInvite(over: Record<string, unknown> = {}) {
   });
 }
 
-/** Walk the public wizard. Stops before Submit. */
+/** Walk the public wizard through hire-packet steps. Stops before Submit. */
 async function fillWizard(
   page: Page,
   v: {
@@ -61,11 +61,29 @@ async function fillWizard(
   } = {},
 ) {
   const next = () => page.getByRole("button", { name: /^next/i }).click();
-  await textField(page, "Full name *").fill(v.name ?? "Walter Walkthrough");
-  await next();
-  await next(); // address
+  const name = v.name ?? "Walter Walkthrough";
+  await textField(page, "Full name *").fill(name);
   await textField(page, "SSN — last 4 digits *").fill(v.ssn ?? "6789");
+  await next(); // address
+  await next(); // application (optional fields)
+  // Consents
+  await textField(page, "Type your full name *").first().fill(name);
+  await page.getByText(/agree to the drug\/alcohol testing consent/i).click();
+  await textField(page, "Type your full name *").nth(1).fill(name);
+  await page.getByText(/agree to the background check authorization/i).click();
   await next();
+  // Direct deposit
+  await textField(page, "Bank name *").fill("First National Bank");
+  await textField(page, "Routing number *").fill("111000025");
+  await textField(page, "Account number *").fill("123456789");
+  await textField(page, "Type your full name *").fill(name);
+  await page.getByText(/authorize direct deposit/i).click();
+  await next();
+  // Handbook
+  await textField(page, "Type your full name *").fill(name);
+  await page.getByText(/acknowledge receipt/i).click();
+  await next();
+  // Documents
   if (v.doc) {
     await page.locator('input[type="file"]').first().setInputFiles({
       name: v.doc.name,
@@ -247,6 +265,9 @@ test.describe("onboarding: the new hire submits", () => {
     const done = await db.onboardingInvite.findUniqueOrThrow({ where: { id: inv.id } });
     expect(done).toMatchObject({ status: "COMPLETED", completedByEmployeeId: emp.id });
     expect(await db.auditLog.count({ where: { action: "onboarding.complete", resource: `Employee:${emp.id}` } })).toBe(1);
+    const packet = await db.onboardingPacketSubmission.findUniqueOrThrow({ where: { employeeId: emp.id } });
+    expect(packet.consentVersion).toBeTruthy();
+    expect(packet.directDeposit).toMatchObject({ routingNumber: "111000025", accountType: "CHECKING" });
 
     // The same link now says "Completed"; the invite cannot be reused.
     await hire.reload();
@@ -288,14 +309,10 @@ test.describe("onboarding: the new hire submits", () => {
     await page.getByRole("button", { name: /^next/i }).click();
     await expect(toast(page, /enter your full name/i)).toBeVisible();
     await textField(page, "Full name *").fill("Check Person");
-    await page.getByRole("button", { name: /^next/i }).click();
-    await page.getByRole("button", { name: /^next/i }).click();
     await textField(page, "SSN — last 4 digits *").fill("12");
     await page.getByRole("button", { name: /^next/i }).click();
     await expect(toast(page, /last 4 digits of your ssn/i)).toBeVisible();
-    await textField(page, "SSN — last 4 digits *").fill("1234");
-    await page.getByRole("button", { name: /^next/i }).click();
-    await page.getByRole("button", { name: /^next/i }).click();
+    await fillWizard(page, { name: "Check Person", ssn: "1234" });
     await submit(page).click();
     await expect(toast(page, /either a work email or a username/i)).toBeVisible();
     await textField(page, "Username (only if no work email above) *").fill("x!");
@@ -364,11 +381,26 @@ test.describe("onboarding: the new hire submits", () => {
   test("the file picker refuses a wrong type and an over-10MB file", async ({ browser }) => {
     const inv = await makeInvite();
     const page = await openInvite(browser, inv.token);
-    await textField(page, "Full name *").fill("Picker Person");
-    await page.getByRole("button", { name: /^next/i }).click();
-    await page.getByRole("button", { name: /^next/i }).click();
+    const next = () => page.getByRole("button", { name: /^next/i }).click();
+    const name = "Picker Person";
+    await textField(page, "Full name *").fill(name);
     await textField(page, "SSN — last 4 digits *").fill("1234");
-    await page.getByRole("button", { name: /^next/i }).click();
+    await next();
+    await next();
+    await textField(page, "Type your full name *").first().fill(name);
+    await page.getByText(/agree to the drug\/alcohol testing consent/i).click();
+    await textField(page, "Type your full name *").nth(1).fill(name);
+    await page.getByText(/agree to the background check authorization/i).click();
+    await next();
+    await textField(page, "Bank name *").fill("Bank");
+    await textField(page, "Routing number *").fill("111000025");
+    await textField(page, "Account number *").fill("999999");
+    await textField(page, "Type your full name *").fill(name);
+    await page.getByText(/authorize direct deposit/i).click();
+    await next();
+    await textField(page, "Type your full name *").fill(name);
+    await page.getByText(/acknowledge receipt/i).click();
+    await next();
     const input = page.locator('input[type="file"]').first();
     await input.setInputFiles({ name: "a.exe", mimeType: "application/octet-stream", buffer: Buffer.from("MZ") });
     await expect(toast(page, /only pdf, png or jpg/i)).toBeVisible();

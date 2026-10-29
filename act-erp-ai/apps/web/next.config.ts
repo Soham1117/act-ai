@@ -26,6 +26,9 @@ const nextConfig: NextConfig = {
   // Avoid bundling the heavy Prisma binary into route bundles.
   // pdfjs-dist loads its worker file at runtime; bundling it breaks that
   // lookup (pay stub auto-read and hire-packet PDF text both failed).
+  // The worker sibling is copied in infra/Dockerfile.web — do not use
+  // outputFileTracingIncludes for it; that can leave a broken package tree
+  // that shadows the real pdfjs-dist and breaks resolution.
   serverExternalPackages: ["@prisma/client", "pdfjs-dist"],
   experimental: {
     // File uploads travel through server actions; default is 1 MB. Per-file

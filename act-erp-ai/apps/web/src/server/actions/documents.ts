@@ -283,6 +283,11 @@ export async function deleteDocument(id: string): Promise<ActionResult> {
       return fail("You can only delete documents you uploaded yourself. Ask an admin if you need this removed.", "errors.documents.youCanOnlyDeleteDocumentsYou_b863b");
     }
 
+    const evidenceReferences = await db.onboardingChecklistItem.count({ where: { submittedDocumentId: id } });
+    const handbookReferences = await db.handbookAcknowledgment.count({ where: { evidenceDocumentId: id } });
+    if (evidenceReferences || handbookReferences) {
+      return fail("This file is retained as onboarding or handbook evidence. Ask HR to review its checklist link before removing it.");
+    }
     await db.document.delete({ where: { id } });
     const stillReferenced = await db.document.count({
       where: { fileName: doc.fileName },

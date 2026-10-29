@@ -222,6 +222,10 @@ model Employee {
   /// while password-only sign-in is enabled.
   personalEmail String?
 
+  /// KMS-encrypted personal details. Legacy nullable columns below are cleared
+  /// atomically when this payload is written; authorized readers hydrate it.
+  privateDetails Json?
+
   /// IRS Treas. Reg. 31.6051-1 requires affirmative, electronically-confirmed
   /// consent before a W-2 can be furnished electronically instead of on
   /// paper — and the employee must be able to withdraw it. Null = no
@@ -247,8 +251,9 @@ model Employee {
   city           String?
   state          String?
   zipCode        String?
-  /// Last 4 digits of the SSN only — the full number is never collected or
-  /// stored. Payroll is processed externally (paystubs are uploaded as
+  /// Last 4 digits only in structured employee fields. Uploaded employment
+  /// and tax documents may contain other identifiers and use private file
+  /// access controls. Payroll is processed externally (paystubs are uploaded as
   /// files), so last-4 is sufficient to reconcile a record against the
   /// payroll provider. NOT unique: across a few dozen employees last-4
   /// collisions are likely enough (~6% at n=35) that a unique index would
@@ -316,7 +321,10 @@ model Employee {
   notifications          NotificationRecipient[]
   benefitEnrollments     BenefitEnrollment[]
   retirementElections    RetirementElection[]
+  eligibilityAssessments BenefitEligibilityAssessment[]
+  privateNotes EmployeeNote[]
   hirePacketImports      HirePacketImport[]
+  onboardingPacket       OnboardingPacketSubmission?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -682,6 +690,8 @@ model NotificationRecipient {
 // ──────────────────────────────────────────────────────────────────────
 
 model Document {
+  checklistEvidence OnboardingChecklistItem[] @relation("ChecklistEvidence")
+  handbookEvidence HandbookAcknowledgment[] @relation("HandbookEvidence")
   id                 String                       @id @default(cuid())
   title              String
   description        String?                      @db.Text
@@ -717,6 +727,14 @@ model Payroll {
   payPeriodEnd       DateTime  @db.Date
   /// SHA-256 of the uploaded file, used to block duplicate uploads.
   fileSha256         String?
+  /// Provenance belongs to an individual source page, never a combined employee file.
+  sourceSha256       String?
+  sourceFileName     String?
+  sourcePage         Int?
+  importKey          String?   @unique
+  semanticHash       String?
+  payDate            DateTime? @db.Date
+  checkReference     String?
   uploadedById       String?   @db.Uuid
   uploaderEmployeeId String?
   uploader           Employee? @relation("PayrollUploader", fields: [uploaderEmployeeId], references: [id])
@@ -725,6 +743,7 @@ model Payroll {
   @@index([employeeId, payPeriodEnd])
   @@index([payPeriodStart])
   @@index([category])
+  @@index([semanticHash])
 }
 
 /// Admin-uploaded onboarding zip for one employee — extracted fields await HR review.
@@ -735,6 +754,8 @@ model HirePacketImport {
   uploadedById   String                 @db.Uuid
   uploadedBy     User                   @relation("HirePacketUploads", fields: [uploadedById], references: [id])
   status         HirePacketImportStatus @default(PENDING)
+  /// Opaque per-attempt token fences cancelled/retried background workers.
+  processingToken String?
   zipFileName    String
   /// S3 object key under documents/hire-packets/…
   zipStorageKey  String
@@ -786,6 +807,9 @@ model PayrollCalendar {
 /// dates or tier prices once enrollments exist against it; roll forward
 /// (clone + re-point) instead.
 model BenefitPlan {
+  planCode String?
+  planDesignation String?
+  resourceVersionId String?
   id                 String            @id @default(cuid())
   type               BenefitType
   name               String
@@ -995,8 +1019,37 @@ model OnboardingInvite {
   compensationValue Decimal?          @db.Decimal(12, 2)
   dateOfHire        DateTime?         @db.Date
 
+  /// In-progress hire packet (no password). Cleared on successful submit.
+  draftJson       Json?
+  draftStep       Int?
+  draftUpdatedAt  DateTime?
+
+  packetSubmission OnboardingPacketSubmission?
+
   @@index([status])
   @@index([expiresAt])
+}
+
+/// Structured new-hire packet from the public invite (application, consents, DD).
+/// Direct-deposit account/routing are admin-only; audit when viewed.
+model OnboardingPacketSubmission {
+  id         String @id @default(cuid())
+  inviteId   String @unique
+  invite     OnboardingInvite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  employeeId String @unique
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  consentVersion String
+  application    Json
+  drugAlcohol    Json
+  background     Json
+  /// Full routing/account — treat as sensitive; never expose to the employee role.
+  directDeposit  Json
+  handbook       Json
+
+  submittedAt DateTime @default(now())
+
+  @@index([submittedAt])
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1575,4 +1628,152 @@ model ContractTimeBreak {
   endTime     DateTime?
   durationMin Int               @default(0)
   type        BreakType         @default(BREAK)
+}
+
+// HR features are additive. Punch tables, kiosk sessions and employee-owned
+// documents retain their existing shape and ownership.
+model CompanyDocument {
+  id          String                   @id @default(cuid())
+  title       String
+  category    String
+  issuer      String?
+  isArchived  Boolean                  @default(false)
+  createdById String                   @db.Uuid
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  versions    CompanyDocumentVersion[]
+
+  @@index([category, isArchived])
+}
+
+model CompanyDocumentVersion {
+  id              String                    @id @default(cuid())
+  documentId      String
+  document        CompanyDocument           @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  version         Int
+  originalName    String
+  fileName        String
+  fileType        String
+  sha256          String                    @unique
+  sizeBytes       Int
+  purpose         String                    @default("HR_ONLY")
+  status          String                    @default("DRAFT")
+  year            Int?
+  quarter         Int?
+  periodStart     DateTime?                 @db.Date
+  periodEnd       DateTime?                 @db.Date
+  effectiveDate   DateTime?                 @db.Date
+  sourceReference String?
+  notes           String?                   @db.Text
+  createdById     String                    @db.Uuid
+  createdAt       DateTime                  @default(now())
+  approvedById    String?                   @db.Uuid
+  approvedAt      DateTime?
+  checklistItems  OnboardingChecklistItem[]
+
+  @@unique([documentId, version])
+  @@index([year, quarter])
+}
+
+model OnboardingChecklistItem {
+  id                  String                  @id @default(cuid())
+  employeeId          String?
+  inviteId            String?
+  versionId           String
+  version             CompanyDocumentVersion  @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  title               String
+  itemType            String                  @default("FORM")
+  required            Boolean                 @default(true)
+  status              String                  @default("NOT_STARTED")
+  submittedDocumentId String?
+  submittedDocument   Document? @relation("ChecklistEvidence", fields: [submittedDocumentId], references: [id], onDelete: Restrict)
+  employeeNotes       String?                 @db.Text
+  reviewNotes         String?                 @db.Text
+  reviewedById        String?                 @db.Uuid
+  reviewedAt          DateTime?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  acknowledgment      HandbookAcknowledgment?
+
+  @@unique([employeeId, versionId])
+  @@unique([inviteId, versionId])
+  @@index([employeeId, status])
+  @@index([inviteId])
+}
+
+model HandbookAcknowledgment {
+  id                 String                  @id @default(cuid())
+  checklistItemId    String                  @unique
+  item               OnboardingChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Restrict)
+  employeeId         String
+  versionId          String
+  acknowledgmentText String                  @db.Text
+  method             String
+  evidenceDocumentId String?
+  evidenceDocument   Document? @relation("HandbookEvidence", fields: [evidenceDocumentId], references: [id], onDelete: Restrict)
+  actorId            String                  @db.Uuid
+  acceptedAt         DateTime                @default(now())
+}
+
+model BenefitEligibilityPolicy {
+  id            String      @id @default(cuid())
+  benefitType   BenefitType
+  rule          String
+  effectiveFrom DateTime    @db.Date
+  effectiveTo   DateTime?   @db.Date
+  confirmed     Boolean     @default(false)
+  confirmedById String?     @db.Uuid
+  confirmedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([benefitType, effectiveFrom])
+  @@index([benefitType, effectiveFrom])
+}
+
+model BenefitEligibilityAssessment {
+  id             String      @id @default(cuid())
+  employeeId     String
+  employee       Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  benefitType    BenefitType
+  classification String      @default("REVIEW_REQUIRED")
+  serviceDate    DateTime?   @db.Date
+  notes          String?     @db.Text
+  confirmedById  String?     @db.Uuid
+  confirmedAt    DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([employeeId, benefitType])
+  @@index([employeeId])
+}
+
+model EmployeeNote {
+  id          String @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  noteDate    DateTime @db.Date
+  title       String
+  body        String @db.Text
+  kind        String @default("GENERAL")
+  createdById String @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isArchived  Boolean @default(false)
+  revisions   EmployeeNoteRevision[]
+
+  @@index([employeeId, noteDate])
+}
+
+model EmployeeNoteRevision {
+  id        String @id @default(cuid())
+  noteId    String
+  note      EmployeeNote @relation(fields: [noteId], references: [id], onDelete: Restrict)
+  title     String
+  body      String @db.Text
+  kind      String
+  noteDate  DateTime @db.Date
+  actorId   String @db.Uuid
+  reason    String?
+  createdAt DateTime @default(now())
 }

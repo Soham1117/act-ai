@@ -13,6 +13,7 @@ import {
   PenLine,
 } from "lucide-react";
 import { db } from "@/lib/db";
+import { readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { LeaveBalanceSummary } from "@/components/leave-balance-summary";
 import { loadLeaveBalances } from "@/lib/leave-balance-db";
 import { requireUser } from "@/lib/auth";
@@ -37,7 +38,7 @@ export default async function MyDetailsPage() {
     await getPortalLanguage();
   if (!user.employeeId) notFound();
 
-  const employee = await db.employee
+  const storedEmployee = await db.employee
     .findUnique({
       where: { id: user.employeeId },
       include: {
@@ -66,7 +67,8 @@ export default async function MyDetailsPage() {
     })
     .catch(() => null);
 
-  if (!employee) notFound();
+  if (!storedEmployee) notFound();
+  const employee = await readEmployeePrivateDetails(storedEmployee);
 
   const leaveBalances = await loadLeaveBalances(employee.id).catch(() => null);
 
