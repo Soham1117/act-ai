@@ -140,6 +140,51 @@ curl -fsS https://persona.americancompletiontools.com/api/health
 # Prefer: rm -f "$WALG_RESTORE_ENV_FILE" after a successful drill
 ```
 
+## Disaster cutover (Task 6)
+
+Use only when the live database is corrupt or wiped and you have already run
+`walg-restore-test.sh` successfully at the **same** `RESTORE_TO` (or you accept
+the risk without a drill).
+
+**Script:** `infra/scripts/walg-disaster-restore.sh`
+
+**Required environment:**
+
+| Variable | Value |
+|----------|--------|
+| `I_UNDERSTAND_THIS_REPLACES_LIVE_DB` | `yes` |
+| `RESTORE_TO` | UTC ISO timestamp (same as drill), e.g. `2026-10-29T16:00:00Z` |
+| `WALG_RESTORE_ENV_FILE` | Restore IAM env on the box (`GetObject`); never `infra/walg.env` |
+
+**What it does (in order):**
+
+1. `docker compose stop web`
+2. Best-effort `pg_dump` → `/home/ubuntu/act-releases/walg-disaster-<stamp>/last-chance.dump`
+3. `docker compose stop postgres`
+4. **Volume aside:** copy `act-erp-lite_pgdata` → `act-erp-lite_pgdata-broken-<stamp>`, clear live `pgdata`, then `wal-g backup-fetch` + PITR into live `pgdata`
+5. `docker compose up -d postgres` — verify `TimeEntry` / `AuditLog` counts
+6. `docker compose up -d web` — `curl` public `/api/health`
+
+**Broken volume:** kept for manual rollback inspection. After **7 days** (override with `BROKEN_KEEP_DAYS`) of confidence, an operator removes it explicitly:
+
+```bash
+docker volume rm act-erp-lite_pgdata-broken-<stamp>
+```
+
+The script never auto-deletes the broken volume or release logs.
+
+Example (maintenance window; restore creds on box only for the run):
+
+```bash
+export I_UNDERSTAND_THIS_REPLACES_LIVE_DB=yes
+export RESTORE_TO='2026-10-29T16:00:00Z'
+export WALG_RESTORE_ENV_FILE=/home/ubuntu/act-erp-ai/act-erp-ai/infra/walg-restore.env
+/home/ubuntu/act-erp-ai/act-erp-ai/infra/scripts/walg-disaster-restore.sh | tee /home/ubuntu/act-releases/walg-disaster-$(date -u +%Y%m%dT%H%M%SZ)/run.log
+# Prefer: rm -f "$WALG_RESTORE_ENV_FILE" after success when possible
+```
+
+---
+
 ## Acceptance (Task 5)
 
 First non-destructive drill (2026-10-29): `/home/ubuntu/act-releases/walg-drill-20261029T163548Z/walg-restore-test.log` — exit 0; `TimeEntry=105`; live `/api/health` ok. Restore IAM env was removed from the box after the run.

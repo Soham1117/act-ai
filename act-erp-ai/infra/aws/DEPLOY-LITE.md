@@ -154,9 +154,17 @@ Also: `curl -fsS https://your-domain/api/health` should print `{"status":"ok"}`
 
 ## Backups and restore
 
-Two layers: (1) Lightsail/EBS snapshots of the whole box (coarse, easy), and
-(2) **nightly logical dumps to S3** (`infra/scripts/backup-db.sh`), which are
-what you restore from for "someone deleted data yesterday" or a corrupted DB.
+Recovery layers (most precise first):
+
+1. **Primary — WAL-G point-in-time recovery** (`infra/aws/WAL-G-PITR.md`):
+   continuous WAL + daily base backups to an Object Lock bucket; restore to a
+   chosen second within ~30 days via `infra/scripts/walg-restore-test.sh`
+   (drill) or `infra/scripts/walg-disaster-restore.sh` (live cutover).
+2. **Secondary — optional weekly logical dump** (`infra/scripts/backup-db.sh` to
+   S3): coarse “yesterday’s rows” fallback if WAL-G is unavailable.
+3. **Tertiary — Lightsail instance snapshots**: whole-box rollback; use only
+   when the OS or Docker layer is broken, not for row-level mistakes.
+
 Also keep the **uploads bucket** safe (versioning below); the database only
 stores file keys, so DB backups alone do not restore documents.
 
@@ -230,19 +238,31 @@ keeps it for inspection). It exits non-zero on any failure.
 
 ### Disaster recovery (restore over the live database)
 
-Deliberately manual. Stop the app so nothing writes during the restore, restore
-into a fresh database, then swap:
+Deliberately manual. **Prefer WAL-G PITR** after a drill at the same
+`RESTORE_TO` timestamp (`infra/aws/WAL-G-PITR.md` — Disaster cutover):
+
+```bash
+export I_UNDERSTAND_THIS_REPLACES_LIVE_DB=yes
+export RESTORE_TO='2026-10-29T16:00:00Z'   # UTC; must match a verified drill
+export WALG_RESTORE_ENV_FILE=/home/ubuntu/act-erp-ai/act-erp-ai/infra/walg-restore.env
+infra/scripts/walg-disaster-restore.sh
+```
+
+The script stops web, best-effort `pg_dump`, copies live `pgdata` aside to
+`act-erp-lite_pgdata-broken-<stamp>`, fetches WAL-G + PITR into fresh
+`pgdata`, verifies counts, starts web, and curls `/api/health`. It does **not**
+auto-delete the broken volume.
+
+**Fallback — logical dump swap** (only if WAL-G cannot be used):
 
 ```bash
 dc stop web
-# 1. fetch + restore to a scratch DB and verify (above, with --keep)
 infra/scripts/restore-db.sh s3://ACT-BACKUPS/act-erp/db/<year>/<file>.dump.gz --keep
-# 2. swap names (terminate connections first; needs the postgres superuser)
 dc exec postgres psql -U act -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname IN ('act','act_restore_test') AND pid <> pg_backend_pid();"
 dc exec postgres psql -U act -d postgres -c 'ALTER DATABASE act RENAME TO act_broken_old;'
 dc exec postgres psql -U act -d postgres -c 'ALTER DATABASE act_restore_test RENAME TO act;'
 dc up -d web
-# 3. after a few days of confidence: DROP DATABASE act_broken_old;
+# after confidence: DROP DATABASE act_broken_old;
 ```
 
 ---
@@ -286,7 +306,7 @@ dc up -d web
 
 - **Deploys:** `git pull && dc up -d --build`. If the release changed
   `schema.prisma`, follow **5b** instead (backup first, then `db push`, then up).
-- **Backups:** see "Backups and restore" above. Snapshots + nightly S3 dumps.
+- **Backups:** see "Backups and restore" above. WAL-G PITR primary; optional weekly S3 dumps; snapshots tertiary.
 - **Health:** `dc ps` (web should be `healthy`); `curl https://<domain>/api/health`.
 - **Logs:** `dc logs -f web`; audit-log write failures appear as `[audit] write failed`.
 
