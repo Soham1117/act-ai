@@ -8,6 +8,10 @@
 #   ./walg-restore-test.sh [--keep]
 #
 # Optional: BACKUP_NAME=LATEST (wal-g backup name) or a specific backup.
+#
+# During promote, wal-g may log missing ".history" WAL object errors. That is often
+# benign when recovery finishes (pg_is_in_recovery=f) and the VERIFY queries succeed.
+#
 # Exit: 0 ok | 1 usage/config | 2 fetch/recovery failed | 3 verification failed
 set -euo pipefail
 umask 077
@@ -34,10 +38,15 @@ WALG_RESTORE_ENV_FILE="${WALG_RESTORE_ENV_FILE:-}"
 [ -n "$WALG_RESTORE_ENV_FILE" ] || die 1 "WALG_RESTORE_ENV_FILE is required (restore IAM creds with GetObject; not backup put-only walg.env)"
 [ -f "$WALG_RESTORE_ENV_FILE" ] || die 1 "WALG_RESTORE_ENV_FILE not found: $WALG_RESTORE_ENV_FILE"
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="${ACT_ERP_ROOT:-$(cd "$HERE/../.." && pwd)}"
-COMPOSE_FILE="${COMPOSE_FILE:-$ROOT/infra/docker-compose.prod-lite.yml}"
-[ -f "$COMPOSE_FILE" ] || die 1 "compose file not found: $COMPOSE_FILE"
+# Windows-sourced env files (CRLF) break docker --env-file / wal-g S3 settings.
+WALG_RESTORE_ENV_FOR_DOCKER="$(mktemp)"
+chmod 600 "$WALG_RESTORE_ENV_FOR_DOCKER"
+if grep -q $'\r' "$WALG_RESTORE_ENV_FILE"; then
+  log "WALG_RESTORE_ENV_FILE contains CRLF; using LF-normalized copy for docker --env-file"
+  tr -d '\r' < "$WALG_RESTORE_ENV_FILE" > "$WALG_RESTORE_ENV_FOR_DOCKER"
+else
+  cp "$WALG_RESTORE_ENV_FILE" "$WALG_RESTORE_ENV_FOR_DOCKER"
+fi
 
 LIVE_VOLUME="${LIVE_PGDATA_VOLUME:-act-erp-lite_pgdata}"
 TEST_VOLUME="${RESTORE_TEST_VOLUME:-act-erp-walg-restore-test}"
@@ -107,12 +116,12 @@ INNER_SCRIPT
 chmod a+r "$INNER"
 
 RUNLOG="$(mktemp)"
-trap 'rm -f "$INNER" "$RUNLOG"; cleanup' EXIT
+trap 'rm -f "$INNER" "$RUNLOG" "$WALG_RESTORE_ENV_FOR_DOCKER"; cleanup' EXIT
 
 if ! docker run --name "$CONTAINER" --entrypoint bash \
   -v "${TEST_VOLUME}:/var/lib/postgresql/data" \
   -v "${INNER}:/tmp/walg-restore-inner.sh:ro" \
-  --env-file "$WALG_RESTORE_ENV_FILE" \
+  --env-file "$WALG_RESTORE_ENV_FOR_DOCKER" \
   -e "RESTORE_TO=$RESTORE_TO" \
   -e "BACKUP_NAME=$BACKUP_NAME" \
   "$IMAGE" \
