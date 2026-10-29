@@ -1,0 +1,20 @@
+# Postgres 16 + pgvector + wal-g for continuous archive to S3.
+FROM pgvector/pgvector:pg16
+
+ARG WALG_VERSION=v3.0.7
+ARG TARGETARCH=amd64
+
+USER root
+RUN set -eux; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends ca-certificates curl; \
+  curl -fsSL \
+    "https://github.com/wal-g/wal-g/releases/download/${WALG_VERSION}/wal-g-pg-ubuntu-20.04-${TARGETARCH}.tar.gz" \
+    -o /tmp/wal-g.tgz; \
+  tar -xzf /tmp/wal-g.tgz -C /tmp; \
+  mv /tmp/wal-g-pg-ubuntu-20.04-${TARGETARCH} /usr/local/bin/wal-g; \
+  chmod 755 /usr/local/bin/wal-g; \
+  wal-g --version; \
+  rm -rf /tmp/wal-g.tgz /var/lib/apt/lists/*
+
+USER postgres
