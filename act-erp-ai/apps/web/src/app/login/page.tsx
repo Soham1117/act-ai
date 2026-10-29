@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSessionUserForPasswordChange } from "@/lib/auth";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/logo";
 import { env } from "@/lib/env";
 import { LoginForm } from "./login-form";
@@ -28,10 +27,7 @@ export default async function LoginPage({
   const { next, error } = await searchParams;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-end p-6">
-        <ThemeToggle />
-      </header>
+    <>
       <main className="flex flex-1 items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-8">
           <div className="flex flex-col items-center gap-4">
@@ -63,6 +59,6 @@ export default async function LoginPage({
         </p>
         <p>© {new Date().getFullYear()} American Completion Tools</p>
       </footer>
-    </div>
+    </>
   );
 }

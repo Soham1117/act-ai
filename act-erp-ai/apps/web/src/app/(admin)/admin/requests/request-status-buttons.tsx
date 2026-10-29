@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Check, Loader2, MoreHorizontal, Play, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,11 +27,34 @@ import { REQUEST_TRANSITIONS, type RequestStatusKey } from "@/lib/request-transi
 
 type Action = "PROCESSING" | "COMPLETED" | "REJECTED" | "REOPEN";
 
-const COPY: Record<Action, { title: string; desc: string; confirm: string; required: boolean }> = {
-  PROCESSING: { title: "Mark as processing", desc: "Optionally tell the employee what happens next.", confirm: "Mark processing", required: false },
-  COMPLETED: { title: "Complete request", desc: "Optionally add a note for the employee.", confirm: "Complete", required: false },
-  REJECTED: { title: "Reject request", desc: "A reason is required and is shown to the employee.", confirm: "Reject", required: true },
-  REOPEN: { title: "Reopen request", desc: "Moves the request back to pending. A reason is required and is recorded.", confirm: "Reopen", required: true },
+const COPY: Record<
+  Action,
+  { title: string; desc: string; confirm: string; required: boolean }
+> = {
+  PROCESSING: {
+    title: "Mark as processing",
+    desc: "Optionally tell the employee what happens next.",
+    confirm: "Mark processing",
+    required: false,
+  },
+  COMPLETED: {
+    title: "Complete request",
+    desc: "Optionally add a note for the employee.",
+    confirm: "Complete",
+    required: false,
+  },
+  REJECTED: {
+    title: "Reject request",
+    desc: "A reason is required and is shown to the employee.",
+    confirm: "Reject",
+    required: true,
+  },
+  REOPEN: {
+    title: "Reopen request",
+    desc: "Moves the request back to pending. A reason is required and is recorded.",
+    confirm: "Reopen",
+    required: true,
+  },
 };
 
 export function RequestStatusButtons({
@@ -41,6 +64,7 @@ export function RequestStatusButtons({
   id: string;
   current: RequestStatusKey;
 }) {
+  const formId = useId();
   const [pending, startTransition] = useTransition();
   const [action, setAction] = useState<Action | null>(null);
   const [note, setNote] = useState("");
@@ -54,7 +78,13 @@ export function RequestStatusButtons({
       const res: ActionResult<Record<string, unknown>> =
         action === "REOPEN"
           ? await runAction(() => reopenRequest({ requestId: id, note }))
-          : await runAction(() => updateRequestStatus({ requestId: id, status: action, note: note.trim() || undefined }));
+          : await runAction(() =>
+              updateRequestStatus({
+                requestId: id,
+                status: action,
+                note: note.trim() || undefined,
+              }),
+            );
       if (!toastAction(res)) return;
       toast.success(action === "REOPEN" ? "Reopened" : action.toLowerCase());
       setAction(null);
@@ -66,7 +96,13 @@ export function RequestStatusButtons({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={pending} aria-label="Request actions">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 md:h-9 md:w-9"
+            disabled={pending}
+            aria-label="Request actions"
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -97,18 +133,28 @@ export function RequestStatusButtons({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={!!action} onOpenChange={(o) => !o && setAction(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{c?.title}</DialogTitle>
-            <DialogDescription>{c?.desc}</DialogDescription>
-          </DialogHeader>
+      <InlinePanel open={!!action} onOpenChange={(o) => !o && setAction(null)}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>{c?.title}</InlinePanelTitle>
+            <InlinePanelDescription>{c?.desc}</InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs">{c?.required ? "Note (required)" : "Note (optional)"}</Label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={2000} />
+            <Label htmlFor={`${formId}-field-0`} className="text-xs">
+              {c?.required ? "Note (required)" : "Note (optional)"}
+            </Label>
+            <Textarea
+              id={`${formId}-field-0`}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
+              maxLength={2000}
+            />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAction(null)}>Close</Button>
+          <InlinePanelFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setAction(null)}>
+              Close
+            </Button>
             <Button
               variant={action === "REJECTED" ? "destructive" : "default"}
               disabled={pending || (!!c?.required && note.trim().length < 2)}
@@ -117,9 +163,9 @@ export function RequestStatusButtons({
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {c?.confirm}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }

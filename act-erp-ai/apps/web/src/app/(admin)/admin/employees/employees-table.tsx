@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { getAvatarUrl } from "@/lib/format";
 import { getDepartmentConfig } from "@/lib/departments";
 import { BulkActions } from "./bulk-actions";
+import { DataListCard, FilterStack, ResponsiveDataList } from "@/components/mobile";
 
 export type Row = {
   id: string;
@@ -188,7 +189,7 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-11 w-11 md:h-8 md:w-8">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -226,23 +227,25 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
     .rows.filter((r) => r.getIsSelected() && !r.original.isAdmin)
     .map((r) => ({ id: r.original.id, name: r.original.name }));
 
+  const pageRows = table.getRowModel().rows;
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <div className="relative max-w-xs flex-1">
+      <FilterStack>
+        <div className="relative w-full flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Search name, email, ID…"
             value={globalFilter ?? ""}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-8 h-9"
+            className="h-11 pl-8 sm:h-9"
           />
         </div>
         {selected.length > 0 && (
           <BulkActions selected={selected} onDone={() => setRowSelection({})} />
         )}
-        <div className="ml-auto flex items-center gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex w-full items-center justify-between gap-3 sm:ml-auto sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2">
             <Switch
               id="show-inactive"
               checked={showInactive}
@@ -256,54 +259,110 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
             {table.getFilteredRowModel().rows.length} of {visibleRows.length}
           </span>
         </div>
-      </div>
+      </FilterStack>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id}>
-                {hg.headers.map((h) => (
-                  <TableHead key={h.id}>
-                    {h.isPlaceholder
-                      ? null
-                      : flexRender(h.column.columnDef.header, h.getContext())}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+      <ResponsiveDataList
+        mobile={
+          <div className="space-y-2">
+            {pageRows.length ? (
+              pageRows.map((row) => {
+                const r = row.original;
+                const src = r.profilePic ?? getAvatarUrl(r.email);
+                return (
+                  <DataListCard key={r.id} className="flex items-start gap-3">
+                    {!r.isAdmin && (
+                      <Checkbox
+                        checked={row.getIsSelected()}
+                        onCheckedChange={(v) => row.toggleSelected(!!v)}
+                        aria-label={`Select ${r.name}`}
+                        className="mt-1"
+                      />
+                    )}
+                    <Link href={`/admin/employees/${r.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
+                        <Image src={src} alt={r.name} fill sizes="40px" className="object-cover" unoptimized />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{r.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {r.employeeId}
+                          {r.jobTitle ? ` · ${r.jobTitle}` : ""}
+                        </span>
+                        <span className="mt-1 inline-flex">
+                          <Badge
+                            variant={
+                              r.employmentStatus === "ACTIVE"
+                                ? "success"
+                                : r.employmentStatus === "TERMINATED"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                            className="text-[10px]"
+                          >
+                            {r.employmentStatus.replace(/_/g, " ")}
+                          </Badge>
+                        </span>
+                      </span>
+                    </Link>
+                  </DataListCard>
+                );
+              })
             ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-32 text-center text-sm text-muted-foreground">
-                  No employees match your filter.
-                </TableCell>
-              </TableRow>
+              <p className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+                No employees match your filter.
+              </p>
             )}
-          </TableBody>
-        </Table>
-      </div>
+          </div>
+        }
+        desktop={
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((hg) => (
+                  <TableRow key={hg.id}>
+                    {hg.headers.map((h) => (
+                      <TableHead key={h.id}>
+                        {h.isPlaceholder
+                          ? null
+                          : flexRender(h.column.columnDef.header, h.getContext())}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {pageRows.length ? (
+                  pageRows.map((row) => (
+                    <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="h-32 text-center text-sm text-muted-foreground">
+                      No employees match your filter.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        }
+      />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
           Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
         </p>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+          <Button variant="outline" size="sm" className="min-h-10 sm:min-h-0" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
             Previous
           </Button>
-          <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+          <Button variant="outline" size="sm" className="min-h-10 sm:min-h-0" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
             Next
           </Button>
         </div>

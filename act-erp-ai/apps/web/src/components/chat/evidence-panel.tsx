@@ -13,13 +13,23 @@ interface DocView {
   title: string;
 }
 
-export function EvidencePanel({ citation, onClose }: { citation: CitationInfo | null; onClose: () => void }) {
+export function EvidencePanel({
+  citation,
+  onClose,
+}: {
+  citation: CitationInfo | null;
+  onClose: () => void;
+}) {
   // The fetch result is keyed by document id, so "loading" is derived (the
   // result is for another document / not here yet) instead of being set
   // synchronously inside the effect. `nonce` bumps on every completed load so
   // the viewer re-jumps to the cited page.
   const docId = citation?.document_id;
-  const [result, setResult] = useState<{ docId: string; view: DocView | null; nonce: number } | null>(null);
+  const [result, setResult] = useState<{
+    docId: string;
+    view: DocView | null;
+    nonce: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!docId) return;
@@ -27,10 +37,12 @@ export function EvidencePanel({ citation, onClose }: { citation: CitationInfo | 
     fetch(`/api/knowledge/${docId}/view`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("view failed"))))
       .then((d: DocView) => {
-        if (!cancelled) setResult((prev) => ({ docId, view: d, nonce: (prev?.nonce ?? 0) + 1 }));
+        if (!cancelled)
+          setResult((prev) => ({ docId, view: d, nonce: (prev?.nonce ?? 0) + 1 }));
       })
       .catch(() => {
-        if (!cancelled) setResult((prev) => ({ docId, view: null, nonce: (prev?.nonce ?? 0) + 1 }));
+        if (!cancelled)
+          setResult((prev) => ({ docId, view: null, nonce: (prev?.nonce ?? 0) + 1 }));
       });
     return () => {
       cancelled = true;
@@ -60,13 +72,21 @@ export function EvidencePanel({ citation, onClose }: { citation: CitationInfo | 
       : {};
 
   return (
-    <div className="flex h-full flex-col border-l">
+    <div className="flex h-full min-w-0 flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <div className="truncate text-sm font-medium">
           {citation.eid} · {view?.title ?? "Source"}
-          {citation.breadcrumb ? <span className="text-muted-foreground"> — {citation.breadcrumb}</span> : null}
+          {citation.breadcrumb ? (
+            <span className="text-muted-foreground"> — {citation.breadcrumb}</span>
+          ) : null}
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label="Close source evidence"
+          className="h-11 w-11 shrink-0"
+        >
           <X className="h-4 w-4" />
         </Button>
       </div>

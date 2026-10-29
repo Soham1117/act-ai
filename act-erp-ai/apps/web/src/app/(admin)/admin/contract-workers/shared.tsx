@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 
 export const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50";
+  "flex min-h-11 w-full min-w-0 md:min-h-9 rounded-md border border-input bg-transparent px-3 py-1 text-base md:text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50";
 
 export type LiveStatus = "ACTIVE" | "ON_BREAK" | "OUT";
 
@@ -79,7 +79,13 @@ export function LiveBadge({ status }: { status: LiveStatus }) {
   );
 }
 
-export function ApprovalBadge({ status, open }: { status: HoursRow["approvalStatus"]; open?: boolean }) {
+export function ApprovalBadge({
+  status,
+  open,
+}: {
+  status: HoursRow["approvalStatus"];
+  open?: boolean;
+}) {
   if (open)
     return (
       <Badge variant="outline" className="text-[10px]">
@@ -88,10 +94,20 @@ export function ApprovalBadge({ status, open }: { status: HoursRow["approvalStat
     );
   return (
     <Badge
-      variant={status === "APPROVED" ? "success" : status === "REJECTED" ? "destructive" : "warning"}
+      variant={
+        status === "APPROVED"
+          ? "success"
+          : status === "REJECTED"
+            ? "destructive"
+            : "warning"
+      }
       className="text-[10px]"
     >
-      {status === "APPROVED" ? "Approved" : status === "REJECTED" ? "Rejected" : "Pending"}
+      {status === "APPROVED"
+        ? "Approved"
+        : status === "REJECTED"
+          ? "Rejected"
+          : "Pending"}
     </Badge>
   );
 }

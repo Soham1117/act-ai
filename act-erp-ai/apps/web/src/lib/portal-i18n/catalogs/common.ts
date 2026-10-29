@@ -1,4 +1,5 @@
 export const commonMessages: Record<string, { en: string; es: string }> = {
+  "common.close": { en: "Close", es: "Cerrar" },
   "common.changeLanguage": {
     en: "Change language",
     es: "Cambiar idioma",

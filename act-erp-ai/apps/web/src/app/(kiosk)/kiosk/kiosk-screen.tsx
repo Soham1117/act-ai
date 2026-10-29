@@ -401,9 +401,9 @@ export function KioskScreen({
   return (
     <div
       lang={locale}
-      className="grid min-h-screen grid-rows-[auto_1fr_auto] bg-muted/30 text-foreground"
+      className="grid min-h-screen min-w-0 grid-rows-[auto_1fr_auto] bg-muted/30 text-foreground"
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-background px-6 py-4 sm:px-8">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-background px-4 py-4 sm:px-8">
         <div className="flex items-center gap-3">
           <Logo className="h-8" />
           <div className="hidden sm:block">
@@ -414,7 +414,7 @@ export function KioskScreen({
           </div>
         </div>
         <KioskLanguageSwitch />
-        <div className="text-right">
+        <div className="min-w-0 text-right">
           <p className="font-mono text-2xl font-semibold tabular-nums">
             {now ? formatBusinessTime(now) : " "}
           </p>

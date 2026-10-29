@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Loader2, Trash2, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { runAction, toastAction } from "@/lib/toast-action";
@@ -34,6 +34,7 @@ export function BulkActions({
   selected: Selected;
   onDone: () => void;
 }) {
+  const fieldId = useId();
   const [terminateOpen, setTerminateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -56,31 +57,31 @@ export function BulkActions({
 
   return (
     <>
-      <Button variant="outline" size="sm" disabled={pending} onClick={() => setTerminateOpen(true)}>
+      <Button variant="outline" size="sm" disabled={pending} aria-expanded={terminateOpen} onClick={() => setTerminateOpen(true)}>
         <UserMinus className="mr-2 h-3.5 w-3.5" />
         Terminate {count}
       </Button>
-      <Button variant="destructive" size="sm" disabled={pending} onClick={() => setDeleteOpen(true)}>
+      <Button variant="destructive" size="sm" disabled={pending} aria-expanded={deleteOpen} onClick={() => setDeleteOpen(true)}>
         <Trash2 className="mr-2 h-3.5 w-3.5" />
         Delete {count}
       </Button>
 
-      <Dialog open={terminateOpen} onOpenChange={setTerminateOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+      <InlinePanel disabled={pending} open={terminateOpen} onOpenChange={setTerminateOpen}>
+        <InlinePanelContent className="max-w-md">
+          <InlinePanelHeader>
+            <InlinePanelTitle>
               Terminate {count} employee{count === 1 ? "" : "s"}
-            </DialogTitle>
-            <DialogDescription>
+            </InlinePanelTitle>
+            <InlinePanelDescription>
               {names}. Their records and documents are kept. They can still sign in read-only for{" "}
               {TERMINATION_GRACE_DAYS} days after the termination date, then sign-in stops. Admins,
               yourself and anyone already terminated are skipped.
-            </DialogDescription>
-          </DialogHeader>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Termination date</Label>
-              <Input
+              <Label htmlFor={`${fieldId}-1`} className="text-xs">Termination date</Label>
+              <Input id={`${fieldId}-1`}
                 type="date"
                 value={date}
                 max={todayDateString()}
@@ -88,15 +89,15 @@ export function BulkActions({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Reason (optional)</Label>
-              <Input
+              <Label htmlFor={`${fieldId}-2`} className="text-xs">Reason (optional)</Label>
+              <Input id={`${fieldId}-2`}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Resigned, end of contract, etc."
               />
             </div>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setTerminateOpen(false)}>
               Cancel
             </Button>
@@ -123,21 +124,21 @@ export function BulkActions({
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Terminate
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
 
-      <Dialog open={deleteOpen} onOpenChange={(o) => (o ? setDeleteOpen(true) : closeDelete())}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+      <InlinePanel disabled={pending} open={deleteOpen} onOpenChange={(o) => (o ? setDeleteOpen(true) : closeDelete())}>
+        <InlinePanelContent className="max-w-md">
+          <InlinePanelHeader>
+            <InlinePanelTitle>
               Permanently delete {count} employee{count === 1 ? "" : "s"}?
-            </DialogTitle>
-            <DialogDescription>
+            </InlinePanelTitle>
+            <InlinePanelDescription>
               {names}. This removes their login and their records and cannot be undone. To
               offboard someone normally, use Terminate instead (it keeps pay and time history).
-            </DialogDescription>
-          </DialogHeader>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="space-y-3">
             {deleteError && (
               <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
@@ -157,13 +158,13 @@ export function BulkActions({
               </Label>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">
+              <Label htmlFor={`${fieldId}-3`} className="text-xs">
                 Type <span className="font-mono font-semibold">DELETE</span> to confirm
               </Label>
-              <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+              <Input id={`${fieldId}-3`} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
             </div>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={closeDelete}>
               Cancel
             </Button>
@@ -187,9 +188,9 @@ export function BulkActions({
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete permanently
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }

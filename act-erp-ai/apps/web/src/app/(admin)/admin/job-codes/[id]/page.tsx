@@ -67,9 +67,9 @@ export default async function JobCodeDetailPage({
         <Link href="/admin/job-codes"><ArrowLeft className="mr-1 h-3.5 w-3.5" /> Job codes</Link>
       </Button>
 
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 min-w-0">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
+          <h1 className="flex flex-wrap items-center gap-2 break-words text-2xl font-bold">
             {jobCode.isDefault && <Star className="h-5 w-5 fill-primary text-primary" />}
             <span className="font-mono">{jobCode.code}</span>
             <span className="text-muted-foreground">·</span>
@@ -95,6 +95,9 @@ export default async function JobCodeDetailPage({
             )}
           </div>
         </div>
+
+      </div>
+      <div className="mb-6">
         <JobCodeDetailActions
           jobCode={{
             id: jobCode.id,
@@ -131,7 +134,7 @@ export default async function JobCodeDetailPage({
                 >
                   <Link
                     href={`/admin/employees/${a.employee.id}`}
-                    className="flex flex-1 items-center gap-3 hover:underline"
+                    className="flex min-w-0 flex-1 items-center gap-3 hover:underline"
                   >
                     <span className="relative h-9 w-9 overflow-hidden rounded-full bg-muted">
                       <Image

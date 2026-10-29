@@ -2,10 +2,11 @@ import Image from "next/image";
 import { db } from "@/lib/db";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ClipboardList } from "lucide-react";
 import { getAvatarUrl } from "@/lib/format";
+import { MobileTabsList } from "@/components/mobile";
 import { RequestStatusButtons } from "./request-status-buttons";
 import { formatDistanceToNow } from "date-fns";
 
@@ -63,11 +64,11 @@ export default async function AdminRequestsPage() {
       </div>
 
       <Tabs defaultValue="pending" className="mt-6 space-y-4">
-        <TabsList>
+        <MobileTabsList>
           <TabsTrigger value="pending">Pending ({countBy.PENDING ?? 0})</TabsTrigger>
           <TabsTrigger value="processing">Processing ({countBy.PROCESSING ?? 0})</TabsTrigger>
           <TabsTrigger value="all">All (latest {all.length} of {totalCount})</TabsTrigger>
-        </TabsList>
+        </MobileTabsList>
         <TabsContent value="pending"><RequestList rows={pending} /></TabsContent>
         <TabsContent value="processing"><RequestList rows={processing} /></TabsContent>
         <TabsContent value="all"><RequestList rows={all} /></TabsContent>
@@ -108,14 +109,15 @@ function RequestList({ rows }: { rows: RequestRow[] }) {
               r.status === "PROCESSING" ? "warning" :
               r.status === "PENDING" ? "warning" : "outline";
             return (
-              <li key={r.id} className="grid grid-cols-[36px_1fr_auto_auto] items-start gap-3 p-3">
-                <span className="relative h-9 w-9 overflow-hidden rounded-full bg-muted">
+              <li key={r.id} className="flex flex-col gap-2 p-3 sm:grid sm:grid-cols-[36px_minmax(0,1fr)_auto_auto] sm:items-start sm:gap-3">
+                <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted">
                   <Image src={r.employee.profilePic ?? getAvatarUrl(r.employee.email)} alt={r.employee.name} fill sizes="36px" className="object-cover" unoptimized />
                 </span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0 sm:col-start-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-sm font-medium">{r.title}</p>
                     <Badge variant="outline" className="text-[10px]">{r.type.replace(/_/g, " ")}</Badge>
+                    <Badge variant={variant} className="text-[10px] sm:hidden">{r.status}</Badge>
                   </div>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{r.description}</p>
                   {r.adminNotes && (
@@ -127,8 +129,10 @@ function RequestList({ rows }: { rows: RequestRow[] }) {
                     {r.employee.name} · {formatDistanceToNow(r.createdAt, { addSuffix: true })}
                   </p>
                 </div>
-                <Badge variant={variant} className="text-[10px]">{r.status}</Badge>
-                <RequestStatusButtons id={r.id} current={r.status} />
+                <Badge variant={variant} className="hidden text-[10px] sm:inline-flex">{r.status}</Badge>
+                <div className="min-w-0 sm:col-span-full">
+                  <RequestStatusButtons id={r.id} current={r.status} />
+                </div>
               </li>
             );
           })}

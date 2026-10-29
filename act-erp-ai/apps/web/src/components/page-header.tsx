@@ -12,14 +12,23 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <header className={cn("mb-6 flex items-end justify-between gap-4", className)}>
-      <div className="space-y-1">
+    <header
+      className={cn(
+        "mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4",
+        className,
+      )}
+    >
+      <div className="min-w-0 space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         {description && (
           <p className="text-sm text-muted-foreground">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto [&_button]:min-h-11 md:[&_button]:min-h-9">
+          {actions}
+        </div>
+      )}
     </header>
   );
 }
@@ -41,12 +50,12 @@ export function StatCard({
         <span className="uppercase tracking-wider">{label}</span>
         {icon && <span className="opacity-60">{icon}</span>}
       </div>
-      <div className="mt-2 flex items-baseline gap-2">
+      <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-2">
         <span className="text-2xl font-semibold tabular-nums">{value}</span>
         {delta && (
           <span
             className={cn(
-              "text-xs font-medium",
+              "break-words text-xs font-medium",
               delta.positive === false
                 ? "text-destructive"
                 : delta.positive === true

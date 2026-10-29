@@ -18,11 +18,12 @@ import { requireAdmin } from "@/lib/auth";
 import { readOnlyUntil } from "@/lib/employee-validation";
 import { LeaveBalanceSummary } from "@/components/leave-balance-summary";
 import { loadLeaveBalances } from "@/lib/leave-balance-db";
-import { AdjustBalanceDialog } from "../../leave/adjust-balance-dialog";
+import { AdjustBalancePanel } from "../../leave/adjust-balance-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { MobileTabsList } from "@/components/mobile";
 import { Separator } from "@/components/ui/separator";
 import {
   formatBusinessTime,
@@ -34,7 +35,7 @@ import {
 } from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
-import { ChangePasswordModal } from "./change-password-modal";
+import { ChangePasswordPanel } from "./change-password-modal";
 import { StatusToggle } from "./status-toggle";
 import { ResetKioskPinButton } from "./reset-kiosk-pin-button";
 import {
@@ -44,7 +45,7 @@ import {
   EmploymentEditableCard,
   CompensationEditableCard,
 } from "./inline-edit";
-import { UploadDocumentDialog } from "@/components/upload-document-dialog";
+import { UploadDocumentForm } from "@/components/upload-document-form";
 import { DeleteDocumentButton } from "@/components/delete-document-button";
 import { BenefitsCard } from "./benefits-card";
 import { HirePacketImportButton } from "./hire-packet-import-button";
@@ -125,7 +126,18 @@ export default async function EmployeeDetailPage({
     }),
     db.benefitPlan.findMany({
       where: { isActive: true },
-      include: { tiers: true },
+      include: {
+        tiers: true,
+        ageRates: {
+          select: {
+            ageFrom: true,
+            ageTo: true,
+            monthlyEmployeeCost: true,
+            perPay26EmployeeCost: true,
+          },
+          orderBy: { ageFrom: "asc" },
+        },
+      },
       orderBy: [{ type: "asc" }, { name: "asc" }],
     }),
     db.onboardingPacketSubmission.findUnique({
@@ -166,7 +178,16 @@ export default async function EmployeeDetailPage({
       employeeCost: Number(t.employeeCost),
       employerCost: Number(t.employerCost),
     })),
+    ageRates: p.ageRates.map((r) => ({
+      ageFrom: r.ageFrom,
+      ageTo: r.ageTo,
+      monthlyEmployeeCost: Number(r.monthlyEmployeeCost),
+      perPay26EmployeeCost: Number(r.perPay26EmployeeCost),
+    })),
   }));
+  const dobIso = employee.dateOfBirth
+    ? employee.dateOfBirth.toISOString().slice(0, 10)
+    : null;
   const enrollmentRows = employee.benefitEnrollments.map((e) => ({
     id: e.id,
     tier: e.tier,
@@ -203,16 +224,16 @@ export default async function EmployeeDetailPage({
     employee.documents.filter((d) => d.documentType === type);
 
   return (
-    <>
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
+    <div className="min-w-0 max-w-full">
+      <div className="mb-4 flex flex-col gap-3">
+        <Button variant="ghost" size="sm" asChild className="-ml-2 self-start">
           <Link href="/admin/employees">
             <ArrowLeft className="mr-1 h-3.5 w-3.5" /> All employees
           </Link>
         </Button>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:gap-2 [&_button]:min-h-11 [&_button]:w-full sm:[&_button]:min-h-9 lg:[&_button]:w-auto">
           <HirePacketImportButton employeeId={employee.id} />
-          <ChangePasswordModal employeeId={employee.id} employeeName={employee.name} />
+          <ChangePasswordPanel employeeId={employee.id} employeeName={employee.name} />
           <ResetKioskPinButton employeeId={employee.id} />
           <StatusToggle
             employeeId={employee.id}
@@ -254,10 +275,10 @@ export default async function EmployeeDetailPage({
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        <div className="space-y-4">
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-4">
+        <Card className="min-w-0 overflow-hidden">
+          <CardContent className="flex flex-col items-center gap-3 p-4 text-center sm:p-6">
             <ProfilePicEditor
               employeeId={employee.id}
               employeeName={employee.name}
@@ -318,20 +339,20 @@ export default async function EmployeeDetailPage({
         />
         </div>
 
-        <Tabs defaultValue="basic" className="space-y-4">
-          <TabsList className="flex-wrap">
-            <TabsTrigger value="basic">Basic info</TabsTrigger>
-            <TabsTrigger value="work">Work</TabsTrigger>
-            <TabsTrigger value="notes">Employee notes</TabsTrigger>
-            <TabsTrigger value="time-clock">Time clock</TabsTrigger>
-            <TabsTrigger value="leave">Leave</TabsTrigger>
-            <TabsTrigger value="payroll">Payroll</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-            <TabsTrigger value="hire-packet">Hire packet</TabsTrigger>
-            <TabsTrigger value="benefits">Benefits</TabsTrigger>
-            <TabsTrigger value="performance">Performance</TabsTrigger>
-            <TabsTrigger value="training">Training</TabsTrigger>
-          </TabsList>
+        <Tabs defaultValue="basic" className="min-w-0 space-y-4">
+          <MobileTabsList>
+            <TabsTrigger value="basic" className="min-h-9">Basic info</TabsTrigger>
+            <TabsTrigger value="work" className="min-h-9">Work</TabsTrigger>
+            <TabsTrigger value="notes" className="min-h-9">Employee notes</TabsTrigger>
+            <TabsTrigger value="time-clock" className="min-h-9">Time clock</TabsTrigger>
+            <TabsTrigger value="leave" className="min-h-9">Leave</TabsTrigger>
+            <TabsTrigger value="payroll" className="min-h-9">Payroll</TabsTrigger>
+            <TabsTrigger value="documents" className="min-h-9">Documents</TabsTrigger>
+            <TabsTrigger value="hire-packet" className="min-h-9">Hire packet</TabsTrigger>
+            <TabsTrigger value="benefits" className="min-h-9">Benefits</TabsTrigger>
+            <TabsTrigger value="performance" className="min-h-9">Performance</TabsTrigger>
+            <TabsTrigger value="training" className="min-h-9">Training</TabsTrigger>
+          </MobileTabsList>
 
           <TabsContent value="basic">
             <PersonalEditableCard
@@ -400,10 +421,10 @@ export default async function EmployeeDetailPage({
                 {employee.jobCodes.map((a) => (
                   <div
                     key={a.id}
-                    className="flex items-center justify-between rounded-md border p-3"
+                    className="flex min-w-0 flex-col gap-1 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-sm">{a.jobCode.code}</span>
                         {a.isPrimary && (
                           <Badge variant="secondary" className="text-[10px]">
@@ -411,9 +432,9 @@ export default async function EmployeeDetailPage({
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{a.jobCode.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{a.jobCode.title}</p>
                     </div>
-                    <span className="font-mono text-xs text-muted-foreground">
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
                       {a.assignedRate}
                     </span>
                   </div>
@@ -443,21 +464,40 @@ export default async function EmployeeDetailPage({
                     {employee.timeEntries.map((t) => (
                       <li
                         key={t.id}
-                        className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-sm"
+                        className="flex flex-col gap-1.5 px-4 py-3 text-sm sm:grid sm:grid-cols-[100px_1fr_auto_auto_auto] sm:items-center sm:gap-3 sm:py-2.5"
                       >
-                        <span className="text-xs text-muted-foreground">
-                          {formatDateOnly(t.date)}
-                        </span>
+                        <div className="flex items-center justify-between gap-2 sm:contents">
+                          <span className="text-xs text-muted-foreground">
+                            {formatDateOnly(t.date)}
+                          </span>
+                          <div className="flex items-center gap-2 sm:contents">
+                            <span className="font-mono text-sm tabular-nums sm:order-none">
+                              {formatHours(t.totalWorkMin)}
+                            </span>
+                            <Badge
+                              variant={
+                                t.approvalStatus === "APPROVED"
+                                  ? "success"
+                                  : t.approvalStatus === "REJECTED"
+                                    ? "destructive"
+                                    : "warning"
+                              }
+                              className="text-[10px] sm:hidden"
+                            >
+                              {t.approvalStatus}
+                            </Badge>
+                          </div>
+                        </div>
                         <span className="font-mono text-xs">
                           {formatBusinessTime(t.clockIn)}
                           {" → "}
                           {formatBusinessTime(t.clockOut)}
                         </span>
                         <span className="font-mono text-xs text-muted-foreground">
-                          {t.jobCode}
+                          {t.jobCode || "—"}
                         </span>
                         <SourceBadge source={t.source} kioskLabel={t.kioskLabel} />
-                        <div className="flex items-center gap-2">
+                        <div className="hidden items-center gap-2 sm:flex">
                           <span className="font-mono text-sm tabular-nums">
                             {formatHours(t.totalWorkMin)}
                           </span>
@@ -483,19 +523,22 @@ export default async function EmployeeDetailPage({
           </TabsContent>
 
           <TabsContent value="leave">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
+            <Card className="min-w-0 overflow-hidden">
+              <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="min-w-0 text-base leading-snug">
                   Leave summary · {leaveBalances?.totals.available ?? "—"}/{leaveBalances?.totals.allowed ?? "—"}{" "}
                   remaining
                 </CardTitle>
-                <AdjustBalanceDialog
+
+              </CardHeader>
+              <CardContent className="min-w-0">
+                <div className="mb-4">
+                <AdjustBalancePanel
                   employeeId={employee.id}
                   employeeName={employee.name}
                   year={leaveBalances?.year ?? new Date().getFullYear()}
                 />
-              </CardHeader>
-              <CardContent>
+                </div>
                 <LeaveBalanceSummary balances={leaveBalances} />
                 {employee.leaveRequests.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No leave requests yet.</p>
@@ -504,9 +547,9 @@ export default async function EmployeeDetailPage({
                     {employee.leaveRequests.map((l) => (
                       <li
                         key={l.id}
-                        className="flex items-center justify-between py-2 text-sm"
+                        className="flex min-w-0 items-start justify-between gap-3 py-2 text-sm"
                       >
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-medium">
                             {l.leaveType.replace(/_/g, " ")} · {Number(l.totalDays)}d
                           </p>
@@ -523,7 +566,7 @@ export default async function EmployeeDetailPage({
                                 ? "warning"
                                 : "destructive"
                           }
-                          className="text-[10px]"
+                          className="shrink-0 text-[10px]"
                         >
                           {l.status}
                         </Badge>
@@ -604,6 +647,7 @@ export default async function EmployeeDetailPage({
               plans={planOptions}
               enrollments={enrollmentRows}
               elections={electionRows}
+              dateOfBirth={dobIso}
             />
             <DocumentSection
               employeeId={employee.id}
@@ -633,7 +677,7 @@ export default async function EmployeeDetailPage({
           </TabsContent>
         </Tabs>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -686,16 +730,19 @@ function DocumentSection({
   defaultType: DocType;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-base">Documents ({docs.length})</CardTitle>
-        <UploadDocumentDialog
+
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        <div className="mb-4">
+        <UploadDocumentForm
           employeeId={employeeId}
           allowedTypes={allowedTypes}
           defaultType={defaultType}
         />
-      </CardHeader>
-      <CardContent className="p-4 pt-0">
+        </div>
         {docs.length === 0 ? (
           <p className="py-8 text-center text-xs text-muted-foreground">{emptyHint}</p>
         ) : (
@@ -703,7 +750,7 @@ function DocumentSection({
             {docs.map((d) => (
               <li
                 key={d.id}
-                className="flex items-center justify-between gap-3 py-2 text-sm"
+                className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-2 text-sm"
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">{d.title}</p>
@@ -711,12 +758,12 @@ function DocumentSection({
                     {d.documentType} · {d.uploadedAt.toLocaleDateString()}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <a
                     href={`/api/documents/${d.id}/file`}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-md border px-2 py-1 text-primary hover:bg-muted"
+                    className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md border px-2 py-1 text-primary hover:bg-muted sm:min-h-0 sm:min-w-0"
                     title="Open"
                   >
                     <FileText className="h-3.5 w-3.5" />

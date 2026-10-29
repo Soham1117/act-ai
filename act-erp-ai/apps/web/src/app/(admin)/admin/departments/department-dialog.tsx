@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,10 +26,10 @@ export type DepartmentFormValues = {
 };
 
 /**
- * Create dialog (with its own "New department" button) or, when `existing` is
- * given, a controlled edit dialog for that department.
+ * Create inline form (with its own "New department" button) or, when `existing` is
+ * given, a controlled edit form for that department.
  */
-export function DepartmentDialog({
+export function DepartmentForm({
   existing,
   open: controlledOpen,
   onOpenChange,
@@ -38,6 +38,7 @@ export function DepartmentDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 } = {}) {
+  const formId = useId();
   const [innerOpen, setInnerOpen] = useState(false);
   const open = controlledOpen ?? innerOpen;
   const setOpen = (v: boolean) => {
@@ -64,43 +65,77 @@ export function DepartmentDialog({
       if (!toastAction(res)) return;
       toast.success(`Created ${name}`);
       setOpen(false);
-      setName(""); setCode(""); setDescription("");
+      setName("");
+      setCode("");
+      setDescription("");
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
       {!existing && (
-        <DialogTrigger asChild>
-          <Button><Plus className="mr-2 h-4 w-4" /> New department</Button>
-        </DialogTrigger>
+        <InlinePanelTrigger asChild disabled={pending}>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" /> New department
+          </Button>
+        </InlinePanelTrigger>
       )}
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{existing ? "Edit department" : "New department"}</DialogTitle>
-        </DialogHeader>
+      <InlinePanelContent>
+        <InlinePanelHeader>
+          <InlinePanelTitle>
+            {existing ? "Edit department" : "New department"}
+          </InlinePanelTitle>
+        </InlinePanelHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required />
+            <Label htmlFor={`${formId}-name`} className="text-xs">
+              Name
+            </Label>
+            <Input
+              id={`${formId}-name`}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Short code (optional)</Label>
-            <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={8} />
+            <Label htmlFor={`${formId}-code`} className="text-xs">
+              Short code (optional)
+            </Label>
+            <Input
+              id={`${formId}-code`}
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              maxLength={8}
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <Label htmlFor={`${formId}-description`} className="text-xs">
+              Description
+            </Label>
+            <Textarea
+              id={`${formId}-description`}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+            />
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <InlinePanelFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
             <Button type="submit" disabled={pending || name.length < 2}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {existing ? "Save" : "Create"}
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }

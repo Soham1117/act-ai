@@ -6,13 +6,13 @@ import { Check, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { approveEmployee, rejectPendingHire } from "@/server/actions/employees";
 
@@ -33,7 +33,7 @@ export function PendingHireActions({
 
   return (
     <>
-      <div className="flex gap-2">
+      <div className="flex min-w-0 flex-wrap gap-2">
         <Button
           size="sm"
           disabled={pending}
@@ -57,21 +57,21 @@ export function PendingHireActions({
           size="sm"
           variant="outline"
           disabled={pending}
-          onClick={() => setConfirmReject(true)}
+          aria-expanded={confirmReject} onClick={() => setConfirmReject(true)}
         >
           <X className="mr-1.5 h-3.5 w-3.5" /> Reject
         </Button>
       </div>
-      <Dialog open={confirmReject} onOpenChange={setConfirmReject}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Reject {name}?</DialogTitle>
-            <DialogDescription>
+      <InlinePanel disabled={pending} open={confirmReject} onOpenChange={setConfirmReject}>
+        <InlinePanelContent className="max-w-sm">
+          <InlinePanelHeader>
+            <InlinePanelTitle>Reject {name}?</InlinePanelTitle>
+            <InlinePanelDescription>
               This deletes their account and everything they submitted (details and uploaded
               documents). They can be invited again with a new link.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setConfirmReject(false)}>
               Cancel
             </Button>
@@ -92,9 +92,9 @@ export function PendingHireActions({
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Reject and delete
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }

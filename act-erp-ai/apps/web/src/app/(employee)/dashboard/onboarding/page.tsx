@@ -19,7 +19,7 @@ export default async function EmployeeOnboardingPage() {
   ]);
   return <>
     <PageHeader title={spanish ? "Lista de incorporación" : "Onboarding checklist"} description={spanish ? "Envíe sus documentos y confirme el recibo del manual. RR. HH. revisa cada elemento." : "Submit your documents and acknowledge your handbook. HR reviews each item."} />
-    <div className="mb-4 flex flex-wrap items-center gap-4 text-sm"><Link href="/dashboard/documents" className="text-primary hover:underline">{spanish ? "Cargar documentos completados" : "Upload completed documents"}</Link>
+    <div className="mb-4 flex flex-col gap-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:gap-4"><Link href="/dashboard/documents" className="inline-flex min-h-11 items-center text-primary hover:underline md:min-h-0">{spanish ? "Cargar documentos completados" : "Upload completed documents"}</Link>
       <span className="text-muted-foreground">{checklistComplete(items) && items.length > 0 ? spanish ? "Elementos obligatorios revisados" : "Required items reviewed" : spanish ? "La lista no cambia el acceso a su cuenta" : "This checklist does not change your account access"}</span></div>
     {items.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">{spanish ? "RR. HH. no le ha asignado documentos de incorporación." : "HR has not assigned onboarding documents to you."}</p> : <div className="space-y-4">{items.map((item) => <ChecklistItemPanel key={`${item.id}:${item.updatedAt.toISOString()}`} spanish={spanish} readOnly={user.accessLevel !== "FULL"} item={{
       id: item.id, title: item.title, itemType: item.itemType, required: item.required, status: item.status,

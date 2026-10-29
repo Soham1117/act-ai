@@ -185,7 +185,7 @@ export function HireImportReviewForm({
           <AlertCircle className="h-8 w-8 text-destructive" />
           <p className="text-sm font-medium">Import failed</p>
           <p className="max-w-md text-xs text-muted-foreground">{errorMessage ?? "Unknown error."}</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={pending} onClick={onRetry}>
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Retry import
@@ -300,7 +300,7 @@ export function HireImportReviewForm({
                       <Label htmlFor={`field-${key}`} className="text-sm font-medium">
                         {HIRE_PACKET_FIELD_LABELS[key as keyof typeof HIRE_PACKET_FIELD_LABELS]}
                       </Label>
-                      <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      <div className="grid min-w-0 gap-2 break-words text-xs sm:grid-cols-2">
                         <div>
                           <span className="text-muted-foreground">Current: </span>
                           <span className={differs ? "" : "text-muted-foreground"}>

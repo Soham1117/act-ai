@@ -13,9 +13,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMobileNav,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { AssistantNav } from "@/components/assistant-nav";
+import { cn } from "@/lib/utils";
 import {
   Banknote,
   Bell,
@@ -77,18 +80,22 @@ const NAV: Array<{
   },
 ];
 
-/** Nav entries that only make sense when the AI feature is switched on. */
 const AI_ONLY_HREFS = new Set(["/dashboard/chat"]);
 
-export function EmployeeSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
-  const { t } = usePortalLanguage();
-  const pathname = usePathname();
-  const nav = aiEnabled
+function useEmployeeNav(aiEnabled: boolean) {
+  return aiEnabled
     ? NAV
     : NAV.map((section) => ({
         ...section,
         items: section.items.filter((item) => !AI_ONLY_HREFS.has(item.href)),
       })).filter((section) => section.items.length > 0);
+}
+
+export function EmployeeSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
+  const { t } = usePortalLanguage();
+  const pathname = usePathname();
+  const nav = useEmployeeNav(aiEnabled);
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -135,5 +142,49 @@ export function EmployeeSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) 
       </SidebarContent>
       <SidebarRail />
     </Sidebar>
+  );
+}
+
+export function EmployeeSidebarMobileNav({ aiEnabled = false }: { aiEnabled?: boolean }) {
+  const { t } = usePortalLanguage();
+  const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
+  const nav = useEmployeeNav(aiEnabled);
+
+  return (
+    <SidebarMobileNav>
+      <nav className="flex w-full flex-col gap-4">
+        {nav.map((section) => (
+          <div key={section.group} className="flex w-full flex-col gap-1">
+            <p className="px-2 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/55">
+              {t("nav." + section.group.toLowerCase().replace(/ /g, "_"))}
+            </p>
+            <ul className="flex w-full list-none flex-col gap-0.5 p-0">
+              {section.items.map((item) => {
+                const active =
+                  pathname === item.href ||
+                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                const label = t("nav." + item.label.toLowerCase().replace(/ /g, "_"));
+                return (
+                  <li key={item.href} className="w-full">
+                    <Link
+                      href={item.href}
+                      onClick={() => setOpenMobile(false)}
+                      className={cn(
+                        "flex min-h-11 w-full items-center gap-3 rounded-md px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                        active && "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+                      )}
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    </SidebarMobileNav>
   );
 }

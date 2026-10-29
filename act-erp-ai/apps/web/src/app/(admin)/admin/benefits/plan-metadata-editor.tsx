@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { saveBenefitPlanMetadata } from "@/server/actions/benefit-eligibility";
 
@@ -58,16 +58,16 @@ export function PlanMetadataEditor({
     });
   }
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
+      <InlinePanelTrigger asChild disabled={pending}>
         <Button variant="outline" size="sm">
           Plan information
         </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Plan code and documents</DialogTitle>
-        </DialogHeader>
+      </InlinePanelTrigger>
+      <InlinePanelContent>
+        <InlinePanelHeader>
+          <InlinePanelTitle>Plan code and documents</InlinePanelTitle>
+        </InlinePanelHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor={`plan-code-${plan.id}`}>Plan code</Label>
@@ -86,7 +86,7 @@ export function PlanMetadataEditor({
               </Label>
               <select
                 id={`plan-designation-${plan.id}`}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                className="flex min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base md:min-h-9 md:text-sm"
                 value={designation}
                 onChange={(e) => setDesignation(e.target.value)}
               >
@@ -100,7 +100,7 @@ export function PlanMetadataEditor({
             <Label htmlFor={`plan-resource-${plan.id}`}>Approved benefits resource</Label>
             <select
               id={`plan-resource-${plan.id}`}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="flex min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base md:min-h-9 md:text-sm"
               value={resource}
               onChange={(e) => setResource(e.target.value)}
             >
@@ -116,13 +116,13 @@ export function PlanMetadataEditor({
               to employees or replace the existing consent-aware document delivery.
             </p>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save information"}
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }

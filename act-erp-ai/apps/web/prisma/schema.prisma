@@ -842,12 +842,33 @@ model BenefitPlan {
   updatedAt          DateTime          @updatedAt
 
   tiers       BenefitPlanTier[]
+  ageRates    BenefitPlanAgeRate[]
   enrollments BenefitEnrollment[]
   elections   RetirementElection[]
 
   @@unique([type, name, planYearStart])
   @@index([isActive, type])
   @@index([planYearEnd])
+}
+
+/// Age-banded employee medical cost (after employer contribution), from the
+/// carrier/renewal rate sheet. Used when BenefitPlan.type is MEDICAL and rows
+/// exist; otherwise enrollment falls back to BenefitPlanTier.
+model BenefitPlanAgeRate {
+  id                   String      @id @default(cuid())
+  planId               String
+  plan                 BenefitPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  /// Inclusive lower bound of attained age for this band.
+  ageFrom              Int
+  /// Inclusive upper bound (use 120 for open-ended "64+").
+  ageTo                Int
+  /// Employee cost AFTER employer contribution, monthly.
+  monthlyEmployeeCost  Decimal     @db.Decimal(10, 2)
+  /// Same net cost on a 26-pay period (renewal letter "26 PP" column).
+  perPay26EmployeeCost Decimal     @db.Decimal(10, 2)
+
+  @@unique([planId, ageFrom, ageTo])
+  @@index([planId])
 }
 
 /// The price list for a plan. Only medical/dental/vision plans have tiers —

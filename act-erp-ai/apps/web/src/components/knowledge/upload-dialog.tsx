@@ -8,13 +8,13 @@ import { runAction, toastAction } from "@/lib/toast-action";
 import { uploadKnowledgeDocument } from "@/server/actions/knowledge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -56,16 +56,16 @@ export function KnowledgeUploadDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <InlinePanel open={open} onOpenChange={(next) => { if (!busy) setOpen(next); }}>
+      <InlinePanelTrigger asChild disabled={busy}>
         <Button>
           <Upload className="mr-2 h-4 w-4" /> Upload document
         </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Upload knowledge document</DialogTitle>
-        </DialogHeader>
+      </InlinePanelTrigger>
+      <InlinePanelContent>
+        <InlinePanelHeader>
+          <InlinePanelTitle>Upload knowledge document</InlinePanelTitle>
+        </InlinePanelHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="kd-title">Title</Label>
@@ -76,9 +76,9 @@ export function KnowledgeUploadDialog() {
             <Input id="kd-file" type="file" accept={ACCEPT} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Visibility</Label>
+            <Label htmlFor="kd-visibility">Visibility</Label>
             <Select value={visibility} onValueChange={(v) => setVisibility(v as "PRIVATE" | "ORG")}>
-              <SelectTrigger>
+              <SelectTrigger id="kd-visibility">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -91,13 +91,14 @@ export function KnowledgeUploadDialog() {
             </p>
           </div>
         </div>
-        <DialogFooter>
+        <InlinePanelFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={submit} disabled={busy || !file || !title.trim()}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Upload
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </InlinePanelFooter>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }

@@ -85,7 +85,7 @@ export default async function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm">{t("account.settings.theme")}</p>
                 <p className="text-xs text-muted-foreground">
@@ -215,9 +215,11 @@ function Row({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-b-0 last:pb-0">
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={mono ? "font-mono text-sm" : "text-sm"}>{value}</p>
+    <div className="flex flex-col gap-1 border-b pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+      <p className="shrink-0 text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={mono ? "min-w-0 break-all font-mono text-sm sm:text-right" : "min-w-0 break-words text-sm sm:text-right"}>
+        {value}
+      </p>
     </div>
   );
 }

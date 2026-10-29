@@ -1,11 +1,18 @@
 import { getPortalLanguage } from "@/lib/portal-i18n/server";
-import { PortalLanguageProvider, PortalLanguageSwitch } from "@/components/portal-language";
+import { PortalLanguageProvider } from "@/components/portal-language";
+import { AuthToolbar } from "@/components/auth-toolbar";
 import { Providers } from "@/components/providers";
 
-// Standalone (outside the employee/admin shells) so the forced password
-// change can't redirect-loop through those layouts. Needs client providers
-// for toasts.
 export default async function ChangePasswordLayout({ children }: { children: React.ReactNode }) {
   const { language } = await getPortalLanguage();
-  return <Providers><PortalLanguageProvider language={language}><div className="fixed right-4 top-4 z-50"><PortalLanguageSwitch /></div>{children}</PortalLanguageProvider></Providers>;
+  return (
+    <Providers>
+      <PortalLanguageProvider language={language}>
+        <div className="flex min-h-screen flex-col">
+          <AuthToolbar />
+          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        </div>
+      </PortalLanguageProvider>
+    </Providers>
+  );
 }

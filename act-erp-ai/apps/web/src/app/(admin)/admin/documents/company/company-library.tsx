@@ -12,10 +12,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { runAction, toastAction } from "@/lib/toast-action";
+import { FilterStack } from "@/components/mobile";
 
 type Version = {id: string; version: number; originalName: string; status: string; purpose: string; year: number | null; quarter: number | null; sourceReference: string | null; notes: string | null; effectiveDate: string | null; periodStart: string | null; periodEnd: string | null};
 type Document = {id: string; title: string; category: string; issuer: string | null; isArchived: boolean; versions: Version[]};
-const selectClass = "h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
+const selectClass = "h-10 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm";
 
 export function CompanyLibrary({documents, filters}: {documents: Document[]; filters: {q: string; category: string; year: string; quarter: string; archived: boolean}}) {
   const router = useRouter();
@@ -62,22 +63,24 @@ export function CompanyLibrary({documents, filters}: {documents: Document[]; fil
         <div className="space-y-1.5"><Label htmlFor="company-source">Source reference</Label><Input id="company-source" name="sourceReference" placeholder="For example, the source email or provider" maxLength={300} /></div>
       </div>
       <div className="space-y-1.5"><Label htmlFor="company-notes">HR notes</Label><Textarea id="company-notes" name="notes" maxLength={2000} placeholder="Version, review needs, or context. Keep sensitive identifiers out of notes." /></div>
-      <div className="flex gap-2"><Button disabled={pending} type="submit">{pending ? "Saving…" : "Save draft"}</Button><Button disabled={pending} type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button></div>
+      <div className="flex flex-wrap gap-2"><Button disabled={pending} type="submit">{pending ? "Saving…" : "Save draft"}</Button><Button disabled={pending} type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button></div>
     </form>}
-    <form className="flex flex-wrap items-end gap-3" method="get">
-      <div className="min-w-48 flex-1 space-y-1.5"><Label htmlFor="library-search">Search</Label><Input id="library-search" name="q" defaultValue={filters.q} placeholder="Title or issuing organization" /></div>
-      <div className="space-y-1.5"><Label htmlFor="library-category">Category</Label><select id="library-category" name="category" className={selectClass} defaultValue={filters.category}><option value="">All categories</option>{Object.entries(COMPANY_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-      <div className="w-24 space-y-1.5"><Label htmlFor="library-year">Year</Label><Input id="library-year" type="number" name="year" defaultValue={filters.year} min={1900} max={2200} /></div>
-      <div className="w-28 space-y-1.5"><Label htmlFor="library-quarter">Quarter</Label><select id="library-quarter" className={selectClass} name="quarter" defaultValue={filters.quarter}><option value="">All</option>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>Q{n}</option>)}</select></div>
-      <label className="flex h-10 items-center gap-2 text-sm"><input type="checkbox" name="archived" value="1" defaultChecked={filters.archived} />Include archived</label>
-      <Button variant="outline" type="submit">Apply</Button>
+    <form method="get">
+      <FilterStack className="items-end">
+      <div className="w-full flex-1 space-y-1.5 sm:min-w-48"><Label htmlFor="library-search">Search</Label><Input id="library-search" name="q" defaultValue={filters.q} placeholder="Title or issuing organization" /></div>
+      <div className="w-full space-y-1.5 sm:w-auto"><Label htmlFor="library-category">Category</Label><select id="library-category" name="category" className={selectClass} defaultValue={filters.category}><option value="">All categories</option>{Object.entries(COMPANY_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+      <div className="w-full space-y-1.5 sm:w-24"><Label htmlFor="library-year">Year</Label><Input id="library-year" type="number" name="year" defaultValue={filters.year} min={1900} max={2200} /></div>
+      <div className="w-full space-y-1.5 sm:w-28"><Label htmlFor="library-quarter">Quarter</Label><select id="library-quarter" className={selectClass} name="quarter" defaultValue={filters.quarter}><option value="">All</option>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>Q{n}</option>)}</select></div>
+      <label className="flex h-10 w-full items-center gap-2 text-sm sm:w-auto"><input type="checkbox" name="archived" value="1" defaultChecked={filters.archived} />Include archived</label>
+      <Button variant="outline" type="submit" className="w-full sm:w-auto">Apply</Button>
+      </FilterStack>
     </form>
     {review && <form className="space-y-3 rounded-lg border p-4" onSubmit={(event) => {event.preventDefault(); start(async () => {const result = await runAction(() => approveCompanyVersion({id: review.version.id, purpose, reason})); if (!toastAction(result)) return; toast.success("Version approved. No employee documents were sent."); setReview(null); router.refresh();});}}>
       <h2 className="font-semibold">Review {review.doc.title}, version {review.version.version}</h2>
       <p className="text-sm text-muted-foreground">Confirm that the document is the correct edition. Only blank, approved resources may be assigned to employees. Payroll and tax records stay private.</p>
       <div className="space-y-1.5"><Label htmlFor="company-purpose">Approved use</Label><select id="company-purpose" className={selectClass} value={purpose} onChange={(e) => setPurpose(e.target.value)}>{Object.entries(COMPANY_PURPOSES).filter(([key]) => allowedCompanyPurpose(review.doc.category, key)).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
       <div className="space-y-1.5"><Label htmlFor="company-reason">Review note</Label><Textarea id="company-reason" required minLength={3} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></div>
-      <div className="flex gap-2"><Button disabled={pending} type="submit">Approve version</Button><Button disabled={pending} variant="outline" type="button" onClick={() => setReview(null)}>Cancel</Button></div>
+      <div className="flex flex-wrap gap-2"><Button disabled={pending} type="submit">Approve version</Button><Button disabled={pending} variant="outline" type="button" onClick={() => setReview(null)}>Cancel</Button></div>
     </form>}
     <div className="divide-y rounded-lg border">
       {documents.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">No company documents match these filters. Upload a document or adjust the filters.</p>}

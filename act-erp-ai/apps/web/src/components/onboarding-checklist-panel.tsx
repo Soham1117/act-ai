@@ -23,7 +23,7 @@ export type ChecklistItemView = {
   documents: FileOption[];
 };
 
-const selectClass = "h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
+const selectClass = "h-11 min-w-0 w-full rounded-md border border-input bg-background px-3 text-base md:h-10 md:text-sm";
 
 export function ChecklistAssignment({ owners, templates, initialOwner = "" }: {
   owners: Array<{ value: string; label: string }>;
@@ -35,15 +35,15 @@ export function ChecklistAssignment({ owners, templates, initialOwner = "" }: {
   const [versionId, setVersionId] = useState("");
   const [required, setRequired] = useState(true);
   const [pending, startTransition] = useTransition();
-  return <Card><CardContent className="space-y-4 p-4">
+  return <Card><CardContent className="min-w-0 space-y-4 p-4 [&_button]:min-h-11 md:[&_button]:min-h-9">
     <div><h2 className="font-medium">Assign an approved template</h2>
       <p className="text-sm text-muted-foreground">Choose a reviewed blank form or handbook from the Company library. This does not change account access.</p></div>
     <div className="grid gap-3 sm:grid-cols-2">
-      <label className="space-y-1 text-sm">Employee or open invite
+      <label className="min-w-0 space-y-1 text-sm">Employee or open invite
         <select className={selectClass} value={owner} onChange={(event) => setOwner(event.target.value)} disabled={pending}>
           <option value="">Choose a recipient</option>{owners.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
         </select></label>
-      <label className="space-y-1 text-sm">Approved template
+      <label className="min-w-0 space-y-1 text-sm">Approved template
         <select className={selectClass} value={versionId} onChange={(event) => setVersionId(event.target.value)} disabled={pending}>
           <option value="">Choose a template</option>{templates.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
         </select></label>
@@ -76,17 +76,17 @@ export function ChecklistItemPanel({ item, admin = false, readOnly = false, span
   function save(action: () => ReturnType<typeof submitChecklistDocument>, message: string) {
     startTransition(async () => { const result = await runAction(action); if (!toastAction(result)) return; toast.success(message); setConfirmed(false); setReason(""); router.refresh(); });
   }
-  return <Card role="region" aria-label={item.title}><CardContent className="space-y-4 p-4">
+  return <Card role="region" aria-label={item.title}><CardContent className="min-w-0 space-y-4 p-4 [&_button]:min-h-11 md:[&_button]:min-h-9">
     <div className="flex flex-wrap items-start justify-between gap-2"><div>
-      <h2 className="font-medium">{item.title}</h2>
+      <h2 className="break-words font-medium">{item.title}</h2>
       <p className="text-xs text-muted-foreground">{admin ? `${item.ownerLabel} · ` : ""}{copy("Version", "Versión")} {item.versionNumber} · {item.required ? copy("Required", "Obligatorio") : copy("Optional", "Opcional")}</p>
     </div><Badge variant={done ? "success" : item.status === "NEEDS_CORRECTION" ? "destructive" : "outline"}>{spanish ? spanishStatuses[item.status] ?? item.status : CHECKLIST_LABELS[item.status] ?? item.status}</Badge></div>
     <div className="flex flex-wrap gap-4 text-sm">
-      {item.templateAvailable ? <a href={`/api/company-documents/${item.versionId}/file`} target="_blank" rel="noreferrer" className="text-primary underline-offset-4 hover:underline">{copy("Open assigned template", "Abrir plantilla asignada")}</a>
+      {item.templateAvailable ? <a href={`/api/company-documents/${item.versionId}/file`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center break-words text-primary underline-offset-4 hover:underline">{copy("Open assigned template", "Abrir plantilla asignada")}</a>
         : <p className="text-muted-foreground">{copy("Template unavailable. Ask HR for the current version.", "Plantilla no disponible. Solicite a RR. HH. la versión actual.")}</p>}
-      {item.submittedDocumentId && <a href={`/api/documents/${item.submittedDocumentId}/file`} target="_blank" rel="noreferrer" className="text-primary underline-offset-4 hover:underline">{copy("Open submitted document", "Abrir documento enviado")}</a>}
+      {item.submittedDocumentId && <a href={`/api/documents/${item.submittedDocumentId}/file`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center break-words text-primary underline-offset-4 hover:underline">{copy("Open submitted document", "Abrir documento enviado")}</a>}
     </div>
-    {item.reviewNotes && <p className="whitespace-pre-wrap border-l-2 pl-3 text-sm">{copy("HR review", "Revisión de RR. HH.")}: {item.reviewNotes}</p>}
+    {item.reviewNotes && <p className="whitespace-pre-wrap break-words text-sm">{copy("HR review", "Revisión de RR. HH.")}: {item.reviewNotes}</p>}
     {item.acknowledgment && <p className="text-sm text-muted-foreground">{copy("Handbook receipt recorded", "Acuse de recibo registrado")}: {new Date(item.acknowledgment.acceptedAt).toLocaleDateString(spanish ? "es-US" : "en-US")} · {item.acknowledgment.method === "PAPER" ? copy("signed paper receipt", "recibo firmado en papel") : copy("employee acknowledgment", "acuse de recibo del empleado")}</p>}
     {!admin && !done && item.itemType === "FORM" && <div className="space-y-3">
       <label className="block space-y-1 text-sm">{copy("Your completed document", "Su documento completado")}
@@ -103,11 +103,11 @@ export function ChecklistItemPanel({ item, admin = false, readOnly = false, span
       <Button disabled={pending || readOnly || !confirmed || !item.templateAvailable} onClick={() => save(() => acknowledgeHandbook({ id: item.id, confirmed: true, language: spanish ? "es" : "en" }), copy("Handbook receipt recorded for HR review", "Acuse registrado para revisión de RR. HH."))}>{copy("Acknowledge receipt", "Confirmar recibo")}</Button>
     </div>}
     {admin && <div className="space-y-3 border-t pt-4">
-      <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-sm">HR decision
+      <div className="grid gap-3 sm:grid-cols-2"><label className="min-w-0 space-y-1 text-sm">HR decision
         <select className={selectClass} value={decision} onChange={(event) => setDecision(event.target.value as typeof decision)} disabled={pending || !item.employeeId}>
           <option value="ACCEPTED">Accept</option><option value="NEEDS_CORRECTION" disabled={!!item.acknowledgment}>Needs correction</option><option value="NOT_APPLICABLE">Not applicable</option>
         </select></label>
-        {item.itemType === "HANDBOOK" && !item.acknowledgment && <label className="space-y-1 text-sm">Signed paper receipt, if applicable
+        {item.itemType === "HANDBOOK" && !item.acknowledgment && <label className="min-w-0 space-y-1 text-sm">Signed paper receipt, if applicable
           <select className={selectClass} value={paperEvidence} onChange={(event) => setPaperEvidence(event.target.value)} disabled={pending || !item.employeeId}>
             <option value="">Choose the employee&apos;s signed receipt</option>{item.documents.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}
           </select></label>}

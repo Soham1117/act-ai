@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { Archive, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { uploadHirePacketZip } from "@/server/actions/hire-packet";
@@ -46,28 +46,28 @@ export function HirePacketImportButton({ employeeId }: { employeeId: string }) {
   }
 
   return (
-    <Dialog
+    <InlinePanel disabled={pending}
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) reset();
       }}
     >
-      <DialogTrigger asChild>
+      <InlinePanelTrigger asChild>
         <Button variant="outline" size="sm">
           <Archive className="mr-1.5 h-3.5 w-3.5" />
           Import hire packet
         </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      </InlinePanelTrigger>
+      <InlinePanelContent className="sm:max-w-md">
         <form onSubmit={onSubmit}>
-          <DialogHeader>
-            <DialogTitle>Import hire packet</DialogTitle>
-            <DialogDescription>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Import hire packet</InlinePanelTitle>
+            <InlinePanelDescription>
               Upload a .zip of onboarding forms (I-9, W-4, offer letter, ID, direct deposit).
               Files are stored and fields are extracted for your review before applying.
-            </DialogDescription>
-          </DialogHeader>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="grid gap-3 py-4">
             <div className="grid gap-2">
               <Label htmlFor="hire-zip">Zip file</Label>
@@ -86,7 +86,7 @@ export function HirePacketImportButton({ employeeId }: { employeeId: string }) {
               )}
             </div>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button type="button" variant="ghost" disabled={pending} onClick={() => setOpen(false)}>
               Cancel
             </Button>
@@ -94,9 +94,9 @@ export function HirePacketImportButton({ employeeId }: { employeeId: string }) {
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Upload &amp; process
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }

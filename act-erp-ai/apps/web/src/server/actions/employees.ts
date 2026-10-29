@@ -334,10 +334,40 @@ export async function updateEmployee(
     if (primaryJobCodeId !== undefined) data.primaryJobCodeId = primaryJobCodeId;
 
     const nameChanged = typeof data.name === "string" && data.name !== existing.name;
+    const workEmailChanging = data.workEmail !== undefined;
     const privateChanged = EMPLOYEE_PRIVATE_FIELDS.some(field => data[field] !== undefined);
     const privateWrite = privateChanged
       ? await prepareEmployeePrivateUpdate(storedEmployee!, data)
       : {};
+
+    // Work email on the profile is also a login identifier (User.email). Keep
+    // Employee.email + User.email aligned so either username or work email works.
+    if (workEmailChanging) {
+      const nextLoginEmail = (data.workEmail as string | null) || null;
+      if (nextLoginEmail) {
+        const taken = await db.user.findFirst({
+          where: { email: nextLoginEmail, NOT: { id: existing.userId } },
+          select: { id: true },
+        });
+        if (taken) {
+          return fail(
+            "That work email is already used as another person's login. Pick a different address.",
+            "errors.employees.thatWorkEmailIsAlreadyUsed_login",
+          );
+        }
+        const empTaken = await db.employee.findFirst({
+          where: { email: nextLoginEmail, NOT: { id: employeeId } },
+          select: { id: true },
+        });
+        if (empTaken) {
+          return fail(
+            "That work email is already on another employee record. Pick a different address.",
+            "errors.employees.thatWorkEmailIsAlreadyOn_emp",
+          );
+        }
+      }
+      data.email = nextLoginEmail;
+    }
 
     const updated = await db.$transaction(async (tx) => {
       const row = await tx.employee.update({
@@ -345,8 +375,11 @@ export async function updateEmployee(
         data: { ...data, ...privateWrite } as Prisma.EmployeeUncheckedUpdateInput,
       });
       // The User row's name is what the session/topbar shows — keep in sync.
-      if (nameChanged) {
-        await tx.user.update({ where: { id: existing.userId }, data: { name: row.name } });
+      const userPatch: { name?: string; email?: string | null } = {};
+      if (nameChanged) userPatch.name = row.name;
+      if (workEmailChanging) userPatch.email = (data.workEmail as string | null) || null;
+      if (Object.keys(userPatch).length > 0) {
+        await tx.user.update({ where: { id: existing.userId }, data: userPatch });
       }
       // Keep JobCodeAssignment.isPrimary consistent with primaryJobCodeId.
       if (primaryJobCodeId !== undefined) {

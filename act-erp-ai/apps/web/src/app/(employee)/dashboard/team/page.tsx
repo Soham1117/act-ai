@@ -172,7 +172,10 @@ export default async function MyTeamPage({
                   aria-label={t("records.team.pagination")}
                 >
                   {page > 1 ? (
-                    <Link href={`/dashboard/team?page=${page - 1}`} className="underline">
+                    <Link
+                      href={`/dashboard/team?page=${page - 1}`}
+                      className="inline-flex min-h-11 items-center underline md:min-h-0"
+                    >
                       {t("records.team.previous")}
                     </Link>
                   ) : (
@@ -185,7 +188,10 @@ export default async function MyTeamPage({
                     })}
                   </span>
                   {page < peerPages ? (
-                    <Link href={`/dashboard/team?page=${page + 1}`} className="underline">
+                    <Link
+                      href={`/dashboard/team?page=${page + 1}`}
+                      className="inline-flex min-h-11 items-center underline md:min-h-0"
+                    >
                       {t("records.team.next")}
                     </Link>
                   ) : (
@@ -242,9 +248,9 @@ function PersonCard({
     <Link
       id={`${anchor}-${id}`}
       href={`#${anchor}-${id}`}
-      className={`flex items-center gap-3 rounded-md border p-3 transition-colors hover:bg-muted/50 ${ring}`}
+      className={`flex min-h-11 flex-wrap items-center gap-3 rounded-md border p-3 transition-colors hover:bg-muted/50 ${ring}`}
     >
-      <span className="relative h-10 w-10 overflow-hidden rounded-full bg-muted">
+      <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
         <Image
           src={profilePic ?? getAvatarUrl(email)}
           alt={name}
@@ -259,7 +265,7 @@ function PersonCard({
         <p className="truncate text-[11px] text-muted-foreground">{jobTitle ?? "—"}</p>
       </div>
       {department && (
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="shrink-0 text-[10px]">
           {department}
         </Badge>
       )}

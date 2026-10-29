@@ -22,8 +22,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { deleteJobCode, toggleJobCodeActive } from "@/server/actions/job-codes";
 import { runAction, toastAction } from "@/lib/toast-action";
-import { JobCodeDialog } from "./job-code-dialog";
+import { JobCodePanel } from "./job-code-dialog";
 import { getDepartmentConfig } from "@/lib/departments";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 
 export type Row = {
   id: string;
@@ -47,8 +48,7 @@ export function JobCodesTable({ rows, departments }: Props) {
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState<Row | null>(null);
 
-  return (
-    <>
+  const table = (
       <Table>
         <TableHeader>
           <TableRow>
@@ -103,7 +103,7 @@ export function JobCodesTable({ rows, departments }: Props) {
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={pending}>
+                      <Button variant="ghost" size="icon" className="h-11 w-11 md:h-8 md:w-8" disabled={pending}>
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -157,10 +157,103 @@ export function JobCodesTable({ rows, departments }: Props) {
           )}
         </TableBody>
       </Table>
+  );
+
+  return (
+    <>
+      <ResponsiveDataList
+        mobile={
+          <div className="space-y-2 p-2">
+            {rows.map((j) => {
+              const cfg = j.departmentName ? getDepartmentConfig(j.departmentName) : null;
+              const Icon = cfg?.icon;
+              return (
+                <DataListCard key={j.id}>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <Link href={`/admin/job-codes/${j.id}`} className="font-mono text-sm font-medium hover:underline">
+                        {j.isDefault && <Star className="mr-1 inline h-3 w-3 fill-primary text-primary" />}
+                        {j.code}
+                      </Link>
+                      <Badge variant={j.isActive ? "success" : "secondary"} className="text-[10px]">
+                        {j.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <p className="text-sm font-medium">{j.title}</p>
+                    {j.description && (
+                      <p className="line-clamp-2 text-xs text-muted-foreground">{j.description}</p>
+                    )}
+                    {cfg && Icon ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs">
+                        <span className={`flex h-5 w-5 items-center justify-center rounded ${cfg.bgColor} ${cfg.color}`}>
+                          <Icon className="h-3 w-3" />
+                        </span>
+                        {cfg.label}
+                      </span>
+                    ) : null}
+                    <p className="font-mono text-xs">
+                      Rate {j.rate} · {j.assignmentCount} assigned
+                    </p>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={pending}>
+                          Actions
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/admin/job-codes/${j.id}`}>View</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditing(j)}>
+                          <Pencil className="mr-2 h-4 w-4" /> Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            startTransition(async () => {
+                              const res = await runAction(() => toggleJobCodeActive(j.id));
+                              if (!toastAction(res)) return;
+                              toast.success(j.isActive ? "Deactivated" : "Activated");
+                            })
+                          }
+                        >
+                          {j.isActive ? (
+                            <ToggleLeft className="mr-2 h-4 w-4" />
+                          ) : (
+                            <ToggleRight className="mr-2 h-4 w-4" />
+                          )}
+                          {j.isActive ? "Deactivate" : "Activate"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() =>
+                            startTransition(async () => {
+                              const res = await runAction(() => deleteJobCode(j.id));
+                              if (!toastAction(res)) return;
+                              toast.success("Deleted");
+                            })
+                          }
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </DataListCard>
+              );
+            })}
+            {rows.length === 0 && (
+              <p className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+                No job codes yet.
+              </p>
+            )}
+          </div>
+        }
+        desktop={table}
+      />
 
       {/* Edit dialog (controlled) — keyed so it remounts per row. */}
       {editing && (
-        <JobCodeDialog
+        <JobCodePanel
           key={editing.id}
           departments={departments}
           existing={editing}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, PenLine, Plus, Square, Trash2, Undo2, X } from "lucide-react";
@@ -8,27 +8,25 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  InlinePanel,
+  InlinePanelCancel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
+import { InlineConfirmAction } from "@/components/inline-confirm-action";
+import { cn } from "@/lib/utils";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
 import { dateToBusinessLocal, MAX_SHIFT_MS } from "@/lib/time-rules";
@@ -44,7 +42,7 @@ import { PunchPhotos } from "@/components/punch-photos";
 import type { EmployeeOption, EntryRowData, JobCodeOption } from "./time-types";
 
 const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50";
+  "flex h-9 w-full min-h-11 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 md:min-h-9";
 
 const isOpen = (e: { status: string }) => e.status === "ACTIVE" || e.status === "ON_BREAK";
 
@@ -90,7 +88,7 @@ function BreakEditor({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 gap-1 text-xs"
+          className="h-7 gap-1 text-xs min-h-11 md:min-h-7"
           disabled={disabled}
           onClick={() => onChange([...breaks, { start: "", end: "" }])}
         >
@@ -101,15 +99,17 @@ function BreakEditor({
         <p className="text-xs text-muted-foreground">No breaks recorded.</p>
       )}
       {breaks.map((b, i) => (
-        <div key={b.id ?? `new-${i}`} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+        <div key={b.id ?? `new-${i}`} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_1fr_auto]">
           <Input
             type="datetime-local"
+            className="min-h-11 md:min-h-9"
             value={b.start}
             disabled={disabled}
             onChange={(e) => onChange(breaks.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))}
           />
           <Input
             type="datetime-local"
+            className="min-h-11 md:min-h-9"
             value={b.end}
             disabled={disabled}
             onChange={(e) => onChange(breaks.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))}
@@ -118,7 +118,7 @@ function BreakEditor({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-11 w-11 md:h-8 md:w-8"
             disabled={disabled}
             aria-label="Remove break"
             onClick={() => onChange(breaks.filter((_, j) => j !== i))}
@@ -132,19 +132,17 @@ function BreakEditor({
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Edit dialog (+ reopen / delete)
+// Edit panel (+ reopen / delete)
 // ──────────────────────────────────────────────────────────────────────
 
-function EditEntryDialog({
+function EditEntryPanel({
   entry,
   jobCodes,
-  open,
-  onOpenChange,
+  onClose,
 }: {
   entry: EntryRowData;
   jobCodes: JobCodeOption[];
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
+  onClose: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -163,11 +161,10 @@ function EditEntryDialog({
     })),
   );
   const [reason, setReason] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   function done(message: string) {
     toast.success(message);
-    onOpenChange(false);
+    onClose();
     router.refresh();
   }
 
@@ -206,148 +203,120 @@ function EditEntryDialog({
     });
   }
 
-  function remove() {
-    if (!requireReason()) {
-      setConfirmDelete(false);
-      return;
-    }
-    startTransition(async () => {
-      const res = await runAction(() => adminDeleteTimeEntry({ id: entry.id, reason: reason.trim() }));
-      setConfirmDelete(false);
-      if (!toastAction(res)) return;
-      done("Entry deleted.");
-    });
-  }
-
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Edit time entry</DialogTitle>
-            <DialogDescription>
-              {entry.employeeName} · {formatDateOnly(entry.date)}. All times are Central.
-              {entry.approvalStatus === "APPROVED" &&
-                " This entry is approved; it stays approved, and the edit is recorded."}
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={save} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Clock in</Label>
-                <Input
-                  type="datetime-local"
-                  value={clockIn}
-                  onChange={(e) => setClockIn(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Clock out</Label>
-                {openEntry ? (
-                  <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    Still on shift. Use Force clock-out to close it.
-                  </p>
-                ) : (
-                  <Input
-                    type="datetime-local"
-                    value={clockOut}
-                    onChange={(e) => setClockOut(e.target.value)}
-                    required
-                  />
-                )}
-              </div>
-            </div>
+    <InlinePanel open onOpenChange={(o) => !o && onClose()}>
+      <InlinePanelContent className="my-2">
+        <InlinePanelHeader>
+          <InlinePanelTitle>Edit time entry</InlinePanelTitle>
+          <InlinePanelDescription>
+            {entry.employeeName} · {formatDateOnly(entry.date)}. All times are Central.
+            {entry.approvalStatus === "APPROVED" &&
+              " This entry is approved; it stays approved, and the edit is recorded."}
+          </InlinePanelDescription>
+        </InlinePanelHeader>
+        <form onSubmit={save} className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Job code</Label>
-              <JobCodeSelect value={jobCode} onChange={setJobCode} jobCodes={jobCodes} />
-            </div>
-            {!openEntry && <BreakEditor breaks={breaks} onChange={setBreaks} disabled={pending} />}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Notes</Label>
-              <Textarea rows={2} value={notes} maxLength={1000} onChange={(e) => setNotes(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Reason for change (required)</Label>
+              <Label className="text-xs">Clock in</Label>
               <Input
-                value={reason}
-                maxLength={500}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g. Employee forgot to clock out; confirmed with supervisor"
+                type="datetime-local"
+                className="min-h-11 md:min-h-9"
+                value={clockIn}
+                onChange={(e) => setClockIn(e.target.value)}
+                required
               />
             </div>
-            <DialogFooter className="gap-2 sm:justify-between">
-              <div className="flex gap-2">
-                {!openEntry && (
-                  <Button type="button" variant="outline" size="sm" disabled={pending} onClick={reopen}>
-                    <Undo2 className="mr-1 h-3.5 w-3.5" /> Reopen
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => {
-                    if (requireReason()) setConfirmDelete(true);
-                  }}
-                >
+            <div className="space-y-1.5">
+              <Label className="text-xs">Clock out</Label>
+              {openEntry ? (
+                <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  Still on shift. Use Force clock-out to close it.
+                </p>
+              ) : (
+                <Input
+                  type="datetime-local"
+                  className="min-h-11 md:min-h-9"
+                  value={clockOut}
+                  onChange={(e) => setClockOut(e.target.value)}
+                  required
+                />
+              )}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Job code</Label>
+            <JobCodeSelect value={jobCode} onChange={setJobCode} jobCodes={jobCodes} />
+          </div>
+          {!openEntry && <BreakEditor breaks={breaks} onChange={setBreaks} disabled={pending} />}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Notes</Label>
+            <Textarea rows={2} value={notes} maxLength={1000} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Reason for change (required)</Label>
+            <Input
+              className="min-h-11 md:min-h-9"
+              value={reason}
+              maxLength={500}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Employee forgot to clock out; confirmed with supervisor"
+            />
+          </div>
+          <InlinePanelFooter className="sm:justify-between">
+            <div className="flex flex-wrap gap-2">
+              {!openEntry && (
+                <Button type="button" variant="outline" size="sm" className="min-h-11 md:min-h-9" disabled={pending} onClick={reopen}>
+                  <Undo2 className="mr-1 h-3.5 w-3.5" /> Reopen
+                </Button>
+              )}
+              <InlineConfirmAction
+                label="Delete entry"
+                message={`The entry and its breaks are permanently removed from ${entry.employeeName}'s timesheet. A full copy is kept in the audit log with your reason.`}
+                cancelLabel="Cancel"
+                variant="destructive"
+                className="h-8 gap-1 text-xs min-h-11 md:min-h-9"
+                onConfirm={async () => {
+                  if (reason.trim().length < 3) {
+                    toast.error("Enter a reason for this change. It is audited and shown to the employee.");
+                    return false;
+                  }
+                  const res = await runAction(() =>
+                    adminDeleteTimeEntry({ id: entry.id, reason: reason.trim() }),
+                  );
+                  if (!toastAction(res)) return false;
+                  done("Entry deleted.");
+                  return true;
+                }}
+              >
+                <>
                   <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
-                </Button>
-              </div>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={pending}>
-                  {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save changes
-                </Button>
-              </div>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this time entry?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The entry and its breaks are permanently removed from {entry.employeeName}&apos;s timesheet.
-              A full copy is kept in the audit log with your reason.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={pending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={(e) => {
-                e.preventDefault();
-                remove();
-              }}
-            >
-              Delete entry
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+                </>
+              </InlineConfirmAction>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <InlinePanelCancel disabled={pending}>Cancel</InlinePanelCancel>
+              <Button type="submit" className="min-h-11 md:min-h-9" disabled={pending}>
+                {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save changes
+              </Button>
+            </div>
+          </InlinePanelFooter>
+        </form>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Force clock-out dialog
+// Force clock-out panel
 // ──────────────────────────────────────────────────────────────────────
 
-function ForceClockOutDialog({
+function ForceClockOutPanel({
   entry,
-  open,
-  onOpenChange,
+  onClose,
 }: {
   entry: EntryRowData;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
+  onClose: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -363,27 +332,28 @@ function ForceClockOutDialog({
       const res = await runAction(() => adminForceClockOut({ id: entry.id, clockOut, reason: reason.trim() }));
       if (!toastAction(res)) return;
       toast.success("Clocked out. The entry is now pending approval.");
-      onOpenChange(false);
+      onClose();
       router.refresh();
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Force clock-out</DialogTitle>
-          <DialogDescription>
+    <InlinePanel open onOpenChange={(o) => !o && onClose()}>
+      <InlinePanelContent className="my-2">
+        <InlinePanelHeader>
+          <InlinePanelTitle>Force clock-out</InlinePanelTitle>
+          <InlinePanelDescription>
             {entry.employeeName} clocked in {formatDateOnly(entry.date)} at{" "}
             {formatBusinessTime(entry.clockIn)}. Choose when their shift really ended (no more
             than 16 hours after clock-in, Central time). Any open break is closed at that time.
-          </DialogDescription>
-        </DialogHeader>
+          </InlinePanelDescription>
+        </InlinePanelHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Clock out</Label>
             <Input
               type="datetime-local"
+              className="min-h-11 md:min-h-9"
               value={clockOut}
               onChange={(e) => setClockOut(e.target.value)}
               required
@@ -395,20 +365,23 @@ function ForceClockOutDialog({
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Reason (required)</Label>
-            <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+            <Input
+              className="min-h-11 md:min-h-9"
+              value={reason}
+              maxLength={500}
+              onChange={(e) => setReason(e.target.value)}
+            />
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
+          <InlinePanelFooter>
+            <InlinePanelCancel disabled={pending}>Cancel</InlinePanelCancel>
+            <Button type="submit" className="min-h-11 md:min-h-9" disabled={pending}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Clock out
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }
 
@@ -425,12 +398,12 @@ export function EntryActions({
   const [editOpen, setEditOpen] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
       {isOpen(entry) && (
         <Button
           size="sm"
           variant="outline"
-          className="h-8 gap-1 text-xs"
+          className="h-8 gap-1 text-xs min-h-11 md:min-h-8"
           onClick={() => setForceOpen(true)}
         >
           <Square className="h-3 w-3" />
@@ -440,7 +413,7 @@ export function EntryActions({
       <Button
         size="sm"
         variant="outline"
-        className="h-8 gap-1 text-xs"
+        className="h-8 gap-1 text-xs min-h-11 md:min-h-8"
         aria-label={`Edit time entry for ${entry.employeeName}`}
         onClick={() => setEditOpen(true)}
       >
@@ -448,9 +421,11 @@ export function EntryActions({
         {compact ? "" : "Edit"}
       </Button>
       {editOpen && (
-        <EditEntryDialog entry={entry} jobCodes={jobCodes} open={editOpen} onOpenChange={setEditOpen} />
+        <EditEntryPanel entry={entry} jobCodes={jobCodes} onClose={() => setEditOpen(false)} />
       )}
-      {forceOpen && <ForceClockOutDialog entry={entry} open={forceOpen} onOpenChange={setForceOpen} />}
+      {forceOpen && (
+        <ForceClockOutPanel entry={entry} onClose={() => setForceOpen(false)} />
+      )}
     </div>
   );
 }
@@ -469,6 +444,9 @@ export function ManualEntryButton({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const formId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
   const [employeeId, setEmployeeId] = useState("");
   const [search, setSearch] = useState("");
   const [clockIn, setClockIn] = useState("");
@@ -478,6 +456,18 @@ export function ManualEntryButton({
   const [breaks, setBreaks] = useState<BreakDraft[]>([]);
   const [reason, setReason] = useState("");
   const [approve, setApprove] = useState(false);
+
+  useEffect(() => {
+    if (!open && !pending && restoreFocus.current) {
+      restoreFocus.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [open, pending]);
+
+  function closeForm() {
+    restoreFocus.current = true;
+    setOpen(false);
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -506,7 +496,7 @@ export function ManualEntryButton({
       }));
       if (!toastAction(res)) return;
       toast.success(approve ? "Manual entry added and approved." : "Manual entry added (pending approval).");
-      setOpen(false);
+      closeForm();
       setClockIn("");
       setClockOut("");
       setBreaks([]);
@@ -517,22 +507,34 @@ export function ManualEntryButton({
   }
 
   return (
-    <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus className="mr-1 h-3.5 w-3.5" /> Add manual entry
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Add manual time entry</DialogTitle>
-            <DialogDescription>
+    <Collapsible
+      className={cn("min-w-0 space-y-3", open && "w-full basis-full")}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <CollapsibleTrigger asChild disabled={pending}>
+        <Button ref={triggerRef} size="sm" className="min-h-11 w-full sm:w-auto md:min-h-9">
+          <Plus className="mr-1 h-3.5 w-3.5" /> Add manual entry
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent asChild>
+        <section
+          aria-labelledby={`${formId}-heading`}
+          className="min-w-0 space-y-4 rounded-lg border bg-card p-4 sm:p-6"
+        >
+          <div className="space-y-1.5">
+            <h2 id={`${formId}-heading`} className="text-lg font-semibold">
+              Add manual time entry
+            </h2>
+            <p className="text-sm text-muted-foreground">
               For missed punches. The entry is marked Manual. Times are Central.
-            </DialogDescription>
-          </DialogHeader>
+            </p>
+          </div>
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Employee</Label>
               <Input
+                className="min-h-11 md:min-h-9"
                 placeholder="Search by name or ID"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -551,14 +553,26 @@ export function ManualEntryButton({
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Clock in</Label>
-                <Input type="datetime-local" value={clockIn} onChange={(e) => setClockIn(e.target.value)} required />
+                <Input
+                  type="datetime-local"
+                  className="min-h-11 md:min-h-9"
+                  value={clockIn}
+                  onChange={(e) => setClockIn(e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Clock out</Label>
-                <Input type="datetime-local" value={clockOut} onChange={(e) => setClockOut(e.target.value)} required />
+                <Input
+                  type="datetime-local"
+                  className="min-h-11 md:min-h-9"
+                  value={clockOut}
+                  onChange={(e) => setClockOut(e.target.value)}
+                  required
+                />
               </div>
             </div>
             <div className="space-y-1.5">
@@ -573,6 +587,7 @@ export function ManualEntryButton({
             <div className="space-y-1.5">
               <Label className="text-xs">Reason (required)</Label>
               <Input
+                className="min-h-11 md:min-h-9"
                 value={reason}
                 maxLength={500}
                 onChange={(e) => setReason(e.target.value)}
@@ -583,19 +598,19 @@ export function ManualEntryButton({
               <Checkbox checked={approve} onCheckedChange={(v) => setApprove(v === true)} />
               Approve immediately
             </label>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&_button]:min-h-11 md:[&_button]:min-h-9">
+              <Button type="button" variant="outline" disabled={pending} onClick={closeForm}>
                 Cancel
               </Button>
               <Button type="submit" disabled={pending}>
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Add entry
               </Button>
-            </DialogFooter>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
-    </>
+        </section>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -603,7 +618,7 @@ export function ManualEntryButton({
 // Pending queue with bulk approve
 // ──────────────────────────────────────────────────────────────────────
 
-function RejectDialog({
+function RejectPanel({
   title,
   description,
   open,
@@ -620,31 +635,30 @@ function RejectDialog({
 }) {
   const [reason, setReason] = useState("");
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
+    <InlinePanel open={open} onOpenChange={onOpenChange}>
+      <InlinePanelContent className="my-2">
+        <InlinePanelHeader>
+          <InlinePanelTitle>{title}</InlinePanelTitle>
+          <InlinePanelDescription>{description}</InlinePanelDescription>
+        </InlinePanelHeader>
         <div className="space-y-1.5">
           <Label className="text-xs">Reason (shown to the employee)</Label>
           <Textarea rows={3} value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} />
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
-          </Button>
+        <InlinePanelFooter>
+          <InlinePanelCancel disabled={pending}>Cancel</InlinePanelCancel>
           <Button
             variant="destructive"
+            className="min-h-11 md:min-h-9"
             disabled={pending || reason.trim().length < 3}
             onClick={() => onConfirm(reason.trim())}
           >
             {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Reject
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </InlinePanelFooter>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }
 
@@ -663,21 +677,30 @@ function RowReview({ entry }: { entry: EntryRowData }) {
     });
   }
   return (
-    <div className="flex gap-1">
-      <Button size="sm" variant="destructive" disabled={pending} onClick={() => setRejectOpen(true)} aria-label="Reject">
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <Button
+        size="sm"
+        variant="destructive"
+        className="min-h-11 md:min-h-9"
+        disabled={pending}
+        onClick={() => setRejectOpen(true)}
+        aria-label="Reject"
+      >
         <X className="h-4 w-4" />
       </Button>
-      <Button size="sm" variant="success" disabled={pending} onClick={() => run("APPROVED")}>
+      <Button size="sm" variant="success" className="min-h-11 md:min-h-9" disabled={pending} onClick={() => run("APPROVED")}>
         <Check className="h-4 w-4" /> Approve
       </Button>
-      <RejectDialog
-        title="Reject time entry"
-        description={`${entry.employeeName}, ${formatDateOnly(entry.date)} (${formatHours(entry.totalWorkMin)}).`}
-        open={rejectOpen}
-        onOpenChange={setRejectOpen}
-        pending={pending}
-        onConfirm={(reason) => run("REJECTED", reason)}
-      />
+      {rejectOpen && (
+        <RejectPanel
+          title="Reject time entry"
+          description={`${entry.employeeName}, ${formatDateOnly(entry.date)} (${formatHours(entry.totalWorkMin)}).`}
+          open={rejectOpen}
+          onOpenChange={setRejectOpen}
+          pending={pending}
+          onConfirm={(reason) => run("REJECTED", reason)}
+        />
+      )}
     </div>
   );
 }
@@ -740,10 +763,11 @@ export function PendingQueue({
           Select all on this page
         </label>
         <span className="text-xs text-muted-foreground">{selected.size} selected</span>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <Button
             size="sm"
             variant="destructive"
+            className="min-h-11 md:min-h-9"
             disabled={pending || selected.size === 0}
             onClick={() => setBulkReject(true)}
           >
@@ -752,6 +776,7 @@ export function PendingQueue({
           <Button
             size="sm"
             variant="success"
+            className="min-h-11 md:min-h-9"
             disabled={pending || selected.size === 0}
             onClick={() => bulk("APPROVED")}
           >
@@ -760,52 +785,65 @@ export function PendingQueue({
           </Button>
         </div>
       </div>
+      {bulkReject && (
+        <div className="border-b px-3 pb-3">
+          <RejectPanel
+            title={`Reject ${selected.size} entries`}
+            description="The same reason is sent to each employee."
+            open={bulkReject}
+            onOpenChange={setBulkReject}
+            pending={pending}
+            onConfirm={(reason) => bulk("REJECTED", reason)}
+          />
+        </div>
+      )}
       <ul className="divide-y">
         {entries.map((e) => (
-          <li key={e.id} className="flex flex-wrap items-center gap-3 p-3">
-            <Checkbox checked={selected.has(e.id)} onCheckedChange={() => toggle(e.id)} aria-label="Select entry" />
-            <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted">
-              <Image src={e.avatar} alt={e.employeeName} fill sizes="36px" className="object-cover" unoptimized />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{e.employeeName}</p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {formatDateOnly(e.date)} · {formatBusinessTime(e.clockIn)} to {formatBusinessTime(e.clockOut)} ·{" "}
-                {e.jobCode} · {formatHours(e.totalWorkMin)}
-                {e.totalBreakMin > 0 && ` (breaks ${formatHours(e.totalBreakMin)})`}
-              </p>
-              {e.autoClosed && (
-                <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
-                  <AlertTriangle className="h-3 w-3" /> Auto-closed at the 16 hour cap. Verify the hours.
+          <li key={e.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <Checkbox
+                className="mt-2"
+                checked={selected.has(e.id)}
+                onCheckedChange={() => toggle(e.id)}
+                aria-label={`Select ${e.employeeName}`}
+              />
+              <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted">
+                <Image src={e.avatar} alt={e.employeeName} fill sizes="36px" className="object-cover" unoptimized />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-medium">{e.employeeName}</p>
+                <p className="break-words text-[11px] text-muted-foreground">
+                  {formatDateOnly(e.date)} · {formatBusinessTime(e.clockIn)} to {formatBusinessTime(e.clockOut)} ·{" "}
+                  {e.jobCode} · {formatHours(e.totalWorkMin)}
+                  {e.totalBreakMin > 0 && ` (breaks ${formatHours(e.totalBreakMin)})`}
                 </p>
-              )}
-              {e.editReason && !e.autoClosed && (
-                <p className="mt-0.5 text-[11px] text-muted-foreground">{e.editReason}</p>
-              )}
+                {e.autoClosed && (
+                  <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
+                    <AlertTriangle className="h-3 w-3 shrink-0" /> Auto-closed at the 16 hour cap. Verify the hours.
+                  </p>
+                )}
+                {e.editReason && !e.autoClosed && (
+                  <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{e.editReason}</p>
+                )}
+              </div>
             </div>
-            <PunchPhotos
-              type="employee"
-              entryId={e.id}
-              hasIn={e.hasClockInPhoto}
-              hasOut={e.hasClockOutPhoto}
-              source={e.source}
-              clockIn={e.clockIn}
-              clockOut={e.clockOut}
-            />
-            {e.source === "MANUAL" && <Badge variant="outline" className="text-[10px]">Manual</Badge>}
-            <EntryActions entry={e} jobCodes={jobCodes} compact />
-            <RowReview entry={e} />
+            <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
+              <PunchPhotos
+                type="employee"
+                entryId={e.id}
+                hasIn={e.hasClockInPhoto}
+                hasOut={e.hasClockOutPhoto}
+                source={e.source}
+                clockIn={e.clockIn}
+                clockOut={e.clockOut}
+              />
+              {e.source === "MANUAL" && <Badge variant="outline" className="text-[10px]">Manual</Badge>}
+              <EntryActions entry={e} jobCodes={jobCodes} compact />
+              <RowReview entry={e} />
+            </div>
           </li>
         ))}
       </ul>
-      <RejectDialog
-        title={`Reject ${selected.size} entries`}
-        description="The same reason is sent to each employee."
-        open={bulkReject}
-        onOpenChange={setBulkReject}
-        pending={pending}
-        onConfirm={(reason) => bulk("REJECTED", reason)}
-      />
     </div>
   );
 }

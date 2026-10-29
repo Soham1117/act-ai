@@ -557,7 +557,11 @@ export function BatchPaystubsPanel({
         </div>
       ))}
       {!!rows.length && (
-        <div className="overflow-x-auto rounded-md border">
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs text-muted-foreground md:hidden">
+            Swipe horizontally to review all import columns.
+          </p>
+          <div role="region" aria-label="Paystub page review columns" tabIndex={0} className="-mx-1 overflow-x-auto rounded-md border px-1 md:mx-0 md:px-0">
           <table className="w-full min-w-[960px] text-left text-xs">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
@@ -713,7 +717,7 @@ export function BatchPaystubsPanel({
                             }
                           >
                             <SelectTrigger
-                              className="h-8 w-full min-w-0"
+                              className="min-h-11 w-full min-w-0 text-base md:min-h-8 md:text-xs"
                               aria-label={`Employee for page ${row.page.pageNumber} of ${sourceName}`}
                             >
                               <SelectValue placeholder="Choose" />
@@ -894,6 +898,7 @@ export function BatchPaystubsPanel({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
       {!!rows.length && (

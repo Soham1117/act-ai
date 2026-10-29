@@ -4,14 +4,18 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getDepartmentConfig } from "@/lib/departments";
-import { DepartmentDialog } from "./department-dialog";
+import { DepartmentForm } from "./department-dialog";
 import { DepartmentActions } from "./department-actions";
 
 export const metadata = { title: "Departments" };
 
 export default async function DepartmentsPage() {
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-    try { return await p; } catch { return fallback; }
+    try {
+      return await p;
+    } catch {
+      return fallback;
+    }
   };
 
   const departments = await safe(
@@ -24,34 +28,35 @@ export default async function DepartmentsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Departments"
-        description={`${departments.length} departments`}
-        actions={<DepartmentDialog />}
-      />
+      <PageHeader title="Departments" description={`${departments.length} departments`} />
+      <div className="mb-4">
+        <DepartmentForm />
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {departments.map((d) => {
           const cfg = getDepartmentConfig(d.name);
           const Icon = cfg.icon;
           return (
-            <Card key={d.id} className="relative transition-colors hover:border-primary/50">
-              <div className="absolute bottom-2 right-2">
-                <DepartmentActions
-                  department={{ id: d.id, name: d.name, code: d.code, description: d.description }}
-                />
-              </div>
+            <Card
+              key={d.id}
+              className="relative transition-colors hover:border-primary/50"
+            >
               <Link href={`/admin/departments/${d.id}`}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-md ${cfg.bgColor} ${cfg.color}`}>
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-md ${cfg.bgColor} ${cfg.color}`}
+                    >
                       <Icon className="h-5 w-5" />
                     </div>
                     {d.code && (
-                      <Badge variant="outline" className="font-mono text-[10px]">{d.code}</Badge>
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        {d.code}
+                      </Badge>
                     )}
                   </div>
                   <h3 className="mt-3 font-semibold">{cfg.label}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                     {d.description ?? "No description"}
                   </p>
                   <p className="mt-3 text-xs">
@@ -60,6 +65,16 @@ export default async function DepartmentsPage() {
                   </p>
                 </CardContent>
               </Link>
+              <div className="border-t px-4 py-2">
+                <DepartmentActions
+                  department={{
+                    id: d.id,
+                    name: d.name,
+                    code: d.code,
+                    description: d.description,
+                  }}
+                />
+              </div>
             </Card>
           );
         })}

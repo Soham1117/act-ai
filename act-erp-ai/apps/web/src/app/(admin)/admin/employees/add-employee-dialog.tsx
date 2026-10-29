@@ -8,14 +8,14 @@ import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -97,7 +97,7 @@ const defaults: Values = {
   compensationValue: "",
 };
 
-export function AddEmployeeDialog({
+export function AddEmployeePanel({
   departments,
 }: {
   departments: { id: string; name: string }[];
@@ -131,30 +131,30 @@ export function AddEmployeeDialog({
   }
 
   return (
-    <Dialog
+    <InlinePanel disabled={pending}
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
         if (!v) form.reset(defaults);
       }}
     >
-      <DialogTrigger asChild>
+      <InlinePanelTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" /> Add employee
         </Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>New employee</DialogTitle>
-          <DialogDescription>
+      </InlinePanelTrigger>
+      <InlinePanelContent className="max-w-lg ">
+        <InlinePanelHeader>
+          <InlinePanelTitle>New employee</InlinePanelTitle>
+          <InlinePanelDescription>
             Creates the login and the employee record with a temporary password the
             employee must change at first sign-in. To let the hire fill in their own
             details, send an onboarding invite instead. Emails and usernames are
             saved in lowercase.
-          </DialogDescription>
-        </DialogHeader>
+          </InlinePanelDescription>
+        </InlinePanelHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Full name" error={form.formState.errors.name?.message}>
               <Input {...form.register("name")} />
             </Field>
@@ -303,7 +303,7 @@ export function AddEmployeeDialog({
               />
             </Field>
           </div>
-          <DialogFooter className="pt-2">
+          <InlinePanelFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
@@ -311,10 +311,10 @@ export function AddEmployeeDialog({
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }
 

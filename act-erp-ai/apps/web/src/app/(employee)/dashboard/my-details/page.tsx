@@ -20,12 +20,13 @@ import { requireUser } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { formatPhone, formatHours, getAvatarUrl, formatSSNLast4 } from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
 import { getPortalLanguage } from "@/lib/portal-i18n/server";
+import { DataListCard, MobileTabsList, ResponsiveDataList } from "@/components/mobile";
 
 export async function generateMetadata() {
   const { t } = await getPortalLanguage();
@@ -82,7 +83,7 @@ export default async function MyDetailsPage() {
     employee.documents.filter((d) => d.documentType === type);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[280px_1fr]">
       <Card>
         <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
           <div className="relative h-24 w-24 overflow-hidden rounded-full border bg-muted">
@@ -135,8 +136,8 @@ export default async function MyDetailsPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="basic" className="space-y-4">
-        <TabsList className="flex-wrap">
+      <Tabs defaultValue="basic" className="min-w-0 space-y-4">
+        <MobileTabsList>
           <TabsTrigger value="basic">{t("account.details.tab.basic")}</TabsTrigger>
           <TabsTrigger value="work">{t("account.details.tab.work")}</TabsTrigger>
           <TabsTrigger value="time-clock">
@@ -149,7 +150,7 @@ export default async function MyDetailsPage() {
           </TabsTrigger>
           <TabsTrigger value="benefits">{t("account.details.tab.benefits")}</TabsTrigger>
           <TabsTrigger value="training">{t("account.details.tab.training")}</TabsTrigger>
-        </TabsList>
+        </MobileTabsList>
 
         <TabsContent value="basic" className="space-y-4">
           <Card>
@@ -316,10 +317,10 @@ export default async function MyDetailsPage() {
               {employee.jobCodes.map((a) => (
                 <div
                   key={a.id}
-                  className="flex items-center justify-between rounded-md border p-3"
+                  className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-sm">{a.jobCode.code}</span>
                       {a.isPrimary && (
                         <Badge variant="secondary" className="text-[10px]">
@@ -353,53 +354,110 @@ export default async function MyDetailsPage() {
                   {t("account.details.noTimeEntries")}
                 </p>
               ) : (
-                <ul className="divide-y">
-                  {employee.timeEntries.map((entry) => (
-                    <li
-                      key={entry.id}
-                      className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-sm"
-                    >
-                      <span className="text-xs text-muted-foreground">
-                        {formatDateOnly(entry.date)}
-                      </span>
-                      <span className="font-mono text-xs">
-                        {formatTime(entry.clockIn)}
-                        {" → "}
-                        {formatTime(entry.clockOut)}
-                      </span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {entry.jobCode}
-                      </span>
-                      <SourceBadge
-                        source={entry.source}
-                        kioskLabel={entry.kioskLabel}
-                        sourceLabel={enumLabel(entry.source)}
-                        kioskTitle={
-                          entry.kioskLabel
-                            ? t("account.details.kioskTitle", { name: entry.kioskLabel })
-                            : undefined
-                        }
-                      />
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm tabular-nums">
-                          {formatHours(entry.totalWorkMin)}
-                        </span>
-                        <Badge
-                          variant={
-                            entry.approvalStatus === "APPROVED"
-                              ? "success"
-                              : entry.approvalStatus === "REJECTED"
-                                ? "destructive"
-                                : "warning"
-                          }
-                          className="text-[10px]"
+                <ResponsiveDataList
+                  className="text-sm"
+                  mobile={
+                    <ul className="space-y-2 p-3">
+                      {employee.timeEntries.map((entry) => (
+                        <li key={entry.id}>
+                          <DataListCard className="space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {formatDateOnly(entry.date)}
+                              </span>
+                              <Badge
+                                variant={
+                                  entry.approvalStatus === "APPROVED"
+                                    ? "success"
+                                    : entry.approvalStatus === "REJECTED"
+                                      ? "destructive"
+                                      : "warning"
+                                }
+                                className="shrink-0 text-[10px]"
+                              >
+                                {enumLabel(entry.approvalStatus)}
+                              </Badge>
+                            </div>
+                            <span className="font-mono text-xs">
+                              {formatTime(entry.clockIn)}
+                              {" → "}
+                              {formatTime(entry.clockOut)}
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {entry.jobCode}
+                              </span>
+                              <SourceBadge
+                                source={entry.source}
+                                kioskLabel={entry.kioskLabel}
+                                sourceLabel={enumLabel(entry.source)}
+                                kioskTitle={
+                                  entry.kioskLabel
+                                    ? t("account.details.kioskTitle", {
+                                        name: entry.kioskLabel,
+                                      })
+                                    : undefined
+                                }
+                              />
+                            </div>
+                            <span className="font-mono text-sm tabular-nums">
+                              {formatHours(entry.totalWorkMin)}
+                            </span>
+                          </DataListCard>
+                        </li>
+                      ))}
+                    </ul>
+                  }
+                  desktop={
+                    <ul className="divide-y">
+                      {employee.timeEntries.map((entry) => (
+                        <li
+                          key={entry.id}
+                          className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 px-4 py-2.5"
                         >
-                          {enumLabel(entry.approvalStatus)}
-                        </Badge>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDateOnly(entry.date)}
+                          </span>
+                          <span className="font-mono text-xs">
+                            {formatTime(entry.clockIn)}
+                            {" → "}
+                            {formatTime(entry.clockOut)}
+                          </span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {entry.jobCode}
+                          </span>
+                          <SourceBadge
+                            source={entry.source}
+                            kioskLabel={entry.kioskLabel}
+                            sourceLabel={enumLabel(entry.source)}
+                            kioskTitle={
+                              entry.kioskLabel
+                                ? t("account.details.kioskTitle", { name: entry.kioskLabel })
+                                : undefined
+                            }
+                          />
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm tabular-nums">
+                              {formatHours(entry.totalWorkMin)}
+                            </span>
+                            <Badge
+                              variant={
+                                entry.approvalStatus === "APPROVED"
+                                  ? "success"
+                                  : entry.approvalStatus === "REJECTED"
+                                    ? "destructive"
+                                    : "warning"
+                              }
+                              className="text-[10px]"
+                            >
+                              {enumLabel(entry.approvalStatus)}
+                            </Badge>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  }
+                />
               )}
             </CardContent>
           </Card>
@@ -426,7 +484,7 @@ export default async function MyDetailsPage() {
                   {employee.leaveRequests.map((l) => (
                     <li
                       key={l.id}
-                      className="flex items-center justify-between py-2 text-sm"
+                      className="flex flex-col gap-2 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div>
                         <p className="font-medium">
@@ -489,9 +547,10 @@ export default async function MyDetailsPage() {
                         href={`/api/payroll/${p.id}/file`}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-primary hover:underline"
+                        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border text-primary hover:bg-muted md:min-h-9 md:min-w-9"
+                        title={t("account.details.openDocument")}
                       >
-                        <FileText className="h-4 w-4" />
+                        <FileText className="h-3.5 w-3.5" />
                       </a>
                     </li>
                   ))}
@@ -519,7 +578,7 @@ export default async function MyDetailsPage() {
               <p className="text-sm text-muted-foreground">
                 {t("account.details.benefitsRedirect")}
               </p>
-              <Button asChild size="sm">
+              <Button asChild size="sm" className="min-h-11 w-full sm:w-auto md:min-h-9">
                 <Link href="/dashboard/benefits">
                   {t("account.details.goToBenefits")}
                 </Link>
@@ -549,7 +608,7 @@ function Field({ label, value }: { label: string; value: string | null | undefin
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className="mt-0.5 text-sm">{value ?? "—"}</p>
+      <p className="mt-0.5 break-words text-sm">{value ?? "—"}</p>
     </div>
   );
 }
@@ -649,7 +708,7 @@ function DocumentList({
                   href={`/api/documents/${d.id}/file`}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-md border px-2 py-1 text-primary hover:bg-muted"
+                  className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border text-primary hover:bg-muted md:min-h-9 md:min-w-9"
                   title={t("account.details.openDocument")}
                 >
                   <FileText className="h-3.5 w-3.5" />

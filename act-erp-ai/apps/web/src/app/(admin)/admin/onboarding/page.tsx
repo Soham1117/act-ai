@@ -52,8 +52,8 @@ export default async function OnboardingPage() {
       <PageHeader
         title="Onboarding"
         description={`${pending.length} pending · ${completed.length} completed · ${expired.length} expired`}
-        actions={<OnboardingActions departments={departments} />}
       />
+      <div className="mb-6"><OnboardingActions departments={departments} /></div>
 
       <div className="mb-4 text-sm">
         <Link href="/admin/onboarding/checklists" className="text-primary hover:underline">
@@ -105,9 +105,9 @@ export default async function OnboardingPage() {
                 const isExpired = i.status === "EXPIRED" || (i.status === "PENDING" && i.expiresAt <= new Date());
                 const variant = i.status === "COMPLETED" ? "success" : isExpired ? "destructive" : "warning";
                 return (
-                  <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                  <li key={i.id} className="flex flex-col gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <p className="truncate font-medium">{i.email ?? "(no email)"}</p>
                         <Badge variant={variant} className="text-[10px]">
                           {i.status === "COMPLETED"
@@ -138,7 +138,7 @@ export default async function OnboardingPage() {
                       </Link>
                     )}
                     {isPending && (
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 flex-wrap items-center gap-3">
                         <Link href={`/admin/onboarding/checklists?invite=${i.id}`} className="text-xs text-primary hover:underline">Checklist</Link>
                         <RowActions inviteId={i.id} token={i.token} />
                       </div>

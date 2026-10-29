@@ -15,7 +15,7 @@ import "@schedule-x/theme-default/dist/index.css";
 import { Temporal } from "@/lib/temporal-shim";
 import { useTheme } from "next-themes";
 import { addDays, endOfMonth, format, startOfMonth } from "date-fns";
-import { ShiftDialog, type EditTarget } from "./shift-dialog";
+import { ShiftEditor, type EditTarget } from "./shift-editor";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, X, Filter, Search, Check } from "lucide-react";
@@ -280,7 +280,7 @@ export function ScheduleCalendar({
   const filterCount = employeeFilter.length + departmentFilter.length;
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
         <EmployeeFilter
@@ -314,8 +314,8 @@ export function ScheduleCalendar({
           </>
         )}
 
-        <div className="ml-auto">
-          <Button size="sm" onClick={openCreate}>
+        <div className="w-full sm:ml-auto sm:w-auto">
+          <Button size="sm" className="min-h-11 w-full sm:w-auto" onClick={openCreate}>
             <Plus className="mr-1 h-3.5 w-3.5" /> New shift
           </Button>
         </div>
@@ -365,11 +365,7 @@ export function ScheduleCalendar({
         </div>
       )}
 
-      <div ref={calendarBoxRef} className="sx-react-calendar-wrapper" style={{ height: 640 }}>
-        <ScheduleXCalendar calendarApp={calendar} />
-      </div>
-
-      <ShiftDialog
+      <ShiftEditor
         open={open}
         onOpenChange={handleOpenChange}
         employees={employees}
@@ -378,6 +374,12 @@ export function ScheduleCalendar({
         edit={edit}
         onSaved={() => void refetch()}
       />
+
+      <div ref={calendarBoxRef} className="sx-react-calendar-wrapper min-w-0 max-w-full overflow-hidden" style={{ height: 640 }}>
+        <ScheduleXCalendar calendarApp={calendar} />
+      </div>
+
+
     </div>
   );
 }

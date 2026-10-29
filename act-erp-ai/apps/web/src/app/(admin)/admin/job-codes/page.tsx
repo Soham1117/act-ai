@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { JobCodesTable } from "./job-codes-table";
-import { JobCodeDialog } from "./job-code-dialog";
+import { JobCodePanel } from "./job-code-dialog";
 
 export const metadata = { title: "Job codes" };
 
@@ -39,8 +39,9 @@ export default async function JobCodesPage() {
       <PageHeader
         title="Job codes"
         description={`${jobCodes.length} total · ${active} active · ${inactive} inactive`}
-        actions={<JobCodeDialog departments={departments} />}
+
       />
+      <div className="mb-6"><JobCodePanel departments={departments} /></div>
       <Card>
         <CardContent className="p-0">
           <JobCodesTable

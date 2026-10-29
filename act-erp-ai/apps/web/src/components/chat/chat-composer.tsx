@@ -54,10 +54,10 @@ export function ChatComposer({
         }}
         placeholder="Ask about your documents…"
         rows={1}
-        className="max-h-[200px] w-full resize-none bg-transparent px-4 pt-3.5 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+        className="max-h-[200px] w-full resize-none bg-transparent px-4 pt-3.5 text-base leading-relaxed outline-none placeholder:text-muted-foreground md:text-sm"
       />
-      <div className="flex items-center justify-between px-2.5 pb-2 pt-1">
-        <div className="flex items-center gap-1">{leading}</div>
+      <div className="flex flex-wrap items-end justify-between gap-2 px-2.5 pb-2 pt-1">
+        <div className="min-w-0 flex-1">{leading}</div>
         {busy ? (
           <Button
             type="button"
@@ -65,7 +65,8 @@ export function ChatComposer({
             variant="outline"
             onClick={onStop}
             title="Stop"
-            className="size-8 rounded-full"
+            aria-label="Stop response"
+            className="size-11 shrink-0 rounded-full"
           >
             <Square className="h-3.5 w-3.5" />
           </Button>
@@ -76,7 +77,8 @@ export function ChatComposer({
             onClick={submit}
             disabled={!text.trim()}
             title="Send"
-            className="size-8 rounded-full"
+            aria-label="Send message"
+            className="size-11 shrink-0 rounded-full"
           >
             <ArrowUp className="h-4 w-4" />
           </Button>

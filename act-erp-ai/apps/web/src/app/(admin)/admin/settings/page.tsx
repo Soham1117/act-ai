@@ -30,7 +30,7 @@ export default async function AdminSettingsPage() {
     <>
       <PageHeader title="Settings" description="Workspace administration." />
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Employees" value={employeeCount} />
         <StatCard label="Active kiosks" value={kioskCount} icon={<Monitor className="h-4 w-4" />} />
         <StatCard label="Audit events" value={auditCount} icon={<Activity className="h-4 w-4" />} />
@@ -97,7 +97,7 @@ export default async function AdminSettingsPage() {
           ) : (
             <ul className="divide-y">
               {recentAudit.map((a) => (
-                <li key={a.id} className="grid grid-cols-[1fr_auto] items-center gap-4 py-2 text-xs">
+                <li key={a.id} className="flex flex-col gap-1 py-2 text-xs sm:grid sm:grid-cols-[1fr_auto] sm:items-center sm:gap-4">
                   <span>
                     <span className="font-mono text-[10px] text-muted-foreground">{a.action}</span>
                     {" "}

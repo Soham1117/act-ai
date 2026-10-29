@@ -7,8 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PunchPhotos } from "@/components/punch-photos";
-import { formatBusinessTime, formatDateOnly, formatHours, formatPhone } from "@/lib/format";
-import { getContractWorker, listContractWorkers } from "@/server/queries/contract-workers";
+import {
+  formatBusinessTime,
+  formatDateOnly,
+  formatHours,
+  formatPhone,
+} from "@/lib/format";
+import {
+  getContractWorker,
+  listContractWorkers,
+} from "@/server/queries/contract-workers";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 import { ApprovalBadge } from "../shared";
 
 export const metadata = { title: "Contract worker" };
@@ -22,7 +31,9 @@ export default async function ContractWorkerDetailPage({
   const { id } = await params;
   const worker = await getContractWorker(id, 50);
   if (!worker) notFound();
-  const live = (await listContractWorkers({ agencyId: worker.agencyId })).find((w) => w.id === id);
+  const live = (await listContractWorkers({ agencyId: worker.agencyId })).find(
+    (w) => w.id === id,
+  );
 
   return (
     <>
@@ -46,7 +57,11 @@ export default async function ContractWorkerDetailPage({
             {live?.liveStatus === "ACTIVE" && <Badge variant="success">On site</Badge>}
             {live?.liveStatus === "ON_BREAK" && <Badge variant="warning">On break</Badge>}
             <Badge variant={worker.status === "ACTIVE" ? "success" : "secondary"}>
-              {worker.status === "ACTIVE" ? "Active" : worker.status === "INACTIVE" ? "Inactive" : "Ended"}
+              {worker.status === "ACTIVE"
+                ? "Active"
+                : worker.status === "INACTIVE"
+                  ? "Inactive"
+                  : "Ended"}
             </Badge>
             {live?.endingSoon && <Badge variant="warning">Ending soon</Badge>}
           </>
@@ -63,52 +78,55 @@ export default async function ContractWorkerDetailPage({
               <Row label="Project" value={worker.project ?? "—"} />
               <Row label="Job code" value={worker.jobCode ?? "—"} />
               <Row label="Start" value={formatDateOnly(worker.startDate)} />
-              <Row label="End" value={worker.endDate ? formatDateOnly(worker.endDate) : "Open"} />
+              <Row
+                label="End"
+                value={worker.endDate ? formatDateOnly(worker.endDate) : "Open"}
+              />
               <Row label="Phone" value={formatPhone(worker.phone)} />
               <Row label="Notes" value={worker.notes ?? "—"} />
             </dl>
             <p className="mt-4 text-[11px] text-muted-foreground">
-              Edit, make inactive, end, or reactivate from the <Link className="underline" href="/admin/contract-workers">workers list</Link>.
+              Edit, make inactive, end, or reactivate from the{" "}
+              <Link className="underline" href="/admin/contract-workers">
+                workers list
+              </Link>
+              .
             </p>
           </CardContent>
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Recent entries ({worker.timeEntries.length})</CardTitle>
+            <CardTitle className="text-base">
+              Recent entries ({worker.timeEntries.length})
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {worker.timeEntries.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">No time entries yet.</p>
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No time entries yet.
+              </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
-                      <th className="p-3 font-medium">Date</th>
-                      <th className="p-3 font-medium">Times</th>
-                      <th className="p-3 text-right font-medium">Breaks</th>
-                      <th className="p-3 text-right font-medium">Work</th>
-                      <th className="p-3 font-medium">Photos</th>
-                      <th className="p-3 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <ResponsiveDataList
+                mobile={
+                  <div className="space-y-2 p-2">
                     {worker.timeEntries.map((e) => {
                       const open = e.status === "ACTIVE" || e.status === "ON_BREAK";
                       return (
-                        <tr key={e.id} className="border-b last:border-0">
-                          <td className="whitespace-nowrap p-3 text-xs">{formatDateOnly(e.date)}</td>
-                          <td className="whitespace-nowrap p-3 font-mono text-xs">
-                            {formatBusinessTime(e.clockIn)}
-                            {e.clockOut ? ` → ${formatBusinessTime(e.clockOut)}` : " → open"}
-                          </td>
-                          <td className="p-3 text-right font-mono text-xs tabular-nums">
-                            {formatHours(e.totalBreakMin)}
-                          </td>
-                          <td className="p-3 text-right font-mono tabular-nums">
-                            {open ? "—" : formatHours(e.totalWorkMin)}
-                          </td>
-                          <td className="p-3">
+                        <DataListCard key={e.id}>
+                          <div className="space-y-2 text-sm">
+                            <p className="text-xs text-muted-foreground">
+                              {formatDateOnly(e.date)}
+                            </p>
+                            <p className="font-mono text-xs">
+                              {formatBusinessTime(e.clockIn)}
+                              {e.clockOut
+                                ? ` → ${formatBusinessTime(e.clockOut)}`
+                                : " → open"}
+                            </p>
+                            <p className="font-mono text-xs tabular-nums">
+                              Work {open ? "—" : formatHours(e.totalWorkMin)} · breaks{" "}
+                              {formatHours(e.totalBreakMin)}
+                            </p>
                             <PunchPhotos
                               type="contract"
                               entryId={e.id}
@@ -118,8 +136,6 @@ export default async function ContractWorkerDetailPage({
                               clockIn={e.clockIn.toISOString()}
                               clockOut={e.clockOut?.toISOString() ?? null}
                             />
-                          </td>
-                          <td className="p-3">
                             <div className="flex flex-wrap gap-1.5">
                               <ApprovalBadge status={e.approvalStatus} open={open} />
                               {e.autoClosed && (
@@ -128,13 +144,74 @@ export default async function ContractWorkerDetailPage({
                                 </Badge>
                               )}
                             </div>
-                          </td>
-                        </tr>
+                          </div>
+                        </DataListCard>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                }
+                desktop={
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
+                          <th className="p-3 font-medium">Date</th>
+                          <th className="p-3 font-medium">Times</th>
+                          <th className="p-3 text-right font-medium">Breaks</th>
+                          <th className="p-3 text-right font-medium">Work</th>
+                          <th className="p-3 font-medium">Photos</th>
+                          <th className="p-3 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {worker.timeEntries.map((e) => {
+                          const open = e.status === "ACTIVE" || e.status === "ON_BREAK";
+                          return (
+                            <tr key={e.id} className="border-b last:border-0">
+                              <td className="whitespace-nowrap p-3 text-xs">
+                                {formatDateOnly(e.date)}
+                              </td>
+                              <td className="whitespace-nowrap p-3 font-mono text-xs">
+                                {formatBusinessTime(e.clockIn)}
+                                {e.clockOut
+                                  ? ` → ${formatBusinessTime(e.clockOut)}`
+                                  : " → open"}
+                              </td>
+                              <td className="p-3 text-right font-mono text-xs tabular-nums">
+                                {formatHours(e.totalBreakMin)}
+                              </td>
+                              <td className="p-3 text-right font-mono tabular-nums">
+                                {open ? "—" : formatHours(e.totalWorkMin)}
+                              </td>
+                              <td className="p-3">
+                                <PunchPhotos
+                                  type="contract"
+                                  entryId={e.id}
+                                  hasIn={!!e.clockInPhotoKey}
+                                  hasOut={!!e.clockOutPhotoKey}
+                                  source={e.kioskSlug !== null ? "KIOSK" : null}
+                                  clockIn={e.clockIn.toISOString()}
+                                  clockOut={e.clockOut?.toISOString() ?? null}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <div className="flex flex-wrap gap-1.5">
+                                  <ApprovalBadge status={e.approvalStatus} open={open} />
+                                  {e.autoClosed && (
+                                    <Badge variant="destructive" className="text-[10px]">
+                                      Auto-closed
+                                    </Badge>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              />
             )}
           </CardContent>
         </Card>
@@ -145,9 +222,9 @@ export default async function ContractWorkerDetailPage({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4">
+    <div className="grid grid-cols-1 gap-1 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-4">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right">{value}</dd>
+      <dd className="min-w-0 break-words sm:text-right">{value}</dd>
     </div>
   );
 }

@@ -30,12 +30,12 @@ export function AppTopbar({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-backdrop-filter:bg-background/60 sm:gap-3 sm:px-4">
+      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-backdrop-filter:bg-background/60 sm:gap-3 sm:px-4">
         <SidebarTrigger className="-ml-1 shrink-0" />
         <Separator orientation="vertical" className="hidden h-5 sm:block" />
 
         {/* Left-aligned brand title — compacts on small screens. */}
-        <div className="min-w-0 truncate">
+        <div className="min-w-0 flex-1 truncate">
           <span className="hidden text-sm font-semibold tracking-tight md:inline">
             American Completion Tools
           </span>
@@ -44,14 +44,22 @@ export function AppTopbar({
           </span>
         </div>
 
-        <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
           <Button
             variant="outline"
             size="sm"
-            className="h-8 gap-2 px-2.5 text-xs text-muted-foreground"
+            data-command-palette-trigger
+            aria-label={t("common.search")}
+            aria-controls="app-navigation-search"
+            className="h-11 min-w-11 gap-2 px-2.5 text-xs text-muted-foreground md:h-8 md:min-w-0"
             onClick={(e) => {
               e.preventDefault();
-              const ev = new KeyboardEvent("keydown", { key: "k", metaKey: true });
+              const ev = new KeyboardEvent("keydown", {
+                key: "k",
+                metaKey: true,
+                ctrlKey: true,
+                bubbles: true,
+              });
               document.dispatchEvent(ev);
             }}
           >
@@ -60,7 +68,7 @@ export function AppTopbar({
             <CommandHint />
           </Button>
 
-          <Button variant="ghost" size="icon" className="relative h-8 w-8" asChild>
+          <Button variant="ghost" size="icon" className="relative h-11 w-11 md:h-8 md:w-8" asChild>
             <Link
               href={inAdminView ? "/admin/notifications" : "/dashboard/notifications"}
               aria-label={t("common.notifications")}
@@ -79,7 +87,7 @@ export function AppTopbar({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1.5 px-2.5 text-xs"
+              className="h-11 min-w-11 gap-1.5 px-2.5 text-xs md:h-8 md:min-w-0"
               asChild
               title={switcherLabel}
             >
@@ -93,12 +101,12 @@ export function AppTopbar({
           )}
 
           {!inAdminView && <PortalLanguageSwitch />}
-          <ThemeToggle />
-          <UserMenu
+          <div className="[&_button]:h-11 [&_button]:w-11 md:[&_button]:h-9 md:[&_button]:w-9"><ThemeToggle /></div>
+          <div className="[&>button]:h-11 [&>button]:w-11 md:[&>button]:h-9 md:[&>button]:w-9"><UserMenu
             name={user.name}
             email={user.email}
             profileImage={user.profileImage}
-          />
+          /></div>
         </div>
       </header>
       <CommandPalette role={inAdminView ? "ADMIN" : "EMPLOYEE"} />

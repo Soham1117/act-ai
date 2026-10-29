@@ -2,9 +2,10 @@
 import { usePortalLanguage } from "@/components/portal-language";
 
 import * as React from "react";
+import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import {
-  CommandDialog,
+  Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
@@ -68,50 +69,106 @@ export function CommandPalette({ role }: { role: "ADMIN" | "EMPLOYEE" }) {
   const { t } = usePortalLanguage();
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
+
+  const focusInput = React.useCallback(() => {
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        setOpen((o) => !o);
+        setOpen((prev) => {
+          const next = !prev;
+          if (next) focusInput();
+          return next;
+        });
+        return;
+      }
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        setOpen(false);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [open, focusInput]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest("[data-command-palette-trigger]")) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
 
   const scope = role === "ADMIN" ? "admin" : "employee";
   const items = ITEMS.filter((i) => i.scope === "any" || i.scope === scope);
   const groups = Array.from(new Set(items.map((i) => i.group)));
 
+  if (!open) return null;
+
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder={t("common.searchPlaceholder")} />
-      <CommandList>
-        <CommandEmpty> {t("common.noResults")} </CommandEmpty>
-        {groups.map((group, i) => (
-          <React.Fragment key={group}>
-            {i > 0 && <CommandSeparator />}
-            <CommandGroup heading={role === "ADMIN" ? group : t("nav." + group.toLowerCase().replace(/ /g, "_"))}>
-              {items
-                .filter((it) => it.group === group)
-                .map((it) => (
-                  <CommandItem
-                    key={it.href}
-                    onSelect={() => {
-                      setOpen(false);
-                      router.push(it.href);
-                    }}
-                  >
-                    <it.icon className="mr-2 h-4 w-4 text-muted-foreground" />
-                    {role === "ADMIN" ? it.label : t("nav." + it.label.toLowerCase().replace(/ /g, "_"))}
-                  </CommandItem>
-                ))}
-            </CommandGroup>
-          </React.Fragment>
-        ))}
-      </CommandList>
-    </CommandDialog>
+    <div
+      ref={panelRef}
+      id="app-navigation-search"
+      className="min-w-0 border-b bg-popover"
+      role="search"
+    >
+      <div className="flex justify-end px-3 pt-2">
+        <Button type="button" variant="outline" className="min-h-11" onClick={() => {
+          setOpen(false);
+          document.querySelector<HTMLButtonElement>("[data-command-palette-trigger]")?.focus();
+        }}>{t("common.close")}</Button>
+      </div>
+      <Command
+        className="rounded-none bg-popover [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-11 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2.5 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
+      >
+        <CommandInput
+          ref={inputRef}
+          placeholder={t("common.searchPlaceholder")}
+          autoFocus
+        />
+        <CommandList className="max-h-[min(50vh,320px)]">
+          <CommandEmpty>{t("common.noResults")}</CommandEmpty>
+          {groups.map((group, i) => (
+            <React.Fragment key={group}>
+              {i > 0 && <CommandSeparator />}
+              <CommandGroup
+                heading={
+                  role === "ADMIN"
+                    ? group
+                    : t("nav." + group.toLowerCase().replace(/ /g, "_"))
+                }
+              >
+                {items
+                  .filter((it) => it.group === group)
+                  .map((it) => (
+                    <CommandItem
+                      key={it.href}
+                      onSelect={() => {
+                        setOpen(false);
+                        router.push(it.href);
+                      }}
+                    >
+                      <it.icon className="mr-2 h-4 w-4 text-muted-foreground" />
+                      {role === "ADMIN"
+                        ? it.label
+                        : t("nav." + it.label.toLowerCase().replace(/ /g, "_"))}
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            </React.Fragment>
+          ))}
+        </CommandList>
+      </Command>
+    </div>
   );
 }
 

@@ -411,7 +411,7 @@ export default async function EmployeeBenefitsPage() {
                       href={`/api/documents/${d.id}/file`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded-md border px-2 py-1 text-primary hover:bg-muted"
+                      className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border text-primary hover:bg-muted md:min-h-9 md:min-w-9"
                       aria-label={t("records.payroll.viewDocument", { title: d.title })}
                     >
                       <FileText className="h-3.5 w-3.5" />
@@ -435,16 +435,16 @@ export default async function EmployeeBenefitsPage() {
                 {pastEnrollments.map((e) => (
                   <li
                     key={e.id}
-                    className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-muted-foreground"
+                    className="flex flex-col gap-1 px-4 py-2.5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                   >
-                    <div>
+                    <div className="min-w-0 break-words">
                       <span className="font-medium text-foreground">
                         {benefitType(e.plan.type)}
                       </span>
                       {" · "}
                       {e.plan.name} · {tier(e.tier)}
                     </div>
-                    <span className="text-xs">
+                    <span className="shrink-0 text-xs">
                       {formatDateOnly(e.effectiveDate)} →{" "}
                       {e.endDate
                         ? formatDateOnly(e.endDate)
@@ -455,13 +455,13 @@ export default async function EmployeeBenefitsPage() {
                 {pastElections.map((el) => (
                   <li
                     key={el.id}
-                    className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-muted-foreground"
+                    className="flex flex-col gap-1 px-4 py-2.5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <span className="font-medium text-foreground">401(k)</span> ·{" "}
                       {el.plan.name}
                     </div>
-                    <span className="text-xs">
+                    <span className="shrink-0 text-xs">
                       {formatDateOnly(el.effectiveDate)} →{" "}
                       {el.endDate
                         ? formatDateOnly(el.endDate)
@@ -529,8 +529,8 @@ function HealthCoverageCard({
   if (state === "waived") {
     return (
       <Card>
-        <CardContent className="flex items-center justify-between gap-3 p-4">
-          <div>
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <Badge variant="outline" className="mb-1 text-[10px]">
               {benefitType(type)}
             </Badge>
@@ -589,7 +589,7 @@ function HealthCoverageCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
         <div>
           <Badge variant="outline" className="mb-1 text-[10px]">
             {benefitType(type)}
@@ -845,7 +845,7 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className={mono ? "font-mono text-sm" : "text-sm"}>{value}</p>
+      <p className={mono ? "break-all font-mono text-sm" : "break-words text-sm"}>{value}</p>
     </div>
   );
 }

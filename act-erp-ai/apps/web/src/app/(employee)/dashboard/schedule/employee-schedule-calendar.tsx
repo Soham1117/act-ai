@@ -2,21 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNextCalendarApp, ScheduleXCalendar } from "@schedule-x/react";
-import {
-  createViewMonthGrid,
-  createViewWeek,
-} from "@schedule-x/calendar";
+import { createViewMonthGrid, createViewWeek } from "@schedule-x/calendar";
 import "@schedule-x/theme-default/dist/index.css";
 // Must be imported BEFORE any Temporal use — installs polyfill on globalThis
 // so Schedule-X's instanceof checks see the same class our events use.
 import { Temporal } from "@/lib/temporal-shim";
 import { useTheme } from "next-themes";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { getMyScheduleEvents } from "@/server/actions/schedules";
 import { storedTimeContent } from "@/lib/schedule-display";
 import { toast } from "sonner";
@@ -97,7 +89,11 @@ function displayJobTitle(event: RawEvent, t: (key: string) => string) {
     : jobCode;
 }
 
-export function EmployeeScheduleCalendar({ events: initialEvents }: { events: RawEvent[] }) {
+export function EmployeeScheduleCalendar({
+  events: initialEvents,
+}: {
+  events: RawEvent[];
+}) {
   const { t, locale } = usePortalLanguage();
   const translations = useMemo(() => calendarTranslations(t), [t]);
   return (
@@ -127,6 +123,11 @@ function ScheduleCalendar({
   const [events, setEvents] = useState<RawEvent[]>(initialEvents);
   const [openId, setOpenId] = useState<string | null>(null);
   const rangeRef = useRef<string | null>(null);
+  const detailsRef = useRef<HTMLElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (openId) detailsRef.current?.focus();
+  }, [openId]);
   const sxEvents = useMemo(
     () =>
       events.map((e) => ({
@@ -174,35 +175,57 @@ function ScheduleCalendar({
   const open = openId ? events.find((e) => e.id === openId) : undefined;
   return (
     <>
-      <div style={{ height: 600 }}>
-        <ScheduleXCalendar calendarApp={calendar} />
+      {open && (
+        <section
+          ref={detailsRef}
+          tabIndex={-1}
+          aria-label={t("time.schedule.shift")}
+          className="mb-4 min-w-0 space-y-4 rounded-lg border p-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">{t("time.schedule.shift")}</h2>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              onClick={() => {
+                setOpenId(null);
+                calendarRef.current?.focus();
+              }}
+            >
+              {t("common.close")}
+            </Button>
+          </div>
+          <dl className="grid grid-cols-1 gap-y-2 text-sm sm:grid-cols-[6rem_1fr] sm:gap-x-3">
+            <dt className="text-muted-foreground">{t("time.schedule.date")}</dt>
+            <dd>{formatDay(open.start, locale)}</dd>
+            <dt className="text-muted-foreground">{t("time.schedule.time")}</dt>
+            <dd>
+              {formatStoredTime(open.start, locale)} –{" "}
+              {formatStoredTime(open.end, locale)}
+              {open.start.slice(0, 10) !== open.end.slice(0, 10) &&
+                ` (${t("time.schedule.nextDay")})`}
+            </dd>
+            <dt className="text-muted-foreground">{t("time.schedule.jobCode")}</dt>
+            <dd className="font-mono">{displayJobTitle(open, t)}</dd>
+            {open.description && (
+              <>
+                <dt className="text-muted-foreground">{t("time.schedule.notes")}</dt>
+                <dd className="whitespace-pre-wrap break-words">{open.description}</dd>
+              </>
+            )}
+          </dl>
+        </section>
+      )}
+      <div
+        ref={calendarRef}
+        tabIndex={-1}
+        className="-mx-1 overflow-x-auto px-1 md:mx-0 md:overflow-visible md:px-0"
+      >
+        <div className="min-w-[340px]" style={{ height: 600 }}>
+          <ScheduleXCalendar calendarApp={calendar} />
+        </div>
       </div>
-      <Dialog open={!!open} onOpenChange={(o) => !o && setOpenId(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t("time.schedule.shift")}</DialogTitle>
-          </DialogHeader>
-          {open && (
-            <dl className="grid grid-cols-[6rem_1fr] gap-y-2 text-sm">
-              <dt className="text-muted-foreground">{t("time.schedule.date")}</dt>
-              <dd>{formatDay(open.start, locale)}</dd>
-              <dt className="text-muted-foreground">{t("time.schedule.time")}</dt>
-              <dd>
-                {formatStoredTime(open.start, locale)} – {formatStoredTime(open.end, locale)}
-                {open.start.slice(0, 10) !== open.end.slice(0, 10) && ` (${t("time.schedule.nextDay")})`}
-              </dd>
-              <dt className="text-muted-foreground">{t("time.schedule.jobCode")}</dt>
-              <dd className="font-mono">{displayJobTitle(open, t)}</dd>
-              {open.description && (
-                <>
-                  <dt className="text-muted-foreground">{t("time.schedule.notes")}</dt>
-                  <dd className="whitespace-pre-wrap">{open.description}</dd>
-                </>
-              )}
-            </dl>
-          )}
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

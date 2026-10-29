@@ -5,13 +5,13 @@ import { Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toastAction, toastCaught } from "@/lib/toast-action";
 import { deleteDepartment } from "@/server/actions/departments";
-import { DepartmentDialog, type DepartmentFormValues } from "./department-dialog";
+import { DepartmentForm, type DepartmentFormValues } from "./department-dialog";
 
 /** Edit / Delete menu for one department card. */
 export function DepartmentActions({ department }: { department: DepartmentFormValues }) {
@@ -68,7 +68,7 @@ export function DepartmentActions({ department }: { department: DepartmentFormVa
       </DropdownMenu>
 
       {editing && (
-        <DepartmentDialog
+        <DepartmentForm
           key={department.id}
           existing={department}
           open
@@ -78,26 +78,30 @@ export function DepartmentActions({ department }: { department: DepartmentFormVa
         />
       )}
 
-      <Dialog open={deleting} onOpenChange={(o) => !pending && setDeleting(o)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {department.name}?</DialogTitle>
-            <DialogDescription>
+      <InlinePanel open={deleting} onOpenChange={(o) => !pending && setDeleting(o)}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Delete {department.name}?</InlinePanelTitle>
+            <InlinePanelDescription>
               This removes the department. A department that still has employees or open
               onboarding invites cannot be deleted.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(false)} disabled={pending}>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
+          <InlinePanelFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleting(false)}
+              disabled={pending}
+            >
               Cancel
             </Button>
             <Button variant="destructive" onClick={confirmDelete} disabled={pending}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }

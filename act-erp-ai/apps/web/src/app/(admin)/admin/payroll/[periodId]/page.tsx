@@ -23,6 +23,7 @@ import { effectivePeriodStatus } from "@/lib/payroll-period";
 import { formatDateOnly } from "@/lib/format";
 import { DownloadCsvButton } from "./download-csv-button";
 import { PrintClient } from "./print-button";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 
 export const metadata = { title: "Payroll period" };
 
@@ -59,15 +60,17 @@ export default async function PayrollPeriodPage({
         description={`${formatDateOnly(period.payPeriodStart)} → ${formatDateOnly(period.payPeriodEnd)} · pay date ${formatDateOnly(period.payDate)}`}
         actions={
           <div className="flex gap-2 print:hidden">
+            <PrintButton />
+          </div>
+        }
+      />
+      <div className="mb-4 print:hidden">
             <DownloadCsvButton
               periodId={period.id}
               title={period.title}
               blockingExceptions={readiness.blocking}
             />
-            <PrintButton />
-          </div>
-        }
-      />
+      </div>
 
       <div className="mb-6 flex items-center gap-2 print:hidden">
         <Badge variant={displayStatus === "COMPLETED" ? "success" : displayStatus === "CURRENT" ? "warning" : "outline"}>
@@ -85,45 +88,76 @@ export default async function PayrollPeriodPage({
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead className="text-right">Approved hours</TableHead>
-                <TableHead>Readiness</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {readiness.employees.map((employee) => (
-                <TableRow key={employee.employeeRowId}>
-                  <TableCell>
-                    <div className="font-medium">{employee.name}</div>
-                    <div className="font-mono text-xs text-muted-foreground">{employee.employeeId}</div>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {employee.department ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {(employee.approvedMinutes / 60).toFixed(2)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {employee.exceptions.length === 0 ? (
-                        <Badge variant="success">Ready</Badge>
-                      ) : (
-                        employee.exceptions.map((exception) => (
-                          <Badge key={exception} variant="destructive">
-                            {readinessLabel(exception)}
-                          </Badge>
-                        ))
-                      )}
+          <ResponsiveDataList
+            mobile={
+              <div className="space-y-2 p-2">
+                {readiness.employees.map((employee) => (
+                  <DataListCard key={employee.employeeRowId}>
+                    <div className="space-y-1 text-sm">
+                      <p className="font-medium">{employee.name}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{employee.employeeId}</p>
+                      <p className="text-xs text-muted-foreground">{employee.department ?? "—"}</p>
+                      <p className="font-mono text-xs tabular-nums">
+                        {(employee.approvedMinutes / 60).toFixed(2)} approved hours
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {employee.exceptions.length === 0 ? (
+                          <Badge variant="success">Ready</Badge>
+                        ) : (
+                          employee.exceptions.map((exception) => (
+                            <Badge key={exception} variant="destructive">
+                              {readinessLabel(exception)}
+                            </Badge>
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </DataListCard>
+                ))}
+              </div>
+            }
+            desktop={
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead className="text-right">Approved hours</TableHead>
+                    <TableHead>Readiness</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {readiness.employees.map((employee) => (
+                    <TableRow key={employee.employeeRowId}>
+                      <TableCell>
+                        <div className="font-medium">{employee.name}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{employee.employeeId}</div>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {employee.department ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">
+                        {(employee.approvedMinutes / 60).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {employee.exceptions.length === 0 ? (
+                            <Badge variant="success">Ready</Badge>
+                          ) : (
+                            employee.exceptions.map((exception) => (
+                              <Badge key={exception} variant="destructive">
+                                {readinessLabel(exception)}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            }
+          />
         </CardContent>
       </Card>
 
@@ -149,68 +183,119 @@ export default async function PayrollPeriodPage({
           <CardTitle className="text-base">Payroll slip · {totalEmployees} employees</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead className="text-right">Days</TableHead>
-                <TableHead className="text-right">Regular</TableHead>
-                <TableHead className="text-right">Overtime</TableHead>
-                <TableHead className="text-right">Total hours</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {slips.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-sm text-muted-foreground">
+          <ResponsiveDataList
+            mobile={
+              <div className="space-y-2 p-2 print:hidden">
+                {slips.length === 0 ? (
+                  <p className="rounded-md border p-8 text-center text-sm text-muted-foreground">
                     No approved time entries in this period.
-                  </TableCell>
-                </TableRow>
-              )}
-              {slips.map((r) => (
-                <TableRow key={r.employeeRowId}>
-                  <TableCell className="font-mono text-xs">{r.employeeId}</TableCell>
-                  <TableCell className="font-medium">{r.name}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{r.department ?? "—"}</TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">{r.daysWorked}</TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {r.regularHours.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {r.overtimeHours > 0 ? (
-                      <span className="text-primary">{r.overtimeHours.toFixed(2)}</span>
-                    ) : (
-                      <span className="text-muted-foreground">0.00</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm font-semibold tabular-nums">
-                    {r.totalHours.toFixed(2)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {slips.length > 0 && (
-                <TableRow className="bg-muted/30 font-semibold">
-                  <TableCell colSpan={3} className="text-right text-xs uppercase tracking-wider text-muted-foreground">
-                    Totals
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {slips.reduce((s, r) => s + r.daysWorked, 0)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {slips.reduce((s, r) => s + r.regularHours, 0).toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {totalOT.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {totalHours.toFixed(2)}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                  </p>
+                ) : (
+                  <>
+                    {slips.map((r) => (
+                      <DataListCard key={r.employeeRowId}>
+                        <div className="space-y-1 text-sm">
+                          <p className="font-medium">{r.name}</p>
+                          <p className="font-mono text-xs text-muted-foreground">{r.employeeId}</p>
+                          <p className="text-xs text-muted-foreground">{r.department ?? "—"}</p>
+                          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1 font-mono text-xs tabular-nums">
+                            <div>
+                              <dt className="text-muted-foreground">Days</dt>
+                              <dd>{r.daysWorked}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Regular</dt>
+                              <dd>{r.regularHours.toFixed(2)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">OT</dt>
+                              <dd>{r.overtimeHours.toFixed(2)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Total</dt>
+                              <dd className="font-semibold">{r.totalHours.toFixed(2)}</dd>
+                            </div>
+                          </dl>
+                        </div>
+                      </DataListCard>
+                    ))}
+                    <DataListCard className="bg-muted/30">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Totals</p>
+                      <p className="mt-1 font-mono text-xs tabular-nums">
+                        {slips.reduce((s, r) => s + r.daysWorked, 0)} days ·{" "}
+                        {slips.reduce((s, r) => s + r.regularHours, 0).toFixed(2)} reg · {totalOT.toFixed(2)} OT ·{" "}
+                        {totalHours.toFixed(2)} total
+                      </p>
+                    </DataListCard>
+                  </>
+                )}
+              </div>
+            }
+            desktop={
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee ID</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead className="text-right">Days</TableHead>
+                    <TableHead className="text-right">Regular</TableHead>
+                    <TableHead className="text-right">Overtime</TableHead>
+                    <TableHead className="text-right">Total hours</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {slips.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-32 text-center text-sm text-muted-foreground">
+                        No approved time entries in this period.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {slips.map((r) => (
+                    <TableRow key={r.employeeRowId}>
+                      <TableCell className="font-mono text-xs">{r.employeeId}</TableCell>
+                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{r.department ?? "—"}</TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">{r.daysWorked}</TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">
+                        {r.regularHours.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">
+                        {r.overtimeHours > 0 ? (
+                          <span className="text-primary">{r.overtimeHours.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">0.00</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm font-semibold tabular-nums">
+                        {r.totalHours.toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {slips.length > 0 && (
+                    <TableRow className="bg-muted/30 font-semibold">
+                      <TableCell colSpan={3} className="text-right text-xs uppercase tracking-wider text-muted-foreground">
+                        Totals
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">
+                        {slips.reduce((s, r) => s + r.daysWorked, 0)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">
+                        {slips.reduce((s, r) => s + r.regularHours, 0).toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">
+                        {totalOT.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm tabular-nums">
+                        {totalHours.toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            }
+          />
         </CardContent>
       </Card>
 

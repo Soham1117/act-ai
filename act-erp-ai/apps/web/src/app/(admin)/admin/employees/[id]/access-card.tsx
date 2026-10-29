@@ -8,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { setUserRole } from "@/server/actions/employees";
 
@@ -88,19 +88,19 @@ export function AccessCard({
           )}
         </CardContent>
       </Card>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
+      <InlinePanel disabled={pending} open={open} onOpenChange={setOpen}>
+        <InlinePanelContent className="max-w-sm">
+          <InlinePanelHeader>
+            <InlinePanelTitle>
               {target === "ADMIN" ? `Make ${name} an admin?` : `Remove admin access from ${name}?`}
-            </DialogTitle>
-            <DialogDescription>
+            </InlinePanelTitle>
+            <InlinePanelDescription>
               {target === "ADMIN"
                 ? "They will be able to view and edit everything in the admin area. They are signed out and must sign in again."
                 : "They will only see their own employee pages. They are signed out and must sign in again. There must always be at least one admin."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
@@ -119,9 +119,9 @@ export function AccessCard({
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirm
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }

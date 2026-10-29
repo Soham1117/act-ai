@@ -1,32 +1,33 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Loader2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { changeEmployeePassword } from "@/server/actions/employees";
 import { AdminPasswordField } from "../password-field";
 
-export function ChangePasswordModal({
+export function ChangePasswordPanel({
   employeeId,
   employeeName,
 }: {
   employeeId: string;
   employeeName: string;
 }) {
+  const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [password, setPassword] = useState("");
@@ -59,26 +60,26 @@ export function ChangePasswordModal({
   }
 
   return (
-    <Dialog
+    <InlinePanel disabled={pending}
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
         if (!o) reset();
       }}
     >
-      <DialogTrigger asChild>
+      <InlinePanelTrigger asChild>
         <Button variant="outline" size="sm">
           <KeyRound className="mr-2 h-3.5 w-3.5" /> Reset password
         </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Reset password</DialogTitle>
-          <DialogDescription>
+      </InlinePanelTrigger>
+      <InlinePanelContent className="max-w-md">
+        <InlinePanelHeader>
+          <InlinePanelTitle>Reset password</InlinePanelTitle>
+          <InlinePanelDescription>
             Set a temporary password for {employeeName} and give it to them in person. Their
             current sessions are signed out.
-          </DialogDescription>
-        </DialogHeader>
+          </InlinePanelDescription>
+        </InlinePanelHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs">New password</Label>
@@ -89,8 +90,8 @@ export function ChangePasswordModal({
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Confirm password</Label>
-            <Input
+            <Label htmlFor={`${fieldId}-1`} className="text-xs">Confirm password</Label>
+            <Input id={`${fieldId}-1`}
               type="password"
               autoComplete="new-password"
               value={confirm}
@@ -109,7 +110,7 @@ export function ChangePasswordModal({
               Require them to choose their own password at next sign-in (recommended)
             </Label>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
@@ -117,9 +118,9 @@ export function ChangePasswordModal({
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }

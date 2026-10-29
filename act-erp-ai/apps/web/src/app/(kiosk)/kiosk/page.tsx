@@ -24,16 +24,15 @@ export default async function KioskIndex() {
     .catch(() => []);
 
   return (
-    <div className="mx-auto max-w-3xl p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Kiosks</h1>
-        <p className="text-sm text-muted-foreground">
-          Pick a kiosk to activate on this terminal, or create a new one.
-        </p>
-      </div>
-
-      <div className="mb-6 flex justify-end">
-        <Button asChild>
+    <div className="mx-auto max-w-3xl p-4 sm:p-8">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight">Kiosks</h1>
+          <p className="text-sm text-muted-foreground">
+            Pick a kiosk to activate on this terminal, or create a new one.
+          </p>
+        </div>
+        <Button asChild className="min-h-11 w-full sm:w-auto md:min-h-9">
           <Link href="/admin/kiosks">Manage kiosks</Link>
         </Button>
       </div>
@@ -64,12 +63,12 @@ export default async function KioskIndex() {
                 return (
                   <li
                     key={k.id}
-                    className="flex items-center justify-between gap-3 p-4"
+                    className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
-                        <p className="truncate font-medium">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <MonitorSmartphone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <p className="break-words font-medium">
                           {k.label ?? "Unnamed"}
                         </p>
                         <Badge
@@ -96,7 +95,7 @@ export default async function KioskIndex() {
                       </p>
                     </div>
                     {k.slug && (
-                      <Button asChild variant="outline" size="sm">
+                      <Button asChild variant="outline" size="sm" className="min-h-11 w-full sm:w-auto md:min-h-9">
                         <Link href={`/kiosk/${k.slug}`}>
                           Open <ArrowRight className="ml-1 h-3 w-3" />
                         </Link>

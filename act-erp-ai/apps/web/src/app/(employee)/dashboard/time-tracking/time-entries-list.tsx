@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Globe, MonitorSmartphone, Sparkles, PenLine } from "lucide-react";
 import type { TimeEntrySource } from "@prisma/client";
 import { usePortalLanguage } from "@/components/portal-language";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 
 type Entry = {
   id: string;
@@ -52,6 +53,47 @@ function SourceBadge({
   );
 }
 
+function entryVariant(approvalStatus: string) {
+  return approvalStatus === "APPROVED"
+    ? "success"
+    : approvalStatus === "REJECTED"
+      ? "destructive"
+      : "warning";
+}
+
+function EntryNotes({
+  e,
+  t,
+}: {
+  e: Entry;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  return (
+    <>
+      {e.approvalStatus === "REJECTED" && (
+        <p className="break-words rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {t("timesheet.rejectedHelp", {
+            notes: e.approvalNotes
+              ? `: ${e.approvalNotes.trim().replace(/[.!?]?$/, ".")}`
+              : ".",
+          })}
+        </p>
+      )}
+      {e.approvalStatus !== "REJECTED" && e.approvalNotes && (
+        <p className="break-words text-xs text-muted-foreground">
+          {t("timesheet.adminNote", { note: e.approvalNotes })}
+        </p>
+      )}
+      {(e.edited || e.autoClosed) && e.editReason && (
+        <p className="break-words text-xs text-muted-foreground">
+          {e.autoClosed ? t("timesheet.autoClosedReview") : t("timesheet.editedByAdmin")}{" "}
+          {e.editReason}
+        </p>
+      )}
+    </>
+  );
+}
+
 export function TimeEntriesList({ entries }: { entries: Entry[] }) {
   const { t, formatTime, formatDateOnly, enumLabel } = usePortalLanguage();
   const formatTrackedHours = (minutes: number | null | undefined) =>
@@ -68,68 +110,102 @@ export function TimeEntriesList({ entries }: { entries: Entry[] }) {
     );
   }
 
+  const approvalLabel = (approvalStatus: string) =>
+    approvalStatus === "APPROVED"
+      ? t("timesheet.approval.approved")
+      : approvalStatus === "REJECTED"
+        ? t("timesheet.approval.rejected")
+        : approvalStatus === "PENDING"
+          ? t("timesheet.approval.pending")
+          : enumLabel(approvalStatus);
+
+  const hoursClass = (approvalStatus: string) =>
+    "font-mono text-sm tabular-nums" +
+    (approvalStatus === "REJECTED" ? " text-muted-foreground line-through" : "");
+
   return (
-    <ul className="divide-y text-sm">
-      {entries.map((e) => {
-        const variant =
-          e.approvalStatus === "APPROVED"
-            ? "success"
-            : e.approvalStatus === "REJECTED"
-              ? "destructive"
-              : "warning";
-        return (
-          <li
-            key={e.id}
-            className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 py-2.5"
-          >
-            <span className="text-xs text-muted-foreground">{formatDateOnly(e.date)}</span>
-            <span className="font-mono text-xs">
-              {formatTime(e.clockInIso)} → {formatTime(e.clockOutIso)}
-            </span>
-            <span className="font-mono text-xs text-muted-foreground">{e.jobCode}</span>
-            <SourceBadge source={e.source} kioskLabel={e.kioskLabel} t={t} />
-            <div className="flex items-center gap-2">
-              <span
-                className={
-                  "font-mono text-sm tabular-nums" +
-                  (e.approvalStatus === "REJECTED" ? " text-muted-foreground line-through" : "")
-                }
+    <ResponsiveDataList
+      className="text-sm"
+      mobile={
+        <ul className="space-y-2">
+          {entries.map((e) => {
+            const variant = entryVariant(e.approvalStatus);
+            return (
+              <li key={e.id} className="space-y-2">
+                <DataListCard className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {formatDateOnly(e.date)}
+                    </span>
+                    <Badge variant={variant} className="shrink-0 text-[10px]">
+                      {approvalLabel(e.approvalStatus)}
+                    </Badge>
+                  </div>
+                  <p className="font-mono text-xs">
+                    {formatTime(e.clockInIso)} → {formatTime(e.clockOutIso)}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs text-muted-foreground">{e.jobCode}</span>
+                    <SourceBadge source={e.source} kioskLabel={e.kioskLabel} t={t} />
+                  </div>
+                  <span className={hoursClass(e.approvalStatus)}>
+                    {formatTrackedHours(e.totalWorkMin)}
+                  </span>
+                </DataListCard>
+                <EntryNotes e={e} t={t} />
+              </li>
+            );
+          })}
+        </ul>
+      }
+      desktop={
+        <ul className="divide-y">
+          {entries.map((e) => {
+            const variant = entryVariant(e.approvalStatus);
+            return (
+              <li
+                key={e.id}
+                className="grid grid-cols-[100px_1fr_auto_auto_auto] items-center gap-3 py-2.5"
               >
-                {formatTrackedHours(e.totalWorkMin)}
-              </span>
-              <Badge variant={variant} className="text-[10px]">
-                {e.approvalStatus === "APPROVED"
-                  ? t("timesheet.approval.approved")
-                  : e.approvalStatus === "REJECTED"
-                    ? t("timesheet.approval.rejected")
-                    : e.approvalStatus === "PENDING"
-                      ? t("timesheet.approval.pending")
-                      : enumLabel(e.approvalStatus)}
-              </Badge>
-            </div>
-            {e.approvalStatus === "REJECTED" && (
-              <p className="col-span-full rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                {t("timesheet.rejectedHelp", {
-                  notes: e.approvalNotes
-                    ? `: ${e.approvalNotes.trim().replace(/[.!?]?$/, ".")}`
-                    : ".",
-                })}
-              </p>
-            )}
-            {e.approvalStatus !== "REJECTED" && e.approvalNotes && (
-              <p className="col-span-full text-xs text-muted-foreground">
-                {t("timesheet.adminNote", { note: e.approvalNotes })}
-              </p>
-            )}
-            {(e.edited || e.autoClosed) && e.editReason && (
-              <p className="col-span-full text-xs text-muted-foreground">
-                {e.autoClosed ? t("timesheet.autoClosedReview") : t("timesheet.editedByAdmin")}{" "}
-                {e.editReason}
-              </p>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+                <span className="text-xs text-muted-foreground">{formatDateOnly(e.date)}</span>
+                <span className="font-mono text-xs">
+                  {formatTime(e.clockInIso)} → {formatTime(e.clockOutIso)}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">{e.jobCode}</span>
+                <SourceBadge source={e.source} kioskLabel={e.kioskLabel} t={t} />
+                <div className="flex items-center gap-2">
+                  <span className={hoursClass(e.approvalStatus)}>
+                    {formatTrackedHours(e.totalWorkMin)}
+                  </span>
+                  <Badge variant={variant} className="text-[10px]">
+                    {approvalLabel(e.approvalStatus)}
+                  </Badge>
+                </div>
+                {e.approvalStatus === "REJECTED" && (
+                  <p className="col-span-full break-words rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                    {t("timesheet.rejectedHelp", {
+                      notes: e.approvalNotes
+                        ? `: ${e.approvalNotes.trim().replace(/[.!?]?$/, ".")}`
+                        : ".",
+                    })}
+                  </p>
+                )}
+                {e.approvalStatus !== "REJECTED" && e.approvalNotes && (
+                  <p className="col-span-full break-words text-xs text-muted-foreground">
+                    {t("timesheet.adminNote", { note: e.approvalNotes })}
+                  </p>
+                )}
+                {(e.edited || e.autoClosed) && e.editReason && (
+                  <p className="col-span-full break-words text-xs text-muted-foreground">
+                    {e.autoClosed ? t("timesheet.autoClosedReview") : t("timesheet.editedByAdmin")}{" "}
+                    {e.editReason}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      }
+    />
   );
 }

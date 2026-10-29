@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { ReadOnlyBanner } from "@/components/read-only-banner";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { EmployeeSidebar } from "@/components/employee-sidebar";
+import { EmployeeSidebar, EmployeeSidebarMobileNav } from "@/components/employee-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
 import { db } from "@/lib/db";
 import { aiEnabled } from "@/lib/features";
@@ -45,6 +45,7 @@ export default async function EmployeeLayout({
         <EmployeeSidebar aiEnabled={aiEnabled} />
         <SidebarInset className="min-w-0">
           <AppTopbar user={user} initialUnread={initialUnread} />
+          <EmployeeSidebarMobileNav aiEnabled={aiEnabled} />
           {user.accessLevel !== "FULL" && (
             <ReadOnlyBanner
               status={readOnly?.employmentStatus ?? null}

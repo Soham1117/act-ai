@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
-import { CreateKioskDialog } from "./create-kiosk-dialog";
+import { CreateKioskPanel } from "./create-kiosk-dialog";
 import { RequirePinSwitch } from "./require-pin-switch";
 import { KioskRowActions } from "./kiosk-row-actions";
 import { TrustedNetworksCard } from "./trusted-networks-card";
@@ -48,8 +48,9 @@ export default async function KiosksPage() {
       <PageHeader
         title="Kiosks"
         description="Each kiosk is a permanent terminal endpoint. Create here, activate from the device."
-        actions={<CreateKioskDialog />}
+
       />
+      <div className="mb-6"><CreateKioskPanel /></div>
       <Card>
         <CardContent className="p-0">
           <ul className="divide-y">
@@ -76,7 +77,7 @@ export default async function KiosksPage() {
               return (
                 <li
                   key={s.id}
-                  className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 p-4"
+                  className="flex flex-col gap-3 p-4 sm:grid sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:gap-4"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">

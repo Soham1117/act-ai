@@ -3,7 +3,8 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { MobileTabsList } from "@/components/mobile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Receipt } from "lucide-react";
@@ -78,12 +79,12 @@ export default async function AdminReimbursementsPage({
       </div>
 
       <Tabs defaultValue={tab} className="mt-6 space-y-4">
-        <TabsList>
+        <MobileTabsList>
           <TabsTrigger value="pending">Pending ({pending.length})</TabsTrigger>
           <TabsTrigger value="under-review">Under review ({underReview.length})</TabsTrigger>
           <TabsTrigger value="approved">Approved ({approved.length})</TabsTrigger>
           <TabsTrigger value="all">All ({allCount})</TabsTrigger>
-        </TabsList>
+        </MobileTabsList>
         <TabsContent value="pending"><RList rows={pending} /></TabsContent>
         <TabsContent value="under-review"><RList rows={underReview} /></TabsContent>
         <TabsContent value="approved"><RList rows={approved} /></TabsContent>
@@ -153,7 +154,7 @@ function RList({ rows }: { rows: R[] }) {
             const paid = r.paidAmount === null ? null : Number(r.paidAmount);
             return (
               <li key={r.id} className="space-y-2 p-3">
-                <div className="grid grid-cols-[36px_1fr_auto_auto_auto] items-center gap-3">
+                <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[36px_minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-3">
                   <span className="relative h-9 w-9 overflow-hidden rounded-full bg-muted">
                     <Image src={r.employee.profilePic ?? getAvatarUrl(r.employee.email)} alt={r.employee.name} fill sizes="36px" className="object-cover" unoptimized />
                   </span>
@@ -170,12 +171,12 @@ function RList({ rows }: { rows: R[] }) {
                     )}
                   </span>
                   <Badge variant={variant} className="text-[10px]">{r.status.replace("_", " ")}</Badge>
-                  <div className="w-8">
+                  <div className="min-w-0 sm:col-span-full">
                     <ReimbursementStatusButtons id={r.id} current={r.status} amount={amount} />
                   </div>
                 </div>
-                <div className="ml-12 space-y-1">
-                  <p className="text-[11px] text-muted-foreground">{r.description}</p>
+                <div className="space-y-1 sm:ml-12">
+                  <p className="break-words text-sm text-muted-foreground">{r.description}</p>
                   {r.reviewNotes && (
                     <p className="text-[11px]">
                       <span className="font-medium">{r.status === "REJECTED" ? "Rejection reason: " : "Review note: "}</span>

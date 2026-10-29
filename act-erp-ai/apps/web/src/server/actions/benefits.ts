@@ -3,12 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { readEmployeePrivateDetails } from "@/server/employee-private-data";
+import { employeePrivateSelect, readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { notifyEmployees } from "@/lib/notify";
 import type { BenefitType, Prisma } from "@prisma/client";
 import { tierLabel, utcToday } from "@/lib/benefits";
+import {
+  resolveMedicalEmployeeCost,
+  validateAgeBands,
+  type AgeRateBand,
+} from "@/lib/benefit-age-rates";
 import { ok, fail, failFromUnknown, type ActionFail, type ActionResult } from "@/lib/action-result";
 
 /**
@@ -112,6 +117,13 @@ async function assertNoOverlap(
 
 // ── Plan catalog ──────────────────────────────────────────────────────
 
+const ageRateSchema = z.object({
+  ageFrom: z.coerce.number().int().min(0).max(120),
+  ageTo: z.coerce.number().int().min(0).max(120),
+  monthlyEmployeeCost: z.coerce.number().min(0),
+  perPay26EmployeeCost: z.coerce.number().min(0),
+});
+
 const planSchema = z.object({
   type: planTypeEnum,
   name: z.string().min(2).max(120),
@@ -122,6 +134,8 @@ const planSchema = z.object({
   planYearStart: z.string(),
   planYearEnd: z.string(),
   costPeriod: costPeriodEnum.default("PER_PAYCHECK"),
+  planCode: z.string().max(40).optional(),
+  planDesignation: z.string().max(40).optional(),
   matchDescription: z.string().optional(),
   vestingDescription: z.string().optional(),
   notes: z.string().optional(),
@@ -270,6 +284,11 @@ const planWithTiersSchema = planSchema.extend({
    * leave tiers untouched.
    */
   tiers: z.array(tierPriceSchema).optional(),
+  /**
+   * COMPLETE age-band list for MEDICAL. Empty array clears bands. Undefined
+   * leaves existing bands untouched.
+   */
+  ageRates: z.array(ageRateSchema).optional(),
 });
 
 /**
@@ -294,6 +313,13 @@ export async function upsertBenefitPlan(
       if (seen.has(t.tier)) return fail(`The ${tierLabel(t.tier)} tier is listed twice.`);
       seen.add(t.tier);
     }
+    if (data.ageRates) {
+      if (data.type !== "MEDICAL" && data.ageRates.length > 0) {
+        return fail("Age-banded rates are only supported on medical plans.");
+      }
+      const bandsOk = validateAgeBands(data.ageRates);
+      if (!bandsOk.ok) return fail(bandsOk.error);
+    }
 
     const planId = await db.$transaction(async (tx) => {
       const fields = {
@@ -306,6 +332,8 @@ export async function upsertBenefitPlan(
         planYearStart: parseDay(data.planYearStart),
         planYearEnd: parseDay(data.planYearEnd),
         costPeriod: data.costPeriod,
+        planCode: data.planCode?.trim() || null,
+        planDesignation: data.planDesignation?.trim() || null,
         matchDescription: data.matchDescription || null,
         vestingDescription: data.vestingDescription || null,
         notes: data.notes || null,
@@ -358,13 +386,32 @@ export async function upsertBenefitPlan(
           });
         }
       }
+      if (data.ageRates) {
+        await tx.benefitPlanAgeRate.deleteMany({ where: { planId: id } });
+        if (data.ageRates.length > 0) {
+          await tx.benefitPlanAgeRate.createMany({
+            data: data.ageRates.map((r) => ({
+              planId: id,
+              ageFrom: r.ageFrom,
+              ageTo: r.ageTo,
+              monthlyEmployeeCost: r.monthlyEmployeeCost,
+              perPay26EmployeeCost: r.perPay26EmployeeCost,
+            })),
+          });
+        }
+      }
       return id;
     });
 
     await audit({
       action: data.id ? "benefits.update_plan" : "benefits.create_plan",
       resource: `BenefitPlan:${planId}`,
-      diff: { type: data.type, name: data.name, tierCount: data.tiers?.length },
+      diff: {
+        type: data.type,
+        name: data.name,
+        tierCount: data.tiers?.length,
+        ageRateCount: data.ageRates?.length,
+      },
     });
     revalidateBenefits();
     return ok({ id: planId });
@@ -513,7 +560,24 @@ export async function confirmEnrollment(id: string): Promise<ActionResult<{ id: 
   try {
     const row = await db.benefitEnrollment.findUnique({
       where: { id },
-      include: { plan: { select: { name: true } } },
+      include: {
+        plan: {
+          select: {
+            name: true,
+            type: true,
+            costPeriod: true,
+            ageRates: {
+              select: {
+                ageFrom: true,
+                ageTo: true,
+                monthlyEmployeeCost: true,
+                perPay26EmployeeCost: true,
+              },
+            },
+          },
+        },
+        employee: { select: employeePrivateSelect },
+      },
     });
     if (!row) return fail("That enrollment no longer exists. Refresh the page and try again.", "errors.benefits.thatEnrollmentNoLongerExistsRefresh_a21bc");
     if (row.status !== "PENDING") {
@@ -522,9 +586,38 @@ export async function confirmEnrollment(id: string): Promise<ActionResult<{ id: 
     if (row.endDate && row.endDate <= utcToday()) {
       return fail("That enrollment has already ended; there is nothing to confirm.", "errors.benefits.thatEnrollmentHasAlreadyEndedThere_881a9");
     }
+
+    let lockedAgeCost: number | null = null;
+    if (
+      row.plan.type === "MEDICAL" &&
+      row.plan.ageRates.length > 0 &&
+      row.employeeCostOverride == null &&
+      row.tier
+    ) {
+      const bands: AgeRateBand[] = row.plan.ageRates.map((r) => ({
+        ageFrom: r.ageFrom,
+        ageTo: r.ageTo,
+        monthlyEmployeeCost: Number(r.monthlyEmployeeCost),
+        perPay26EmployeeCost: Number(r.perPay26EmployeeCost),
+      }));
+      const privateDob = (await readEmployeePrivateDetails(row.employee)).dateOfBirth;
+      const band = resolveMedicalEmployeeCost(bands, privateDob, row.effectiveDate);
+      if (!band) {
+        return fail(
+          "This medical plan uses age-banded rates. Add the employee's date of birth, or enter an employee cost override before confirming.",
+        );
+      }
+      lockedAgeCost =
+        row.plan.costPeriod === "PER_PAYCHECK" ? band.perPay26EmployeeCost : band.monthlyEmployeeCost;
+    }
+
     await db.benefitEnrollment.update({
       where: { id },
-      data: { status: "ENROLLED", confirmedAsOf: new Date() },
+      data: {
+        status: "ENROLLED",
+        confirmedAsOf: new Date(),
+        ...(lockedAgeCost != null ? { employeeCostOverride: lockedAgeCost } : {}),
+      },
     });
     await audit({
       action: "benefits.confirm_enrollment",

@@ -124,4 +124,29 @@ describe("matchEmployee", () => {
     const result = matchEmployee(parsed({ ssnLast4: null, employeeName: null }), roster);
     expect(result).toMatchObject({ employeeId: null, confidence: "none" });
   });
+
+  it("treats paystub Gonzales as the same last name as roster Gonzalez", () => {
+    const joseRoster: EmployeeCandidate[] = [
+      { id: "jose", name: "Jose Gonzalez", ssnLast4: "4321" },
+      { id: "jamie", name: "Jamie Gonzales", ssnLast4: "8765" },
+    ];
+    expect(
+      matchEmployee(
+        parsed({ employeeName: "Jose Gonzales", ssnLast4: "4321" }),
+        joseRoster,
+      ),
+    ).toMatchObject({ employeeId: "jose", confidence: "high", nameOk: true });
+    expect(
+      matchEmployee(
+        parsed({ employeeName: "Jose Gonzales", ssnLast4: null }),
+        joseRoster,
+      ).employeeId,
+    ).toBe("jose");
+    expect(
+      matchEmployee(
+        parsed({ employeeName: "Jamie Gonzales", ssnLast4: null }),
+        joseRoster,
+      ).employeeId,
+    ).toBe("jamie");
+  });
 });

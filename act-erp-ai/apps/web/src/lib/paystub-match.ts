@@ -12,6 +12,15 @@ export type MatchResult = {
   ssnOk: boolean;
 };
 
+/**
+ * Known last-name spelling pairs from payroll vs legal/roster (e.g. paystub
+ * "Gonzales" vs employee "Gonzalez"). Applied per token so first names still
+ * distinguish people (Jamie Gonzales ≠ Jose Gonzalez).
+ */
+const TOKEN_ALIASES: Record<string, string> = {
+  gonzales: "gonzalez",
+};
+
 function nameTokens(name: string): string[] {
   return name
     .normalize("NFKC")
@@ -19,7 +28,8 @@ function nameTokens(name: string): string[] {
     .replace(/['’\.]/g, "")
     .replace(/[()]/g, " ")
     .split(/[^\p{L}\p{M}\p{N}]+/u)
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((token) => TOKEN_ALIASES[token] ?? token);
 }
 
 function removeOne(list: string[], value: string): boolean {

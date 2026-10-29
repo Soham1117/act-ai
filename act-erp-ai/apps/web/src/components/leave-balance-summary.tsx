@@ -12,33 +12,59 @@ export function LeaveBalanceSummary({ balances }: { balances: YearBalances | nul
     (b) => b.unlimited || b.allowed > 0 || b.used > 0,
   );
   return (
-    <div className="mb-4 overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="py-1 pr-3">{balances.year}</th>
-            <th className="py-1 pr-3 text-right">{t("common.allowed")}</th>
-            <th className="py-1 pr-3 text-right">{t("common.taken")}</th>
-            <th className="py-1 pr-3 text-right">{t("common.upcoming")}</th>
-            <th className="py-1 pr-3 text-right">{t("common.pending")}</th>
-            <th className="py-1 text-right">{t("common.remaining")}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map((b) => (
-            <tr key={language === "es" ? enumLabel(b.leaveType) : b.leaveType}>
-              <td className="py-1 pr-3 font-medium">{language === "es" ? enumLabel(b.leaveType) : b.leaveType}</td>
-              <td className="py-1 pr-3 text-right font-mono tabular-nums">{b.unlimited ? "∞" : b.allowed}</td>
-              <td className="py-1 pr-3 text-right font-mono tabular-nums">{b.taken}</td>
-              <td className="py-1 pr-3 text-right font-mono tabular-nums">{b.upcoming}</td>
-              <td className="py-1 pr-3 text-right font-mono tabular-nums">{b.pending}</td>
-              <td className="py-1 text-right font-mono font-semibold tabular-nums">
+    <div className="mb-4">
+      {/* Phone: stacked cards — wide table overflows ~390px. */}
+      <ul className="space-y-2 md:hidden">
+        {rows.map((b) => (
+          <li key={language === "es" ? enumLabel(b.leaveType) : b.leaveType} className="rounded-md border p-3 text-xs">
+            <p className="mb-2 font-medium">
+              {language === "es" ? enumLabel(b.leaveType) : b.leaveType}
+            </p>
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-muted-foreground">
+              <dt>{t("common.allowed")}</dt>
+              <dd className="text-right font-mono tabular-nums text-foreground">{b.unlimited ? "∞" : b.allowed}</dd>
+              <dt>{t("common.taken")}</dt>
+              <dd className="text-right font-mono tabular-nums text-foreground">{b.taken}</dd>
+              <dt>{t("common.upcoming")}</dt>
+              <dd className="text-right font-mono tabular-nums text-foreground">{b.upcoming}</dd>
+              <dt>{t("common.pending")}</dt>
+              <dd className="text-right font-mono tabular-nums text-foreground">{b.pending}</dd>
+              <dt>{t("common.remaining")}</dt>
+              <dd className="text-right font-mono font-semibold tabular-nums text-foreground">
                 {b.unlimited ? t("common.unlimited") : b.available}
-              </td>
+              </dd>
+            </dl>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+              <th className="py-1 pr-3">{balances.year}</th>
+              <th className="py-1 pr-3 text-right">{t("common.allowed")}</th>
+              <th className="py-1 pr-3 text-right">{t("common.taken")}</th>
+              <th className="py-1 pr-3 text-right">{t("common.upcoming")}</th>
+              <th className="py-1 pr-3 text-right">{t("common.pending")}</th>
+              <th className="py-1 text-right">{t("common.remaining")}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y">
+            {rows.map((b) => (
+              <tr key={language === "es" ? enumLabel(b.leaveType) : b.leaveType}>
+                <td className="py-1 pr-3 font-medium">{language === "es" ? enumLabel(b.leaveType) : b.leaveType}</td>
+                <td className="py-1 pr-3 text-right font-mono tabular-nums">{b.unlimited ? "∞" : b.allowed}</td>
+                <td className="py-1 pr-3 text-right font-mono tabular-nums">{b.taken}</td>
+                <td className="py-1 pr-3 text-right font-mono tabular-nums">{b.upcoming}</td>
+                <td className="py-1 pr-3 text-right font-mono tabular-nums">{b.pending}</td>
+                <td className="py-1 text-right font-mono font-semibold tabular-nums">
+                  {b.unlimited ? t("common.unlimited") : b.available}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

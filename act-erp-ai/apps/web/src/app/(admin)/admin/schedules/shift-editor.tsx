@@ -1,35 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import {
-  CalendarIcon,
-  Check,
-  Loader2,
-  Search,
-  Trash2,
-  X,
-} from "lucide-react";
+import { CalendarIcon, Check, Loader2, Search, Trash2, X } from "lucide-react";
 import { format, eachDayOfInterval, getDay, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -42,11 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   createSchedule,
   createSchedulesBulk,
@@ -84,7 +64,7 @@ const WEEKDAYS = [
   { idx: 0, label: "S" },
 ] as const;
 
-export function ShiftDialog({
+export function ShiftEditor({
   open,
   onOpenChange,
   employees,
@@ -105,11 +85,11 @@ export function ShiftDialog({
   const formKey = edit ? `edit:${edit.id}` : `new:${initialDate ?? ""}`;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit shift" : "New shift"}</DialogTitle>
-        </DialogHeader>
+    <InlinePanel open={open} onOpenChange={onOpenChange}>
+      <InlinePanelContent>
+        <InlinePanelHeader>
+          <InlinePanelTitle>{isEdit ? "Edit shift" : "New shift"}</InlinePanelTitle>
+        </InlinePanelHeader>
         <ShiftForm
           key={formKey}
           employees={employees}
@@ -119,8 +99,8 @@ export function ShiftDialog({
           onSaved={onSaved}
           onClose={() => onOpenChange(false)}
         />
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }
 
@@ -143,6 +123,7 @@ function ShiftForm({
   onSaved?: () => void;
   onClose: () => void;
 }) {
+  const formId = useId();
   const isEdit = Boolean(edit);
   const [pending, startTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -181,8 +162,7 @@ function ShiftForm({
     if (!q) return employees;
     return employees.filter(
       (e) =>
-        e.name.toLowerCase().includes(q) ||
-        (e.email?.toLowerCase().includes(q) ?? false),
+        e.name.toLowerCase().includes(q) || (e.email?.toLowerCase().includes(q) ?? false),
     );
   }, [employees, search]);
 
@@ -239,14 +219,16 @@ function ShiftForm({
 
     startTransition(async () => {
       if (isEdit && edit) {
-        const res = await runAction(() => updateSchedule({
-          id: edit.id,
-          date,
-          jobCode,
-          startTime,
-          endTime,
-          notes: notes || null,
-        }));
+        const res = await runAction(() =>
+          updateSchedule({
+            id: edit.id,
+            date,
+            jobCode,
+            startTime,
+            endTime,
+            notes: notes || null,
+          }),
+        );
         if (!toastAction(res)) return;
         toast.success("Shift updated");
         showWarnings(res.warnings);
@@ -261,14 +243,16 @@ function ShiftForm({
       }
 
       if (mode === "single" && selected.length === 1) {
-        const res = await runAction(() => createSchedule({
-          employeeId: selected[0],
-          date,
-          jobCode,
-          startTime,
-          endTime,
-          notes: notes || undefined,
-        }));
+        const res = await runAction(() =>
+          createSchedule({
+            employeeId: selected[0],
+            date,
+            jobCode,
+            startTime,
+            endTime,
+            notes: notes || undefined,
+          }),
+        );
         if (!toastAction(res)) return;
         toast.success("Shift created");
         showWarnings(res.warnings);
@@ -282,14 +266,16 @@ function ShiftForm({
         return;
       }
 
-      const result = await runAction(() => createSchedulesBulk({
-        employeeIds: selected,
-        dates: expandedDates,
-        jobCode,
-        startTime,
-        endTime,
-        notes: notes || undefined,
-      }));
+      const result = await runAction(() =>
+        createSchedulesBulk({
+          employeeIds: selected,
+          dates: expandedDates,
+          jobCode,
+          startTime,
+          endTime,
+          notes: notes || undefined,
+        }),
+      );
       if (!toastAction(result)) return;
       toast.success(
         `Created ${result.created} shift${result.created === 1 ? "" : "s"}` +
@@ -315,12 +301,14 @@ function ShiftForm({
 
   return (
     <>
-      <form onSubmit={onSubmit} className="space-y-5">
+      <form onSubmit={onSubmit} className="min-w-0 space-y-5">
         {/* Employees */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="text-xs">
-              {isEdit ? "Employee" : `Employees${selected.length ? ` · ${selected.length} selected` : ""}`}
+            <Label htmlFor={`${formId}-field-0`} className="text-xs">
+              {isEdit
+                ? "Employee"
+                : `Employees${selected.length ? ` · ${selected.length} selected` : ""}`}
             </Label>
             {!isEdit && selected.length > 0 && (
               <button
@@ -343,10 +331,11 @@ function ShiftForm({
               <div className="relative border-b">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
+                  id={`${formId}-field-0`}
                   placeholder="Search employees…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="h-9 border-0 pl-8 shadow-none focus-visible:ring-0"
+                  className="h-11 border-0 pl-8 pr-28 shadow-none focus-visible:ring-0"
                 />
                 <button
                   type="button"
@@ -371,7 +360,7 @@ function ShiftForm({
                         <button
                           type="button"
                           onClick={() => toggleEmployee(e.id)}
-                          className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-muted ${
+                          className={`flex min-h-11 w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-muted ${
                             on ? "bg-muted/60" : ""
                           }`}
                         >
@@ -384,7 +373,7 @@ function ShiftForm({
                           >
                             {on && <Check className="h-3 w-3" />}
                           </span>
-                          <span className="flex-1 min-w-0 truncate">{e.name}</span>
+                          <span className="min-w-0 flex-1 truncate">{e.name}</span>
                           <span className="truncate text-[10px] text-muted-foreground">
                             {e.email ?? "—"}
                           </span>
@@ -423,7 +412,7 @@ function ShiftForm({
 
         {/* Date mode toggle */}
         {!isEdit && (
-          <div className="inline-flex rounded-md border p-0.5 text-xs">
+          <div className="inline-flex min-h-11 flex-wrap rounded-md border p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setMode("single")}
@@ -450,22 +439,30 @@ function ShiftForm({
         )}
 
         {(isEdit || mode === "single") && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Date</Label>
-              <DatePickerField value={date} onChange={setDate} />
+              <Label htmlFor={`${formId}-field-1`} className="text-xs">
+                Date
+              </Label>
+              <DatePickerField id={`${formId}-field-1`} value={date} onChange={setDate} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Start</Label>
+              <Label htmlFor={`${formId}-field-2`} className="text-xs">
+                Start
+              </Label>
               <Input
+                id={`${formId}-field-2`}
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">End</Label>
+              <Label htmlFor={`${formId}-field-3`} className="text-xs">
+                End
+              </Label>
               <Input
+                id={`${formId}-field-3`}
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
@@ -481,20 +478,32 @@ function ShiftForm({
         )}
 
         {!isEdit && mode === "range" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0 space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs">From</Label>
-                <DatePickerField value={rangeStart} onChange={setRangeStart} />
+                <Label htmlFor={`${formId}-field-4`} className="text-xs">
+                  From
+                </Label>
+                <DatePickerField
+                  id={`${formId}-field-4`}
+                  value={rangeStart}
+                  onChange={setRangeStart}
+                />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">To</Label>
-                <DatePickerField value={rangeEnd} onChange={setRangeEnd} />
+                <Label htmlFor={`${formId}-field-5`} className="text-xs">
+                  To
+                </Label>
+                <DatePickerField
+                  id={`${formId}-field-5`}
+                  value={rangeEnd}
+                  onChange={setRangeEnd}
+                />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Days of the week</Label>
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 {WEEKDAYS.map((d) => {
                   const on = weekdays.includes(d.idx);
                   return (
@@ -502,7 +511,7 @@ function ShiftForm({
                       type="button"
                       key={d.idx}
                       onClick={() => toggleWeekday(d.idx)}
-                      className={`h-8 w-8 rounded border text-xs font-medium transition ${
+                      className={`h-11 w-11 rounded border text-xs font-medium transition ${
                         on
                           ? "border-primary bg-primary text-primary-foreground"
                           : "bg-background text-muted-foreground hover:bg-muted"
@@ -515,18 +524,24 @@ function ShiftForm({
                 })}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs">Start</Label>
+                <Label htmlFor={`${formId}-field-7`} className="text-xs">
+                  Start
+                </Label>
                 <Input
+                  id={`${formId}-field-7`}
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">End</Label>
+                <Label htmlFor={`${formId}-field-8`} className="text-xs">
+                  End
+                </Label>
                 <Input
+                  id={`${formId}-field-8`}
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
@@ -534,14 +549,13 @@ function ShiftForm({
               </div>
             </div>
             <p className="rounded-md border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground">{totalShifts}</span>{" "}
-              shift{totalShifts === 1 ? "" : "s"} will be created
+              <span className="font-medium text-foreground">{totalShifts}</span> shift
+              {totalShifts === 1 ? "" : "s"} will be created
               {expandedDates.length > 0 && selected.length > 0 ? (
                 <>
                   {" "}
                   · {selected.length} employee
-                  {selected.length === 1 ? "" : "s"} ×{" "}
-                  {expandedDates.length} day
+                  {selected.length === 1 ? "" : "s"} × {expandedDates.length} day
                   {expandedDates.length === 1 ? "" : "s"}
                 </>
               ) : null}
@@ -550,12 +564,14 @@ function ShiftForm({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-xs">Job code</Label>
+            <Label htmlFor={`${formId}-field-9`} className="text-xs">
+              Job code
+            </Label>
             {jobCodeOptions.length > 0 ? (
               <Select value={jobCode} onValueChange={setJobCode}>
-                <SelectTrigger className="font-mono">
+                <SelectTrigger id={`${formId}-field-9`} className="font-mono">
                   <SelectValue placeholder="Pick a job code" />
                 </SelectTrigger>
                 <SelectContent>
@@ -579,15 +595,18 @@ function ShiftForm({
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Notes (optional)</Label>
+          <Label htmlFor={`${formId}-field-10`} className="text-xs">
+            Notes (optional)
+          </Label>
           <Textarea
+            id={`${formId}-field-10`}
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between">
+        <InlinePanelFooter className="gap-2 sm:justify-between">
           {isEdit ? (
             <Button
               type="button"
@@ -602,8 +621,8 @@ function ShiftForm({
           ) : (
             <span />
           )}
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
               Cancel
             </Button>
             <Button
@@ -619,21 +638,29 @@ function ShiftForm({
               {isEdit ? "Save" : "Create"}
             </Button>
           </div>
-        </DialogFooter>
+        </InlinePanelFooter>
       </form>
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this shift?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Only this shift will be deleted. The employee will no longer see
-              it on their schedule.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+      <InlinePanel open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Delete this shift?</InlinePanelTitle>
+            <InlinePanelDescription>
+              Only this shift will be deleted. The employee will no longer see it on their
+              schedule.
+            </InlinePanelDescription>
+          </InlinePanelHeader>
+          <InlinePanelFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setConfirmDelete(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
               onClick={(e) => {
                 e.preventDefault();
                 onDelete();
@@ -642,18 +669,20 @@ function ShiftForm({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }
 
 function DatePickerField({
+  id,
   value,
   onChange,
 }: {
+  id?: string;
   value: string;
   onChange: (next: string) => void;
 }) {
@@ -670,9 +699,10 @@ function DatePickerField({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           type="button"
           variant="outline"
-          className="w-full justify-start gap-2 font-normal"
+          className="min-h-11 w-full justify-start gap-2 font-normal"
         >
           <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
           <span>{format(date, "MMM d, yyyy")}</span>

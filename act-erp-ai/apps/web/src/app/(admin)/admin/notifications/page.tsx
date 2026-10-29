@@ -5,8 +5,9 @@ import { MarkSeenOnView } from "@/app/(employee)/dashboard/notifications/mark-se
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BroadcastDialog } from "./broadcast-dialog";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { MobileTabsList } from "@/components/mobile";
+import { BroadcastForm } from "./broadcast-form";
 import { formatDistanceToNow } from "date-fns";
 
 export const metadata = { title: "Notifications" };
@@ -53,14 +54,14 @@ export default async function AdminNotificationsPage() {
       <PageHeader
         title="Notifications"
         description="Your notifications, plus broadcast announcements and payroll alerts you sent."
-        actions={<BroadcastDialog departments={departments} />}
       />
+      <div className="mb-6"><BroadcastForm departments={departments} /></div>
 
       <Tabs defaultValue={me?.employeeId ? "inbox" : "all"} className="space-y-4">
-        <TabsList>
+        <MobileTabsList>
           {me?.employeeId && <TabsTrigger value="inbox">My inbox ({inbox.length})</TabsTrigger>}
           <TabsTrigger value="all">Sent ({items.length})</TabsTrigger>
-        </TabsList>
+        </MobileTabsList>
         {me?.employeeId && (
           <TabsContent value="inbox">
             <Card>

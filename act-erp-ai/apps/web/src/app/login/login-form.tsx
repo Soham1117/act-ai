@@ -112,7 +112,7 @@ export function LoginForm({
             autoFocus
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            className="text-center font-mono text-xl tracking-[0.4em]"
+            className="min-h-11 text-center font-mono text-xl tracking-[0.4em] md:min-h-9"
           />
         </div>
         <Button type="submit" className="w-full" disabled={pending || code.length !== 6}>
@@ -150,6 +150,7 @@ export function LoginForm({
           placeholder="you@actools.com"
           autoComplete="username"
           autoFocus
+          className="min-h-11 md:min-h-9"
           {...form.register("identifier")}
         />
         {form.formState.errors.identifier && (
@@ -174,6 +175,7 @@ export function LoginForm({
             id="password"
             type={showPw ? "text" : "password"}
             autoComplete="current-password"
+            className="min-h-11 md:min-h-9"
             {...form.register("password")}
           />
           <button

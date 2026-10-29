@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Plus, Loader2, Copy, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,6 +39,7 @@ export function OnboardingActions({
 }: {
   departments: { id: string; name: string }[];
 }) {
+  const formId = useId();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
@@ -53,15 +54,17 @@ export function OnboardingActions({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const invite = await runAction(() => createOnboardingInvite({
-        email: email.trim() || undefined,
-        departmentId: departmentId === NONE ? null : departmentId,
-        jobTitle: jobTitle.trim() || null,
-        employmentType,
-        compensationType,
-        compensationValue: parseMoneyInput(compensationValue),
-        dateOfHire: dateOfHire || null,
-      }));
+      const invite = await runAction(() =>
+        createOnboardingInvite({
+          email: email.trim() || undefined,
+          departmentId: departmentId === NONE ? null : departmentId,
+          jobTitle: jobTitle.trim() || null,
+          employmentType,
+          compensationType,
+          compensationValue: parseMoneyInput(compensationValue),
+          dateOfHire: dateOfHire || null,
+        }),
+      );
       if (!toastAction(invite)) return;
       const url = `${window.location.origin}/onboard/${invite.token}`;
       setGeneratedUrl(url);
@@ -88,44 +91,63 @@ export function OnboardingActions({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) close(); else setOpen(true); }}>
-      <DialogTrigger asChild>
+    <InlinePanel
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) close();
+        else setOpen(true);
+      }}
+    >
+      <InlinePanelTrigger asChild disabled={pending}>
         <Button>
           <Plus className="mr-2 h-4 w-4" /> Generate invite
         </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Generate onboarding invite</DialogTitle>
-        </DialogHeader>
+      </InlinePanelTrigger>
+      <InlinePanelContent>
+        <InlinePanelHeader>
+          <InlinePanelTitle>Generate onboarding invite</InlinePanelTitle>
+        </InlinePanelHeader>
         {generatedUrl ? (
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Share this link with the new hire. It expires in 7 days and can
-              only be used once. After they submit, you&apos;ll approve their account
-              on the Employees page.
+              Share this link with the new hire. It expires in 7 days and can only be used
+              once. After they submit, you&apos;ll approve their account on the Employees
+              page.
             </p>
-            <div className="flex gap-2">
-              <Input value={generatedUrl} readOnly className="font-mono text-xs" />
-              <Button type="button" variant="secondary" onClick={copy}>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <Input
+                value={generatedUrl}
+                readOnly
+                aria-label="Generated onboarding invite link"
+                className="min-w-0 font-mono text-base md:text-xs"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                aria-label="Copy onboarding invite link"
+                onClick={copy}
+              >
                 <Copy className="h-3.5 w-3.5" />
               </Button>
             </div>
-            <DialogFooter>
+            <InlinePanelFooter>
               <Button onClick={close}>Done</Button>
-            </DialogFooter>
+            </InlinePanelFooter>
           </div>
         ) : (
-          <form onSubmit={onSubmit} className="space-y-3">
+          <form onSubmit={onSubmit} className="min-w-0 space-y-3">
             <p className="text-xs text-muted-foreground">
               You set the hire&apos;s position and pay here. The new hire only fills in
               their personal details and can&apos;t change these. Their employee ID is
               generated automatically.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2 space-y-1.5">
-                <Label className="text-xs">Email (optional)</Label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor={`${formId}-field-0`} className="text-xs">
+                  Email (optional)
+                </Label>
                 <Input
+                  id={`${formId}-field-0`}
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -136,9 +158,11 @@ export function OnboardingActions({
                 </p>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Department</Label>
+                <Label htmlFor={`${formId}-field-1`} className="text-xs">
+                  Department
+                </Label>
                 <Select value={departmentId} onValueChange={setDepartmentId}>
-                  <SelectTrigger>
+                  <SelectTrigger id={`${formId}-field-1`}>
                     <SelectValue placeholder="(none)" />
                   </SelectTrigger>
                   <SelectContent>
@@ -152,16 +176,24 @@ export function OnboardingActions({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Job title</Label>
-                <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+                <Label htmlFor={`${formId}-field-2`} className="text-xs">
+                  Job title
+                </Label>
+                <Input
+                  id={`${formId}-field-2`}
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Employment type</Label>
+                <Label htmlFor={`${formId}-field-3`} className="text-xs">
+                  Employment type
+                </Label>
                 <Select
                   value={employmentType}
                   onValueChange={(v) => setEmploymentType(v as EmploymentType)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id={`${formId}-field-3`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -171,20 +203,25 @@ export function OnboardingActions({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Date of hire</Label>
+                <Label htmlFor={`${formId}-field-4`} className="text-xs">
+                  Date of hire
+                </Label>
                 <Input
+                  id={`${formId}-field-4`}
                   type="date"
                   value={dateOfHire}
                   onChange={(e) => setDateOfHire(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Compensation type</Label>
+                <Label htmlFor={`${formId}-field-5`} className="text-xs">
+                  Compensation type
+                </Label>
                 <Select
                   value={compensationType}
                   onValueChange={(v) => setCompensationType(v as CompType)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id={`${formId}-field-5`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -195,8 +232,11 @@ export function OnboardingActions({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Compensation value ($)</Label>
+                <Label htmlFor={`${formId}-field-6`} className="text-xs">
+                  Compensation value ($)
+                </Label>
                 <Input
+                  id={`${formId}-field-6`}
                   type="text"
                   inputMode="decimal"
                   placeholder="60,000"
@@ -205,17 +245,19 @@ export function OnboardingActions({
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={close}>Cancel</Button>
+            <InlinePanelFooter>
+              <Button type="button" variant="outline" disabled={pending} onClick={close}>
+                Cancel
+              </Button>
               <Button type="submit" disabled={pending}>
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Generate link
               </Button>
-            </DialogFooter>
+            </InlinePanelFooter>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }
 
@@ -236,27 +278,24 @@ export function RowActions({ inviteId, token }: { inviteId: string; token: strin
   }
 
   return (
-    <div className="flex max-w-sm flex-wrap justify-end gap-1.5">
+    <div className="flex min-w-0 max-w-sm flex-wrap justify-end gap-1.5 [&_button]:min-h-11">
       {manualUrl && (
         <Input
           value={manualUrl}
           readOnly
           aria-label="Invite link to copy manually"
-          className="h-8 w-full font-mono text-xs"
+          className="min-h-11 w-full font-mono text-base md:text-xs"
           onFocus={(event) => event.currentTarget.select()}
         />
       )}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={copy}
-      >
+      <Button variant="outline" size="sm" onClick={copy}>
         <Copy className="mr-2 h-3 w-3" /> Copy link
       </Button>
       <Button
         variant="ghost"
         size="sm"
         disabled={pending}
+        aria-label="Revoke onboarding invite"
         onClick={() =>
           startTransition(async () => {
             const res = await runAction(() => revokeOnboardingInvite(inviteId));
@@ -265,7 +304,11 @@ export function RowActions({ inviteId, token }: { inviteId: string; token: strin
           })
         }
       >
-        {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+        {pending ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <X className="h-3 w-3" />
+        )}
       </Button>
     </div>
   );

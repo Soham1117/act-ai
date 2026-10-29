@@ -26,17 +26,23 @@ export default async function DepartmentDetailPage({
   return (
     <>
       <Button variant="ghost" size="sm" asChild className="-ml-2 mb-4">
-        <Link href="/admin/departments"><ArrowLeft className="mr-1 h-3.5 w-3.5" /> Departments</Link>
+        <Link href="/admin/departments">
+          <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Departments
+        </Link>
       </Button>
 
-      <div className="mb-6 flex items-end justify-between">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">{dept.name}</h1>
+          <h1 className="break-words text-2xl font-bold">{dept.name}</h1>
           <p className="text-sm text-muted-foreground">
             {dept.description ?? "No description"}
           </p>
         </div>
-        {dept.code && <Badge variant="outline" className="font-mono">{dept.code}</Badge>}
+        {dept.code && (
+          <Badge variant="outline" className="font-mono">
+            {dept.code}
+          </Badge>
+        )}
       </div>
 
       <Card>
@@ -52,16 +58,36 @@ export default async function DepartmentDetailPage({
               <Link
                 key={e.id}
                 href={`/admin/employees/${e.id}`}
-                className="flex items-center gap-3 rounded-md border p-3 transition-colors hover:border-primary/50"
+                className="flex min-w-0 flex-wrap items-center gap-3 rounded-md border p-3 transition-colors hover:border-primary/50"
               >
-                <span className="relative h-9 w-9 overflow-hidden rounded-full bg-muted">
-                  <Image src={e.profilePic ?? getAvatarUrl(e.email)} alt={e.name} fill sizes="36px" className="object-cover" unoptimized />
+                <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted">
+                  <Image
+                    src={e.profilePic ?? getAvatarUrl(e.email)}
+                    alt={e.name}
+                    fill
+                    sizes="36px"
+                    className="object-cover"
+                    unoptimized
+                  />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{e.name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{e.jobTitle ?? "—"}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {e.jobTitle ?? "—"}
+                  </p>
                 </div>
-                <Badge variant={e.employmentStatus === "ACTIVE" ? "success" : e.employmentStatus === "INACTIVE" ? "secondary" : e.employmentStatus === "ON_LEAVE" ? "warning" : "destructive"} className="text-[10px]">
+                <Badge
+                  variant={
+                    e.employmentStatus === "ACTIVE"
+                      ? "success"
+                      : e.employmentStatus === "INACTIVE"
+                        ? "secondary"
+                        : e.employmentStatus === "ON_LEAVE"
+                          ? "warning"
+                          : "destructive"
+                  }
+                  className="shrink-0 text-[10px]"
+                >
                   {e.employmentStatus.replace("_", " ")}
                 </Badge>
               </Link>

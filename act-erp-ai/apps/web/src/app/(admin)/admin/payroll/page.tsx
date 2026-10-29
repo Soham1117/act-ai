@@ -2,11 +2,12 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { MobileTabsList } from "@/components/mobile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Banknote, Upload } from "lucide-react";
-import { CreatePayrollPeriodDialog } from "./create-period-dialog";
+import { CreatePayrollPeriodForm } from "./create-period-form";
 import { PeriodActions } from "./period-actions";
 import { PayrollDocumentActions } from "./document-actions";
 import { effectivePeriodStatus } from "@/lib/payroll-period";
@@ -51,17 +52,17 @@ export default async function AdminPayrollPage() {
         title="Payroll"
         description="Manage pay periods and upload pay stubs."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline">
               <Link href="/admin/payroll/import">
                 <Upload className="mr-1.5 h-3.5 w-3.5" />
                 Upload pay stubs
               </Link>
             </Button>
-            <CreatePayrollPeriodDialog />
           </div>
         }
       />
+      <div className="mb-6"><CreatePayrollPeriodForm /></div>
       <div className="grid gap-3 sm:grid-cols-4">
         <StatCard label="Documents" value={docCount} icon={<Banknote className="h-4 w-4" />} />
         <StatCard label="Upcoming periods" value={upcoming} />
@@ -70,10 +71,10 @@ export default async function AdminPayrollPage() {
       </div>
 
       <Tabs defaultValue="calendar" className="mt-6 space-y-4">
-        <TabsList>
+        <MobileTabsList>
           <TabsTrigger value="calendar">Pay calendar ({calendar.length})</TabsTrigger>
           <TabsTrigger value="documents">Documents ({docCount})</TabsTrigger>
-        </TabsList>
+        </MobileTabsList>
 
         <TabsContent value="calendar">
           <Card>
@@ -90,10 +91,10 @@ export default async function AdminPayrollPage() {
                     p.displayStatus === "CURRENT" ? "warning" :
                     p.displayStatus === "COMPLETED" ? "success" : "outline";
                   return (
-                    <li key={p.id} className="flex items-center gap-2 pr-3 transition-colors hover:bg-muted/50">
+                    <li key={p.id} className="flex min-w-0 flex-col gap-2 p-3 transition-colors hover:bg-muted/50">
                       <Link
                         href={`/admin/payroll/${p.id}`}
-                        className="grid flex-1 grid-cols-[1fr_auto_auto_auto] items-center gap-3 p-3"
+                        className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-3 sm:p-3 sm:pl-3"
                       >
                         <div>
                           <p className="text-sm font-medium">{p.title}</p>
@@ -139,7 +140,7 @@ export default async function AdminPayrollPage() {
                   </li>
                 )}
                 {docs.map((d) => (
-                  <li key={d.id} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 p-3">
+                  <li key={d.id} className="flex flex-col gap-2 p-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-3">
                     <div>
                       <p className="text-sm font-medium">{d.title}</p>
                       <p className="text-[11px] text-muted-foreground">
@@ -152,7 +153,7 @@ export default async function AdminPayrollPage() {
                     <span className="text-[10px] text-muted-foreground">
                       {d.uploadedAt.toLocaleDateString()}
                     </span>
-                    <PayrollDocumentActions id={d.id} title={d.title} />
+                    <div className="min-w-0 sm:col-span-full"><PayrollDocumentActions id={d.id} title={d.title} /></div>
                   </li>
                 ))}
               </ul>

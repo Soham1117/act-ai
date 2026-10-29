@@ -105,8 +105,8 @@ export default async function TimeTrackingPage() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <div className="min-w-0 flex-1">
               <p className="text-xs uppercase tracking-wider text-muted-foreground">
                 {t("timesheet.currentStatus")}
               </p>
@@ -122,12 +122,12 @@ export default async function TimeTrackingPage() {
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   {t("timesheet.since", { time: formatTime(active.clockIn) })}
                   {" · "}
-                  <span className="font-mono">{active.jobCode}</span>
+                  <span className="break-all font-mono">{active.jobCode}</span>
                 </p>
               )}
             </div>
             <Activity
-              className={`h-8 w-8 ${active ? "text-primary" : "text-muted-foreground"}`}
+              className={`h-8 w-8 shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`}
             />
           </CardContent>
         </Card>
@@ -144,7 +144,7 @@ export default async function TimeTrackingPage() {
       </div>
 
       <Card className="mt-6">
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           <div>
             <CardTitle className="text-base">{t("timesheet.recentEntries")}</CardTitle>
             <CardDescription>{t("timesheet.last50RejectedNote")}</CardDescription>

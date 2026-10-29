@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -10,18 +10,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { runAction, toastAction } from "@/lib/toast-action";
-import { createAgency, setAgencyActive, updateAgency } from "@/server/actions/contract-workers";
+import {
+  createAgency,
+  setAgencyActive,
+  updateAgency,
+} from "@/server/actions/contract-workers";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 import type { AgencyRow } from "./shared";
 
-export function AgencyFormDialog({ agency }: { agency?: AgencyRow }) {
+export function AgencyForm({ agency }: { agency?: AgencyRow }) {
+  const formId = useId();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -49,7 +55,9 @@ export function AgencyFormDialog({ agency }: { agency?: AgencyRow }) {
       notes: notes || null,
     };
     startTransition(async () => {
-      const res = agency ? await runAction(() => updateAgency(agency.id, input)) : await runAction(() => createAgency(input));
+      const res = agency
+        ? await runAction(() => updateAgency(agency.id, input))
+        : await runAction(() => createAgency(input));
       if (!toastAction(res)) return;
       toast.success(agency ? "Agency updated" : "Agency added");
       setOpen(false);
@@ -61,37 +69,52 @@ export function AgencyFormDialog({ agency }: { agency?: AgencyRow }) {
   return (
     <>
       {agency ? (
-        <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        <Button
+          className="min-h-11 md:min-h-9"
+          size="sm"
+          variant="ghost"
+          onClick={() => { if (!pending) setOpen(true); }}
+        >
           <Pencil className="mr-1 h-3.5 w-3.5" />
           Edit
         </Button>
       ) : (
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button className="min-h-11 md:min-h-9" size="sm" onClick={() => { if (!pending) setOpen(true); }}>
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           Add agency
         </Button>
       )}
-      <Dialog
+      <InlinePanel
         open={open}
         onOpenChange={(v) => {
+          if (pending) return;
           setOpen(v);
           if (v) reset();
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{agency ? `Edit ${agency.name}` : "Add agency"}</DialogTitle>
-            <DialogDescription>Staffing agency that supplies contract workers.</DialogDescription>
-          </DialogHeader>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>
+              {agency ? `Edit ${agency.name}` : "Add agency"}
+            </InlinePanelTitle>
+            <InlinePanelDescription>
+              Staffing agency that supplies contract workers.
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label htmlFor="ag-name">Name</Label>
-              <Input id="ag-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+              <Label htmlFor={`${formId}-name`}>Name</Label>
+              <Input
+                id={`${formId}-name`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={120}
+              />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="ag-contact">Contact name</Label>
+              <Label htmlFor={`${formId}-contact`}>Contact name</Label>
               <Input
-                id="ag-contact"
+                id={`${formId}-contact`}
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
                 maxLength={120}
@@ -99,13 +122,18 @@ export function AgencyFormDialog({ agency }: { agency?: AgencyRow }) {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="ag-phone">Phone</Label>
-                <Input id="ag-phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={40} />
+                <Label htmlFor={`${formId}-phone`}>Phone</Label>
+                <Input
+                  id={`${formId}-phone`}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  maxLength={40}
+                />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ag-email">Email</Label>
+                <Label htmlFor={`${formId}-email`}>Email</Label>
                 <Input
-                  id="ag-email"
+                  id={`${formId}-email`}
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -114,11 +142,16 @@ export function AgencyFormDialog({ agency }: { agency?: AgencyRow }) {
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="ag-notes">Notes</Label>
-              <Textarea id="ag-notes" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} />
+              <Label htmlFor={`${formId}-notes`}>Notes</Label>
+              <Textarea
+                id={`${formId}-notes`}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                maxLength={2000}
+              />
             </div>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
               Cancel
             </Button>
@@ -126,9 +159,9 @@ export function AgencyFormDialog({ agency }: { agency?: AgencyRow }) {
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {agency ? "Save changes" : "Add agency"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }
@@ -158,8 +191,12 @@ function ActiveToggle({ agency }: { agency: AgencyRow }) {
 
 export function AgenciesTable({ agencies }: { agencies: AgencyRow[] }) {
   if (agencies.length === 0)
-    return <p className="py-10 text-center text-sm text-muted-foreground">No agencies yet. Add one to start.</p>;
-  return (
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        No agencies yet. Add one to start.
+      </p>
+    );
+  const table = (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
@@ -177,17 +214,22 @@ export function AgenciesTable({ agencies }: { agencies: AgencyRow[] }) {
               <td className="p-3 font-medium">{a.name}</td>
               <td className="p-3 text-xs">
                 <div>{a.contactName ?? "—"}</div>
-                <div className="text-muted-foreground">{[a.phone, a.email].filter(Boolean).join(" · ")}</div>
+                <div className="text-muted-foreground">
+                  {[a.phone, a.email].filter(Boolean).join(" · ")}
+                </div>
               </td>
               <td className="p-3 tabular-nums">{a.workerCount}</td>
               <td className="p-3">
-                <Badge variant={a.isActive ? "success" : "secondary"} className="text-[10px]">
+                <Badge
+                  variant={a.isActive ? "success" : "secondary"}
+                  className="text-[10px]"
+                >
                   {a.isActive ? "Active" : "Inactive"}
                 </Badge>
               </td>
               <td className="p-3">
-                <div className="flex justify-end gap-1">
-                  <AgencyFormDialog agency={a} />
+                <div className="flex flex-wrap justify-end gap-1">
+                  <AgencyForm agency={a} />
                   <ActiveToggle agency={a} />
                 </div>
               </td>
@@ -196,5 +238,42 @@ export function AgenciesTable({ agencies }: { agencies: AgencyRow[] }) {
         </tbody>
       </table>
     </div>
+  );
+  return (
+    <ResponsiveDataList
+      mobile={
+        <div className="space-y-2 p-2">
+          {agencies.map((a) => (
+            <DataListCard key={a.id}>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium">{a.name}</p>
+                  <Badge
+                    variant={a.isActive ? "success" : "secondary"}
+                    className="text-[10px]"
+                  >
+                    {a.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {a.contactName ?? "—"}
+                  {[a.phone, a.email].filter(Boolean).length > 0 &&
+                    ` · ${[a.phone, a.email].filter(Boolean).join(" · ")}`}
+                </p>
+                <p className="text-xs">
+                  <span className="font-medium tabular-nums">{a.workerCount}</span>{" "}
+                  workers
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  <AgencyForm agency={a} />
+                  <ActiveToggle agency={a} />
+                </div>
+              </div>
+            </DataListCard>
+          ))}
+        </div>
+      }
+      desktop={table}
+    />
   );
 }

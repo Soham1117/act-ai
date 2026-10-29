@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createKiosk } from "@/server/actions/kiosk";
@@ -28,7 +29,8 @@ function slugify(s: string) {
     .slice(0, 40);
 }
 
-export function CreateKioskDialog() {
+export function CreateKioskPanel() {
+  const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [label, setLabel] = useState("");
@@ -45,24 +47,26 @@ export function CreateKioskDialog() {
   }
 
   return (
-    <Dialog
+    <InlinePanel disabled={pending}
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
         if (!v) reset();
       }}
     >
-      <Button onClick={() => setOpen(true)}>
-        <Plus className="mr-2 h-4 w-4" /> New kiosk
-      </Button>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New kiosk</DialogTitle>
-          <DialogDescription>
+      <InlinePanelTrigger asChild disabled={pending}>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" /> New kiosk
+        </Button>
+      </InlinePanelTrigger>
+      <InlinePanelContent>
+        <InlinePanelHeader>
+          <InlinePanelTitle>New kiosk</InlinePanelTitle>
+          <InlinePanelDescription>
             The slug becomes the URL. Send <span className="font-mono">/kiosk/&lt;slug&gt;</span>{" "}
             to the terminal, then activate it from there.
-          </DialogDescription>
-        </DialogHeader>
+          </InlinePanelDescription>
+        </InlinePanelHeader>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -82,8 +86,8 @@ export function CreateKioskDialog() {
           className="space-y-4"
         >
           <div className="space-y-1.5">
-            <Label className="text-xs">Label</Label>
-            <Input
+            <Label htmlFor={`${fieldId}-1`} className="text-xs">Label</Label>
+            <Input id={`${fieldId}-1`}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="Fort Worth — Plant Floor"
@@ -96,10 +100,10 @@ export function CreateKioskDialog() {
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">URL slug</Label>
+            <Label htmlFor={`${fieldId}-2`} className="text-xs">URL slug</Label>
             <div className="flex items-center rounded-md border bg-muted/30 pl-2 font-mono text-sm">
               <span className="text-muted-foreground">/kiosk/</span>
-              <Input
+              <Input id={`${fieldId}-2`}
                 value={effectiveSlug}
                 onChange={(e) => {
                   setSlug(e.target.value);
@@ -115,7 +119,7 @@ export function CreateKioskDialog() {
               Lowercase letters, numbers, hyphens. Must be unique.
             </p>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button
               type="button"
               variant="outline"
@@ -127,9 +131,9 @@ export function CreateKioskDialog() {
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create kiosk
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }

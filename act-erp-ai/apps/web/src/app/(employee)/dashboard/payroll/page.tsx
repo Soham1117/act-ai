@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Banknote, Download, Eye } from "lucide-react";
 import { businessDateOnly } from "@/lib/format";
 import { getPortalLanguage } from "@/lib/portal-i18n/server";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 
 export async function generateMetadata() {
   const { t } = await getPortalLanguage();
@@ -82,50 +83,95 @@ export default async function EmployeePayrollPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <ul className="divide-y">
-              {docs.length === 0 && (
-                <li className="grid h-32 place-items-center text-xs text-muted-foreground">
-                  {t("records.payroll.empty")}
-                </li>
-              )}
-              {docs.map((d) => (
-                <li
-                  key={d.id}
-                  className="grid grid-cols-[1fr_auto_auto] items-center gap-3 p-3"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{d.title}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {d.category} · {formatLocalizedDate(d.payPeriodStart)} →{" "}
-                      {formatLocalizedDate(d.payPeriodEnd)}
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">
-                    {formatDateTime(d.uploadedAt)}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <Link
-                      href={`/api/payroll/${d.id}/file`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                      aria-label={t("records.payroll.viewDocument", { title: d.title })}
-                    >
-                      <Eye className="inline h-3 w-3" />
-                    </Link>
-                    <a
-                      href={`/api/payroll/${d.id}/file?download=1`}
-                      className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                      aria-label={t("records.payroll.downloadDocument", {
-                        title: d.title,
-                      })}
-                    >
-                      <Download className="inline h-3 w-3" />
-                    </a>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {docs.length === 0 ? (
+              <p className="grid h-32 place-items-center text-xs text-muted-foreground">
+                {t("records.payroll.empty")}
+              </p>
+            ) : (
+              <ResponsiveDataList
+                mobile={
+                  <ul className="space-y-2 p-3">
+                    {docs.map((d) => (
+                      <li key={d.id}>
+                        <DataListCard className="space-y-2">
+                          <div>
+                            <p className="break-words text-sm font-medium">{d.title}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {d.category} · {formatLocalizedDate(d.payPeriodStart)} →{" "}
+                              {formatLocalizedDate(d.payPeriodEnd)}
+                            </p>
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              {formatDateTime(d.uploadedAt)}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Link
+                              href={`/api/payroll/${d.id}/file`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-md border text-xs hover:bg-muted"
+                              aria-label={t("records.payroll.viewDocument", { title: d.title })}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Link>
+                            <a
+                              href={`/api/payroll/${d.id}/file?download=1`}
+                              className="flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-md border text-xs hover:bg-muted"
+                              aria-label={t("records.payroll.downloadDocument", {
+                                title: d.title,
+                              })}
+                            >
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </div>
+                        </DataListCard>
+                      </li>
+                    ))}
+                  </ul>
+                }
+                desktop={
+                  <ul className="divide-y">
+                    {docs.map((d) => (
+                      <li
+                        key={d.id}
+                        className="grid grid-cols-[1fr_auto_auto] items-center gap-3 p-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium">{d.title}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {d.category} · {formatLocalizedDate(d.payPeriodStart)} →{" "}
+                            {formatLocalizedDate(d.payPeriodEnd)}
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatDateTime(d.uploadedAt)}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Link
+                            href={`/api/payroll/${d.id}/file`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                            aria-label={t("records.payroll.viewDocument", { title: d.title })}
+                          >
+                            <Eye className="inline h-3 w-3" />
+                          </Link>
+                          <a
+                            href={`/api/payroll/${d.id}/file?download=1`}
+                            className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                            aria-label={t("records.payroll.downloadDocument", {
+                              title: d.title,
+                            })}
+                          >
+                            <Download className="inline h-3 w-3" />
+                          </a>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                }
+              />
+            )}
           </CardContent>
         </Card>
 

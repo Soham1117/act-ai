@@ -4,13 +4,14 @@ import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plane } from "lucide-react";
-import { LeaveRequestDialog, type DialogBalances } from "./leave-request-dialog";
+import { LeaveRequestForm, type LeaveBalances } from "./leave-request-form";
 import { CancelLeaveButton } from "./cancel-leave-button";
 import { Progress } from "@/components/ui/progress";
 import { businessDateOnly } from "@/lib/format";
 import { LEAVE_TYPES, computeBalances, dateKey } from "@/lib/leave-balance";
 import { loadBalanceInput } from "@/lib/leave-balance-db";
 import { getPortalLanguage } from "@/lib/portal-i18n/server";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 
 export async function generateMetadata() {
   const { t } = await getPortalLanguage();
@@ -43,7 +44,7 @@ export default async function EmployeeLeavePage() {
 
   const cur = input ? computeBalances(input, year) : null;
   const next = input ? computeBalances(input, year + 1) : null;
-  const balances: DialogBalances = {};
+  const balances: LeaveBalances = {};
   for (const yb of [cur, next]) {
     if (!yb) continue;
     balances[yb.year] = Object.fromEntries(
@@ -69,8 +70,8 @@ export default async function EmployeeLeavePage() {
       <PageHeader
         title={t("time.leave.title")}
         description={t("time.leave.description", { year })}
-        actions={<LeaveRequestDialog balances={balances} today={dateKey(today)} />}
       />
+      <LeaveRequestForm balances={balances} today={dateKey(today)} />
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard label={t("time.leave.daysRemaining")} value={totals?.available ?? 0} icon={<Plane className="h-4 w-4" />} />
         <StatCard label={t("time.leave.takenApproved")} value={(totals?.taken ?? 0) + (totals?.upcoming ?? 0)} />
@@ -110,46 +111,126 @@ export default async function EmployeeLeavePage() {
       <Card className="mt-6">
         <CardHeader><CardTitle className="text-base">{t("time.leave.myRequests")}</CardTitle></CardHeader>
         <CardContent className="p-0">
-          <ul className="divide-y">
-            {requests.length === 0 && (
-              <li className="grid h-32 place-items-center text-xs text-muted-foreground">
-                {t("time.leave.noRequests")}
-              </li>
-            )}
-            {requests.map((r) => {
-              const variant =
-                r.status === "APPROVED" ? "success" :
-                r.status === "REJECTED" ? "destructive" :
-                r.status === "CANCELLED" ? "outline" : "warning";
-              const canCancel =
-                r.status === "PENDING" || (r.status === "APPROVED" && r.startDate > today);
-              return (
-                <li key={r.id} className="space-y-1 p-3">
-                  <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3">
-                    <div>
-                      <p className="text-sm font-medium">{leaveTypeLabel(r.leaveType)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDateOnly(r.startDate)} → {formatDateOnly(r.endDate)}
-                        {(r.startHalfDay || r.endHalfDay) && ` · ${t("time.leave.halfDay")}`}
-                      </p>
-                    </div>
-                    <span className="font-mono text-xs tabular-nums">{formatDays(Number(r.totalDays))}</span>
-                    <Badge variant={variant} className="text-[10px]">{enumLabel(r.status)}</Badge>
-                    {canCancel ? (
-                      <CancelLeaveButton id={r.id} approved={r.status === "APPROVED"} />
-                    ) : (
-                      <span className="w-8" />
-                    )}
-                  </div>
-                  {r.reviewNotes && (
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">{t("time.leave.noteFromReviewer")}</span> {r.reviewNotes}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          {requests.length === 0 ? (
+            <p className="grid h-32 place-items-center text-xs text-muted-foreground">
+              {t("time.leave.noRequests")}
+            </p>
+          ) : (
+            <ResponsiveDataList
+              mobile={
+                <ul className="space-y-2 p-3">
+                  {requests.map((r) => {
+                    const variant =
+                      r.status === "APPROVED"
+                        ? "success"
+                        : r.status === "REJECTED"
+                          ? "destructive"
+                          : r.status === "CANCELLED"
+                            ? "outline"
+                            : "warning";
+                    const canCancel =
+                      r.status === "PENDING" ||
+                      (r.status === "APPROVED" && r.startDate > today);
+                    return (
+                      <li key={r.id} className="space-y-1">
+                        <DataListCard className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium">
+                                {leaveTypeLabel(r.leaveType)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatDateOnly(r.startDate)} → {formatDateOnly(r.endDate)}
+                                {(r.startHalfDay || r.endHalfDay) &&
+                                  ` · ${t("time.leave.halfDay")}`}
+                              </p>
+                            </div>
+                            <Badge variant={variant} className="shrink-0 text-[10px]">
+                              {enumLabel(r.status)}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-mono text-xs tabular-nums">
+                              {formatDays(Number(r.totalDays))}
+                            </span>
+                            {canCancel && (
+                              <CancelLeaveButton
+                                id={r.id}
+                                approved={r.status === "APPROVED"}
+                              />
+                            )}
+                          </div>
+                        </DataListCard>
+                        {r.reviewNotes && (
+                          <p className="px-1 text-xs text-muted-foreground">
+                            <span className="font-medium">
+                              {t("time.leave.noteFromReviewer")}
+                            </span>{" "}
+                            {r.reviewNotes}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              }
+              desktop={
+                <ul className="divide-y">
+                  {requests.map((r) => {
+                    const variant =
+                      r.status === "APPROVED"
+                        ? "success"
+                        : r.status === "REJECTED"
+                          ? "destructive"
+                          : r.status === "CANCELLED"
+                            ? "outline"
+                            : "warning";
+                    const canCancel =
+                      r.status === "PENDING" ||
+                      (r.status === "APPROVED" && r.startDate > today);
+                    return (
+                      <li key={r.id} className="space-y-1 p-3">
+                        <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3">
+                          <div>
+                            <p className="text-sm font-medium">
+                              {leaveTypeLabel(r.leaveType)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatDateOnly(r.startDate)} → {formatDateOnly(r.endDate)}
+                              {(r.startHalfDay || r.endHalfDay) &&
+                                ` · ${t("time.leave.halfDay")}`}
+                            </p>
+                          </div>
+                          <span className="font-mono text-xs tabular-nums">
+                            {formatDays(Number(r.totalDays))}
+                          </span>
+                          <Badge variant={variant} className="text-[10px]">
+                            {enumLabel(r.status)}
+                          </Badge>
+                          {canCancel ? (
+                            <CancelLeaveButton
+                              id={r.id}
+                              approved={r.status === "APPROVED"}
+                            />
+                          ) : (
+                            <span className="w-8" />
+                          )}
+                        </div>
+                        {r.reviewNotes && (
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-medium">
+                              {t("time.leave.noteFromReviewer")}
+                            </span>{" "}
+                            {r.reviewNotes}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              }
+            />
+          )}
         </CardContent>
       </Card>
     </>

@@ -5,14 +5,14 @@ import { Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -120,26 +120,27 @@ export function UploadDocumentBulkDialog({
   }
 
   return (
-    <Dialog
+    <InlinePanel
       open={open}
       onOpenChange={(v) => {
+        if (pending) return;
         setOpen(v);
         if (!v) reset();
       }}
     >
-      <DialogTrigger asChild>
+      <InlinePanelTrigger asChild disabled={pending}>
         <Button size="sm">
           <Upload className="mr-1.5 h-3.5 w-3.5" />
           Upload to employees
         </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Upload to employees</DialogTitle>
-          <DialogDescription>
+      </InlinePanelTrigger>
+      <InlinePanelContent className="sm:max-w-lg">
+        <InlinePanelHeader>
+          <InlinePanelTitle>Upload to employees</InlinePanelTitle>
+          <InlinePanelDescription>
             One file, attached to every selected employee.
-          </DialogDescription>
-        </DialogHeader>
+          </InlinePanelDescription>
+        </InlinePanelHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div>
             <Label htmlFor="bulk-file">File</Label>
@@ -149,7 +150,7 @@ export function UploadDocumentBulkDialog({
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="bulk-title">Title</Label>
               <Input
@@ -210,12 +211,12 @@ export function UploadDocumentBulkDialog({
               </label>
             </div>
             <div className={allActive ? "pointer-events-none opacity-50" : undefined}>
-            <div className="mb-1.5 flex items-center justify-between">
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <Label>Recipients ({allActive ? "all active" : `${selected.size} selected`})</Label>
               <button
                 type="button"
                 onClick={selectAllVisible}
-                className="text-[11px] text-primary hover:underline"
+                disabled={allActive || pending} className="min-h-11 text-xs text-primary hover:underline"
               >
                 Select all visible
               </button>
@@ -237,12 +238,12 @@ export function UploadDocumentBulkDialog({
                     <li key={e.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                       <Checkbox
                         id={`emp-${e.id}`}
-                        checked={selected.has(e.id)}
+                        disabled={allActive || pending} checked={selected.has(e.id)}
                         onCheckedChange={() => toggle(e.id)}
                       />
                       <label
                         htmlFor={`emp-${e.id}`}
-                        className="flex-1 cursor-pointer truncate"
+                        className="min-w-0 flex-1 cursor-pointer break-words"
                       >
                         <span className="font-medium">{e.name}</span>
                         <span className="ml-2 text-[11px] text-muted-foreground">{e.email ?? "—"}</span>
@@ -254,17 +255,17 @@ export function UploadDocumentBulkDialog({
             </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          <InlinePanelFooter>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={pending || !file || (!allActive && selected.size === 0)}>
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Upload to {allActive ? "all active" : selected.size || ""}
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }

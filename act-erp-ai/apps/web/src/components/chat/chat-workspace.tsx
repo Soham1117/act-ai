@@ -11,7 +11,7 @@ import { EvidencePanel } from "./evidence-panel";
 /**
  * Full-viewport chat (ChatGPT layout): one centered column — messages scroll,
  * composer pinned at the bottom with the document-scope picker inside it. A
- * citation click opens the evidence panel (PDF visualizer) on the right. The
+ * citation click reveals the evidence panel below the conversation on phones and beside it on wide screens. The
  * parent layout adds p-4/md:p-6 and a sticky h-14 topbar — negative margins
  * cancel the padding so the workspace is exactly 100svh with no page scroll.
  */
@@ -41,7 +41,8 @@ export function ChatWorkspace({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 160)
+      el.scrollTop = el.scrollHeight;
   });
 
   const picker = (
@@ -54,8 +55,8 @@ export function ChatWorkspace({
   );
 
   return (
-    <div className="-m-4 flex h-[calc(100svh-3.5rem)] overflow-hidden md:-m-6">
-      <section className="flex h-full min-w-0 flex-1 flex-col">
+    <div className="-m-4 flex h-[calc(100dvh-3.5rem)] min-w-0 flex-col overflow-hidden md:-m-6 md:flex-row">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
             {turns.length === 0 && (
@@ -69,7 +70,7 @@ export function ChatWorkspace({
             )}
             {turns.map((t, i) => (
               <div key={i} className="space-y-3">
-                <div className="ml-auto w-fit max-w-[80%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground">
+                <div className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground sm:max-w-[80%]">
                   {t.user}
                 </div>
                 <AssistantMessageView message={t.assistant} onCite={setCitation} />
@@ -79,7 +80,12 @@ export function ChatWorkspace({
         </div>
         <div className="shrink-0 px-4 pb-4 pt-1">
           <div className="mx-auto w-full max-w-3xl">
-            <ChatComposer busy={busy} onSend={handleSend} onStop={stop} leading={picker} />
+            <ChatComposer
+              busy={busy}
+              onSend={handleSend}
+              onStop={stop}
+              leading={picker}
+            />
             <p className="mt-1.5 text-center text-[11px] text-muted-foreground/70">
               Answers are grounded in your documents — click an [E#] to see the source.
             </p>
@@ -88,7 +94,10 @@ export function ChatWorkspace({
       </section>
 
       {citation && (
-        <aside className="w-[clamp(320px,38vw,560px)] shrink-0">
+        <aside
+          aria-label="Selected source evidence"
+          className="h-[55dvh] max-h-[55dvh] w-full min-w-0 shrink-0 border-t md:h-full md:max-h-none md:w-[clamp(320px,38vw,560px)] md:border-l md:border-t-0"
+        >
           <EvidencePanel citation={citation} onClose={() => setCitation(null)} />
         </aside>
       )}

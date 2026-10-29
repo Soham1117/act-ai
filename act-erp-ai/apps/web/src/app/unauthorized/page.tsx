@@ -18,11 +18,11 @@ export default function UnauthorizedPage() {
             mistake, ask an admin to update your role.
           </p>
         </div>
-        <div className="flex justify-center gap-2">
-          <Button asChild>
+        <div className="flex flex-col justify-center gap-2 sm:flex-row">
+          <Button asChild className="min-h-11 md:min-h-9">
             <Link href="/dashboard">Go to dashboard</Link>
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="min-h-11 md:min-h-9">
             <Link href="/login">Sign in as another user</Link>
           </Button>
         </div>

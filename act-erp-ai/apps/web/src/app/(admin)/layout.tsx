@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AdminSidebar } from "@/components/admin-sidebar";
+import { AdminSidebar, AdminSidebarMobileNav } from "@/components/admin-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
 import { db } from "@/lib/db";
 import { aiEnabled } from "@/lib/features";
@@ -27,6 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminSidebar aiEnabled={aiEnabled} />
         <SidebarInset className="min-w-0">
           <AppTopbar user={user} initialUnread={initialUnread} />
+          <AdminSidebarMobileNav aiEnabled={aiEnabled} />
           <div className="min-w-0 flex-1 p-4 md:p-6">{children}</div>
         </SidebarInset>
       </SidebarProvider>

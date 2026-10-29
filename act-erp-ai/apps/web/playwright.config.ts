@@ -43,6 +43,20 @@ export default defineConfig({
         permissions: ["camera"],
       },
     },
+    {
+      name: "mobile-chrome",
+      use: {
+        ...devices["Pixel 7"],
+        viewport: { width: 390, height: 844 },
+        launchOptions: {
+          args: [
+            "--use-fake-device-for-media-stream",
+            "--use-fake-ui-for-media-stream",
+          ],
+        },
+        permissions: ["camera"],
+      },
+    },
   ],
   webServer: {
     // CI builds and serves the production bundle (catches build errors too).

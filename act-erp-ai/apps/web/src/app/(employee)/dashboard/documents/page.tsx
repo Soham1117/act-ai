@@ -5,8 +5,9 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Download, FileText } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UploadDocumentDialog } from "@/components/upload-document-dialog";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { MobileTabsList } from "@/components/mobile";
+import { UploadDocumentForm } from "@/components/upload-document-form";
 import { DeleteDocumentButton } from "@/components/delete-document-button";
 import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
@@ -56,7 +57,7 @@ export default async function MyDocumentsPage() {
           { count: new Intl.NumberFormat(locale).format(docs.length) },
         )}
         actions={
-          <UploadDocumentDialog
+          <UploadDocumentForm
             allowedTypes={["PERSONAL", "ONBOARDING", "TRAINING"]}
             defaultType="PERSONAL"
           />
@@ -70,7 +71,7 @@ export default async function MyDocumentsPage() {
       </div>
 
       <Tabs defaultValue="ALL" className="space-y-4">
-        <TabsList>
+        <MobileTabsList>
           <TabsTrigger value="ALL">
             {t("records.documents.all", {
               count: new Intl.NumberFormat(locale).format(docs.length),
@@ -82,7 +83,7 @@ export default async function MyDocumentsPage() {
               {new Intl.NumberFormat(locale).format(grouped[type].length)})
             </TabsTrigger>
           ))}
-        </TabsList>
+        </MobileTabsList>
         <TabsContent value="ALL">
           <DocList
             docs={docs}
@@ -164,12 +165,12 @@ function DocList({
                 </div>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <Link
                 href={`/api/documents/${d.id}/file`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex h-8 flex-1 items-center justify-center rounded-md border text-xs hover:bg-muted"
+                className="flex min-h-11 flex-1 items-center justify-center rounded-md border text-xs hover:bg-muted md:min-h-9"
               >
                 <Download className="mr-1.5 h-3 w-3" /> {t("records.documents.download")}
               </Link>
@@ -177,7 +178,7 @@ function DocList({
                 <DeleteDocumentButton
                   id={d.id}
                   title={d.title}
-                  className="flex h-8 w-8 items-center justify-center rounded-md border text-destructive hover:bg-destructive/10"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-md border text-destructive hover:bg-destructive/10 md:min-h-9 md:min-w-9"
                 />
               )}
             </div>

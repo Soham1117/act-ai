@@ -13,9 +13,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMobileNav,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { AssistantNav } from "@/components/assistant-nav";
+import { cn } from "@/lib/utils";
 import {
   Activity,
   Banknote,
@@ -85,17 +88,21 @@ const NAV: Array<{
   },
 ];
 
-/** Nav entries that only make sense when the AI feature is switched on. */
 const AI_ONLY_HREFS = new Set(["/admin/chat", "/admin/knowledge"]);
 
-export function AdminSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
-  const pathname = usePathname();
-  const nav = aiEnabled
+function useAdminNav(aiEnabled: boolean) {
+  return aiEnabled
     ? NAV
     : NAV.map((section) => ({
         ...section,
         items: section.items.filter((item) => !AI_ONLY_HREFS.has(item.href)),
       })).filter((section) => section.items.length > 0);
+}
+
+export function AdminSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
+  const pathname = usePathname();
+  const nav = useAdminNav(aiEnabled);
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -137,5 +144,56 @@ export function AdminSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
       </SidebarContent>
       <SidebarRail />
     </Sidebar>
+  );
+}
+
+/** Plain vertical mobile menu — no SidebarMenu flex primitives. */
+export function AdminSidebarMobileNav({ aiEnabled = false }: { aiEnabled?: boolean }) {
+  const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
+  const nav = useAdminNav(aiEnabled);
+
+  return (
+    <SidebarMobileNav>
+      <Link
+        href="/admin"
+        className="mb-2 flex items-center px-2 py-1"
+        aria-label="American Completion Tools"
+        onClick={() => setOpenMobile(false)}
+      >
+        <Logo priority className="h-7" />
+      </Link>
+      <nav className="flex w-full flex-col gap-4">
+        {nav.map((section) => (
+          <div key={section.group} className="flex w-full flex-col gap-1">
+            <p className="px-2 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/55">
+              {section.group}
+            </p>
+            <ul className="flex w-full list-none flex-col gap-0.5 p-0">
+              {section.items.map((item) => {
+                const active =
+                  pathname === item.href ||
+                  (item.href !== "/admin" && pathname.startsWith(item.href));
+                return (
+                  <li key={item.href} className="w-full">
+                    <Link
+                      href={item.href}
+                      onClick={() => setOpenMobile(false)}
+                      className={cn(
+                        "flex min-h-11 w-full items-center gap-3 rounded-md px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                        active && "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+                      )}
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    </SidebarMobileNav>
   );
 }

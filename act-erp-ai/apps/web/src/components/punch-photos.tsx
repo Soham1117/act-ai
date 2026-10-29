@@ -1,13 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { formatBusinessTime } from "@/lib/format";
 
 type Side = "in" | "out";
@@ -50,6 +45,9 @@ export function PunchPhotos({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState<Record<Side, boolean>>({ in: false, out: false });
+  const panelId = useId();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const restoreFocus = useRef(false);
   const fromKiosk = source === "KIOSK";
   const sides: Side[] = inOnly ? ["in"] : ["in", "out"];
   const timeOf = (s: Side) => (s === "in" ? clockIn : clockOut);
@@ -63,11 +61,38 @@ export function PunchPhotos({
     if (el && el.complete && el.naturalWidth === 0) queueMicrotask(() => markFailed(s));
   };
 
+  useEffect(() => {
+    if (!open && restoreFocus.current) {
+      restoreFocus.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [open]);
+
+  function closePanel() {
+    restoreFocus.current = true;
+    setOpen(false);
+  }
+
+  function onThumbnailClick(el: HTMLButtonElement) {
+    if (open) {
+      closePanel();
+      return;
+    }
+    triggerRef.current = el;
+    setOpen(true);
+  }
+
   if (!hasIn && !hasOut && !fromKiosk) return null;
 
   return (
-    <>
-      <div className="flex items-center gap-1">
+    <div
+      className={
+        open
+          ? "col-span-full w-full min-w-0 basis-full whitespace-normal"
+          : "min-w-0 whitespace-normal"
+      }
+    >
+      <div className="flex flex-wrap items-center gap-1">
         {sides.map((s) =>
           (s === "in" ? hasIn : hasOut) && gone(s) ? (
             <Badge key={s} variant="outline" className="text-[10px] font-normal text-muted-foreground">
@@ -77,8 +102,10 @@ export function PunchPhotos({
             <button
               key={s}
               type="button"
-              onClick={() => setOpen(true)}
+              onClick={(e) => onThumbnailClick(e.currentTarget)}
               title={s === "in" ? "Clock in photo" : "Clock out photo"}
+              aria-expanded={open}
+              aria-controls={open ? panelId : undefined}
               className="h-8 w-8 shrink-0 overflow-hidden rounded border bg-muted"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -98,11 +125,13 @@ export function PunchPhotos({
           ) : null,
         )}
       </div>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Punch photos</DialogTitle>
-          </DialogHeader>
+      {open && (
+        <section
+          id={panelId}
+          aria-label="Punch photos"
+          className="mt-2 min-w-0 space-y-3 rounded-md border bg-card p-3 text-left"
+        >
+          <p className="text-sm font-medium">Punch photos</p>
           <div className="grid gap-4 sm:grid-cols-2">
             {sides.map((s) => {
               const t = s === "in" ? clockIn : clockOut;
@@ -135,8 +164,11 @@ export function PunchPhotos({
               );
             })}
           </div>
-        </DialogContent>
-      </Dialog>
-    </>
+          <Button type="button" variant="outline" className="min-h-11 md:min-h-9" onClick={closePanel}>
+            Close
+          </Button>
+        </section>
+      )}
+    </div>
   );
 }

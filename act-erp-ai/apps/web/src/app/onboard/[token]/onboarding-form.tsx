@@ -631,7 +631,7 @@ export function OnboardingForm({
       )}
 
       {step === 0 && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label={t("auth.onboard.fullName")}>
             <Input value={form.name} onChange={(e) => update("name", e.target.value)} required />
           </Field>
@@ -790,7 +790,7 @@ export function OnboardingForm({
       )}
 
       {step === 1 && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="col-span-2">
             <Field label={t("auth.onboard.streetAddress")}>
               <Input
@@ -864,7 +864,7 @@ export function OnboardingForm({
 
       {step === 2 && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={t("auth.onboard.positionApplied")}>
               <Input
                 value={form.application.positionApplied ?? ""}
@@ -928,7 +928,7 @@ export function OnboardingForm({
               gradSchool: t("auth.onboard.edu.gradSchool"),
             };
             return (
-              <div key={key} className="grid grid-cols-2 gap-2 rounded-md border p-3">
+              <div key={key} className="grid grid-cols-1 gap-2 sm:grid-cols-2 rounded-md border p-3">
                 <p className="col-span-2 text-xs font-medium">{labels[key]}</p>
                 <Input
                   placeholder={t("auth.onboard.edu.name")}
@@ -966,7 +966,7 @@ export function OnboardingForm({
 
           <SectionTitle>{t("auth.onboard.employmentSection")}</SectionTitle>
           {form.application.employers.map((emp, idx) => (
-            <div key={idx} className="grid grid-cols-2 gap-2 rounded-md border p-3">
+            <div key={idx} className="grid grid-cols-1 gap-2 sm:grid-cols-2 rounded-md border p-3">
               <p className="col-span-2 text-xs font-medium">
                 {t("auth.onboard.employerN", { n: idx + 1 })}
               </p>
@@ -1056,7 +1056,7 @@ export function OnboardingForm({
           ))}
 
           <SectionTitle>{t("auth.onboard.militarySection")}</SectionTitle>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <YesNo
               label={t("auth.onboard.militaryService")}
               value={form.application.militaryService}
@@ -1094,7 +1094,7 @@ export function OnboardingForm({
 
           <SectionTitle>{t("auth.onboard.referencesSection")}</SectionTitle>
           {form.application.references.map((ref, idx) => (
-            <div key={idx} className="grid grid-cols-2 gap-2 rounded-md border p-3">
+            <div key={idx} className="grid grid-cols-1 gap-2 sm:grid-cols-2 rounded-md border p-3">
               <Input
                 placeholder={t("auth.onboard.referenceName")}
                 value={ref.name ?? ""}
@@ -1173,7 +1173,7 @@ export function OnboardingForm({
           <p className="whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs leading-relaxed">
             {DIRECT_DEPOSIT_ACK_TEXT}
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={t("auth.onboard.bankName")}>
               <Input
                 value={form.ddBankName}
@@ -1350,7 +1350,7 @@ export function OnboardingForm({
             </Alert>
           )}
           <p className="text-xs text-muted-foreground">{t("auth.onboard.createAccountHelp")}</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={t("auth.onboard.workEmail")}>
               <Input
                 type="email"
@@ -1400,12 +1400,17 @@ export function OnboardingForm({
         </div>
       )}
 
-      <div className="flex justify-between gap-2 pt-2">
-        <Button variant="outline" onClick={back} disabled={step === 0 || pending}>
+      <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-between">
+        <Button
+          variant="outline"
+          className="min-h-11 w-full sm:w-auto md:min-h-9"
+          onClick={back}
+          disabled={step === 0 || pending}
+        >
           <ChevronLeft className="mr-1 h-4 w-4" /> {t("auth.onboard.back")}
         </Button>
         {isLast ? (
-          <Button onClick={submit} disabled={pending}>
+          <Button className="min-h-11 w-full sm:w-auto md:min-h-9" onClick={submit} disabled={pending}>
             {pending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -1414,7 +1419,7 @@ export function OnboardingForm({
             {t("auth.onboard.submit")}
           </Button>
         ) : (
-          <Button onClick={next} disabled={pending}>
+          <Button className="min-h-11 w-full sm:w-auto md:min-h-9" onClick={next} disabled={pending}>
             {t("auth.onboard.next")} <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         )}

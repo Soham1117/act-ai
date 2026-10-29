@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { UserMinus, UserCheck, Loader2, Pencil, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { runAction, toastAction } from "@/lib/toast-action";
@@ -35,6 +35,7 @@ export function StatusToggle({
   terminationDate: string | null;
   terminationReason: string | null;
 }) {
+  const fieldId = useId();
   const isTerminated = status === "TERMINATED";
   const isInactive = status === "INACTIVE";
   const [open, setOpen] = useState(false);
@@ -49,8 +50,8 @@ export function StatusToggle({
   if (status === "PENDING_REVIEW") return null;
 
   const terminateDialog = (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <InlinePanel disabled={pending} open={open} onOpenChange={setOpen}>
+      <InlinePanelTrigger asChild>
         {isTerminated ? (
           <Button variant="ghost" size="sm">
             <Pencil className="mr-2 h-3.5 w-3.5" /> Edit termination
@@ -65,21 +66,21 @@ export function StatusToggle({
             <UserMinus className="mr-2 h-3.5 w-3.5" /> Terminate
           </Button>
         )}
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{isTerminated ? "Edit termination" : "Terminate employee"}</DialogTitle>
-          <DialogDescription>
+      </InlinePanelTrigger>
+      <InlinePanelContent className="max-w-md">
+        <InlinePanelHeader>
+          <InlinePanelTitle>{isTerminated ? "Edit termination" : "Terminate employee"}</InlinePanelTitle>
+          <InlinePanelDescription>
             The employee record and all documents are kept. The employee can still sign in
             <strong> read-only for {TERMINATION_GRACE_DAYS} days after the termination date</strong>{" "}
             (to view pay stubs and documents), then sign-in stops. They can&apos;t use the
             time clock kiosk once terminated. You can reactivate at any time.
-          </DialogDescription>
-        </DialogHeader>
+          </InlinePanelDescription>
+        </InlinePanelHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Termination date</Label>
-            <Input
+            <Label htmlFor={`${fieldId}-1`} className="text-xs">Termination date</Label>
+            <Input id={`${fieldId}-1`}
               type="date"
               value={date}
               max={todayDateString()}
@@ -90,15 +91,15 @@ export function StatusToggle({
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Reason (optional)</Label>
-            <Input
+            <Label htmlFor={`${fieldId}-2`} className="text-xs">Reason (optional)</Label>
+            <Input id={`${fieldId}-2`}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Resigned, end of contract, etc."
             />
           </div>
         </div>
-        <DialogFooter>
+        <InlinePanelFooter>
           <Button type="button" variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
@@ -120,30 +121,30 @@ export function StatusToggle({
             {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isTerminated ? "Save" : "Terminate"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </InlinePanelFooter>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 
   return (
     <>
       {terminateDialog}
       {!isTerminated && !isInactive && (
-        <Dialog open={inactiveOpen} onOpenChange={setInactiveOpen}>
-          <DialogTrigger asChild>
+        <InlinePanel disabled={pending} open={inactiveOpen} onOpenChange={setInactiveOpen}>
+          <InlinePanelTrigger asChild>
             <Button variant="outline" size="sm" disabled={isAdmin || pending} title={isAdmin ? "Remove their admin role first" : undefined}>
               <Pause className="mr-2 h-3.5 w-3.5" /> Make inactive
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Make employee inactive?</DialogTitle>
-              <DialogDescription>
+          </InlinePanelTrigger>
+          <InlinePanelContent className="max-w-md">
+            <InlinePanelHeader>
+              <InlinePanelTitle>Make employee inactive?</InlinePanelTitle>
+              <InlinePanelDescription>
                 Employment does not end. Records and documents are kept, and portal access becomes read-only.
                 The employee cannot clock in. Any open shift is clocked out for approval. You can reactivate at any time.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
+              </InlinePanelDescription>
+            </InlinePanelHeader>
+            <InlinePanelFooter>
               <Button variant="outline" disabled={pending} onClick={() => setInactiveOpen(false)}>Cancel</Button>
               <Button disabled={pending} onClick={() => startTransition(async () => {
                 const res = await runAction(() => setEmployeeActive(employeeId, false));
@@ -154,9 +155,9 @@ export function StatusToggle({
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Make inactive
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </InlinePanelFooter>
+          </InlinePanelContent>
+        </InlinePanel>
       )}
       {(isTerminated || isInactive) && <Button
         variant="outline"

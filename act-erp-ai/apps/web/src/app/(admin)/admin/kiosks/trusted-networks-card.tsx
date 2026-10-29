@@ -8,15 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  InlinePanel,
+  InlinePanelAction,
+  InlinePanelCancel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { toastAction, toastCaught } from "@/lib/toast-action";
 import { formatBusinessDateTime } from "@/lib/format";
 import {
@@ -172,19 +172,19 @@ export function TrustedNetworksCard({
         </form>
       </CardContent>
 
-      <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this network?</AlertDialogTitle>
-            <AlertDialogDescription>
+      <InlinePanel disabled={pending} open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Remove this network?</InlinePanelTitle>
+            <InlinePanelDescription>
               Kiosks cannot be activated from{" "}
               <span className="font-mono">{removing?.cidr}</span> after this. Kiosks that are
               already activated keep working.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            </InlinePanelDescription>
+          </InlinePanelHeader>
+          <InlinePanelFooter>
+            <InlinePanelCancel disabled={pending}>Cancel</InlinePanelCancel>
+            <InlinePanelAction
               disabled={pending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={(e) => {
@@ -200,10 +200,10 @@ export function TrustedNetworksCard({
               }}
             >
               Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </InlinePanelAction>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </Card>
   );
 }

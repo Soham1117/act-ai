@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { generatePayrollSlipCsv } from "./actions";
 
@@ -55,18 +55,22 @@ export function DownloadCsvButton({
         disabled={pending}
         onClick={() => (blockingExceptions ? setOverrideOpen(true) : download())}
       >
-        {pending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
+        {pending ? (
+          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Download className="mr-1.5 h-3.5 w-3.5" />
+        )}
         Download CSV
       </Button>
-      <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Override payroll readiness?</DialogTitle>
-            <DialogDescription>
-              This period has unresolved employee time. Review the readiness list before exporting.
-              Continuing requires a reason and creates an audit record.
-            </DialogDescription>
-          </DialogHeader>
+      <InlinePanel open={overrideOpen} onOpenChange={setOverrideOpen}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Override payroll readiness?</InlinePanelTitle>
+            <InlinePanelDescription>
+              This period has unresolved employee time. Review the readiness list before
+              exporting. Continuing requires a reason and creates an audit record.
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="space-y-2">
             <Label htmlFor="payroll-override-reason">Override reason</Label>
             <Textarea
@@ -76,10 +80,16 @@ export function DownloadCsvButton({
               maxLength={500}
               placeholder="Explain why payroll can be exported with these exceptions…"
             />
-            <p className="text-xs text-muted-foreground">At least 10 characters required.</p>
+            <p className="text-xs text-muted-foreground">
+              At least 10 characters required.
+            </p>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOverrideOpen(false)} disabled={pending}>
+          <InlinePanelFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOverrideOpen(false)}
+              disabled={pending}
+            >
               Cancel
             </Button>
             <Button
@@ -89,9 +99,9 @@ export function DownloadCsvButton({
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Export with override
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }

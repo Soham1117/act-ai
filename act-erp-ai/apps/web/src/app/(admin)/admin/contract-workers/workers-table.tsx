@@ -3,15 +3,45 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { formatDateOnly } from "@/lib/format";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 import {
   ClockOutButton,
   EndAssignmentButton,
   ReactivateButton,
   ResetPinButton,
-  WorkerFormDialog,
+  WorkerForm,
   WorkerActiveButton,
 } from "./worker-dialogs";
-import { LiveBadge, type AgencyOption, type JobCodeOption, type WorkerRow } from "./shared";
+import {
+  LiveBadge,
+  type AgencyOption,
+  type JobCodeOption,
+  type WorkerRow,
+} from "./shared";
+
+function WorkerActions({
+  w,
+  agencies,
+  jobCodes,
+}: {
+  w: WorkerRow;
+  agencies: AgencyOption[];
+  jobCodes: JobCodeOption[];
+}) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      <WorkerForm worker={w} agencies={agencies} jobCodes={jobCodes} trigger="edit" />
+      {w.liveStatus !== "OUT" && <ClockOutButton workerId={w.id} name={w.name} />}
+      <ResetPinButton workerId={w.id} name={w.name} />
+      {w.status !== "ENDED" && <WorkerActiveButton worker={w} />}
+      {w.status !== "ENDED" ? (
+        <EndAssignmentButton worker={w} />
+      ) : (
+        <ReactivateButton worker={w} />
+      )}
+    </div>
+  );
+}
 
 export function WorkersTable({
   workers,
@@ -23,8 +53,13 @@ export function WorkersTable({
   jobCodes: JobCodeOption[];
 }) {
   if (workers.length === 0)
-    return <p className="py-10 text-center text-sm text-muted-foreground">No contract workers match.</p>;
-  return (
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        No contract workers match.
+      </p>
+    );
+
+  const table = (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
@@ -43,17 +78,23 @@ export function WorkersTable({
             <tr key={w.id} className="border-b align-middle last:border-0">
               <td className="p-3 font-mono text-xs">{w.workerId}</td>
               <td className="p-3 font-medium">
-                <Link href={`/admin/contract-workers/${w.id}`} className="hover:underline">
+                <Link
+                  href={`/admin/contract-workers/${w.id}`}
+                  className="hover:underline"
+                >
                   {w.name}
                 </Link>
               </td>
               <td className="p-3">{w.agencyName}</td>
               <td className="p-3">
                 <div>{w.project ?? "—"}</div>
-                <div className="font-mono text-[11px] text-muted-foreground">{w.jobCode ?? "no job code"}</div>
+                <div className="font-mono text-[11px] text-muted-foreground">
+                  {w.jobCode ?? "no job code"}
+                </div>
               </td>
               <td className="whitespace-nowrap p-3 text-xs">
-                {formatDateOnly(w.startDate)} to {w.endDate ? formatDateOnly(w.endDate) : "open"}
+                {formatDateOnly(w.startDate)} to{" "}
+                {w.endDate ? formatDateOnly(w.endDate) : "open"}
               </td>
               <td className="p-3">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -73,11 +114,7 @@ export function WorkersTable({
               </td>
               <td className="p-3">
                 <div className="flex flex-wrap justify-end gap-1">
-                  <WorkerFormDialog worker={w} agencies={agencies} jobCodes={jobCodes} trigger="edit" />
-                  {w.liveStatus !== "OUT" && <ClockOutButton workerId={w.id} name={w.name} />}
-                  <ResetPinButton workerId={w.id} name={w.name} />
-                  {w.status !== "ENDED" && <WorkerActiveButton worker={w} />}
-                  {w.status !== "ENDED" ? <EndAssignmentButton worker={w} /> : <ReactivateButton worker={w} />}
+                  <WorkerActions w={w} agencies={agencies} jobCodes={jobCodes} />
                 </div>
               </td>
             </tr>
@@ -85,5 +122,61 @@ export function WorkersTable({
         </tbody>
       </table>
     </div>
+  );
+
+  return (
+    <ResponsiveDataList
+      mobile={
+        <div className="space-y-2 p-2">
+          {workers.map((w) => (
+            <DataListCard key={w.id}>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/admin/contract-workers/${w.id}`}
+                      className="text-sm font-medium hover:underline"
+                    >
+                      {w.name}
+                    </Link>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {w.workerId}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {w.status !== "ACTIVE" ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {w.status === "INACTIVE" ? "Inactive" : "Ended"}
+                      </Badge>
+                    ) : (
+                      <LiveBadge status={w.liveStatus} />
+                    )}
+                    {w.endingSoon && (
+                      <Badge variant="warning" className="text-[10px]">
+                        Ending soon
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">{w.agencyName}</p>
+                <p className="text-xs">
+                  {w.project ?? "—"}
+                  <span className="font-mono text-muted-foreground">
+                    {" "}
+                    · {w.jobCode ?? "no job code"}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {formatDateOnly(w.startDate)} →{" "}
+                  {w.endDate ? formatDateOnly(w.endDate) : "open"}
+                </p>
+                <WorkerActions w={w} agencies={agencies} jobCodes={jobCodes} />
+              </div>
+            </DataListCard>
+          ))}
+        </div>
+      }
+      desktop={table}
+    />
   );
 }

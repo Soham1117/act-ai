@@ -5,15 +5,15 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  InlinePanel,
+  InlinePanelAction,
+  InlinePanelCancel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { setKioskRequirePin } from "@/server/actions/kiosk";
 import { runAction, toastAction } from "@/lib/toast-action";
 
@@ -41,7 +41,7 @@ export function RequirePinSwitch({
 
   return (
     <div className="mt-2 space-y-1">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Switch
           id={switchId}
           checked={requirePin}
@@ -57,19 +57,19 @@ export function RequirePinSwitch({
         their PIN.
       </p>
 
-      <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Turn off the PIN at {label}?</AlertDialogTitle>
-            <AlertDialogDescription>
+      <InlinePanel disabled={pending} open={confirmOff} onOpenChange={setConfirmOff}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Turn off the PIN at {label}?</InlinePanelTitle>
+            <InlinePanelDescription>
               Workers will pick their name and punch without a PIN. A photo is taken at every
               clock in and clock out, and photos are kept for 30 days. You can turn the PIN back
               on at any time.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            </InlinePanelDescription>
+          </InlinePanelHeader>
+          <InlinePanelFooter>
+            <InlinePanelCancel disabled={pending}>Cancel</InlinePanelCancel>
+            <InlinePanelAction
               disabled={pending}
               onClick={(e) => {
                 e.preventDefault();
@@ -77,10 +77,10 @@ export function RequirePinSwitch({
               }}
             >
               Turn off PIN
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </InlinePanelAction>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </div>
   );
 }

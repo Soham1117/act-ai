@@ -15,6 +15,7 @@ import {
   type EligibilityType,
 } from "@/lib/benefit-eligibility";
 import { formatDateOnly } from "@/lib/format";
+import { DataListCard, FilterStack, ResponsiveDataList } from "@/components/mobile";
 import { runAction, toastAction } from "@/lib/toast-action";
 import {
   saveBenefitEligibilityAssessment,
@@ -25,7 +26,7 @@ import type { adminBenefitEligibilityData } from "@/server/queries/benefit-eligi
 
 type Data = Awaited<ReturnType<typeof adminBenefitEligibilityData>>;
 const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
+  "flex min-h-11 w-full min-w-0 rounded-md md:min-h-9 border border-input bg-background px-3 text-base md:text-sm";
 
 export function EligibilityWorkspace({ data }: { data: Data }) {
   const [filter, setFilter] = useState<string>("");
@@ -90,8 +91,8 @@ export function EligibilityWorkspace({ data }: { data: Data }) {
             </p>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1">
+        <FilterStack className="sm:grid sm:grid-cols-3 sm:gap-3">
+          <div className="w-full space-y-1">
             <Label htmlFor="eligibility-employee-search">Employee name or ID</Label>
             <Input
               id="eligibility-employee-search"
@@ -142,55 +143,90 @@ export function EligibilityWorkspace({ data }: { data: Data }) {
               ))}
             </select>
           </div>
-        </div>
+        </FilterStack>
         <p role="status" className="text-sm text-muted-foreground">
           Showing {displayed.length} of {visible.length} matching records.
         </p>
-        <div className="max-h-[36rem] overflow-auto rounded-md border">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="p-3">Employee</th>
-                <th className="p-3">Benefit</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Proposed date</th>
-                <th className="p-3">Review</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayed.map((row) => (
-                <tr
-                  key={`${row.employeeId}-${row.benefitType}`}
-                  data-employee-id={row.employeeId}
-                  data-benefit-type={row.benefitType}
-                  className="border-b last:border-0"
-                >
-                  <td className="p-3 font-medium">
-                    {row.employeeName}
-                    <div className="font-mono text-xs font-normal text-muted-foreground">
-                      {row.employeeCode}
+        <ResponsiveDataList
+          mobile={
+            <div className="max-h-[36rem] space-y-2 overflow-y-auto">
+              {displayed.length === 0 ? (
+                <p className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                  No employees match these filters.
+                </p>
+              ) : (
+                displayed.map((row) => (
+                  <DataListCard key={`${row.employeeId}-${row.benefitType}`}>
+                    <div className="space-y-1 text-sm">
+                      <p className="font-medium">{row.employeeName}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {row.employeeCode}
+                      </p>
+                      <p className="text-xs">
+                        {benefitTypeLabel(row.benefitType)} ·{" "}
+                        {eligibilityStateLabel[row.state]}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Proposed{" "}
+                        {row.proposedDate ? formatDateOnly(row.proposedDate) : "—"}
+                      </p>
+                      {row.reason && (
+                        <p className="text-xs text-muted-foreground">{row.reason}</p>
+                      )}
                     </div>
-                  </td>
-                  <td className="p-3">{benefitTypeLabel(row.benefitType)}</td>
-                  <td className="p-3">{eligibilityStateLabel[row.state]}</td>
-                  <td className="whitespace-nowrap p-3">
-                    {row.proposedDate ? formatDateOnly(row.proposedDate) : "—"}
-                  </td>
-                  <td className="max-w-sm p-3 text-xs text-muted-foreground">
-                    {row.reason}
-                  </td>
-                </tr>
-              ))}
-              {displayed.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-4 text-center text-muted-foreground">
-                    No employees match these filters.
-                  </td>
-                </tr>
+                  </DataListCard>
+                ))
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          }
+          desktop={
+            <div className="max-h-[36rem] overflow-auto rounded-md border">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="p-3">Employee</th>
+                    <th className="p-3">Benefit</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Proposed date</th>
+                    <th className="p-3">Review</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayed.map((row) => (
+                    <tr
+                      key={`${row.employeeId}-${row.benefitType}`}
+                      data-employee-id={row.employeeId}
+                      data-benefit-type={row.benefitType}
+                      className="border-b last:border-0"
+                    >
+                      <td className="p-3 font-medium">
+                        {row.employeeName}
+                        <div className="font-mono text-xs font-normal text-muted-foreground">
+                          {row.employeeCode}
+                        </div>
+                      </td>
+                      <td className="p-3">{benefitTypeLabel(row.benefitType)}</td>
+                      <td className="p-3">{eligibilityStateLabel[row.state]}</td>
+                      <td className="whitespace-nowrap p-3">
+                        {row.proposedDate ? formatDateOnly(row.proposedDate) : "—"}
+                      </td>
+                      <td className="max-w-sm p-3 text-xs text-muted-foreground">
+                        {row.reason}
+                      </td>
+                    </tr>
+                  ))}
+                  {displayed.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-4 text-center text-muted-foreground">
+                        No employees match these filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          }
+        />
         {displayed.length < visible.length && (
           <Button
             variant="outline"

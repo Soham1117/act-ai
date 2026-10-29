@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmployeesTable } from "./employees-table";
-import { AddEmployeeDialog } from "./add-employee-dialog";
+import { AddEmployeePanel } from "./add-employee-dialog";
 import { PendingHireActions } from "./pending-hire-actions";
 
 export const metadata = { title: "Employees" };
@@ -32,8 +32,9 @@ export default async function EmployeesPage() {
       <PageHeader
         title="Employees"
         description={`${employees.length} record${employees.length === 1 ? "" : "s"} · ${departments.length} departments`}
-        actions={<AddEmployeeDialog departments={departments} />}
+
       />
+      <div className="mb-6"><AddEmployeePanel departments={departments} /></div>
       {pendingHires.length > 0 && (
         <Card className="mb-4 border-amber-500/50 bg-amber-500/5">
           <CardHeader className="pb-2">

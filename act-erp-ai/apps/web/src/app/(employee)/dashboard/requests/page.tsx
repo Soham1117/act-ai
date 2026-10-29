@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RequestDialog } from "./request-dialog";
+import { RequestForm } from "./request-form";
 import { CancelRequestButton } from "./cancel-request-button";
 import { getPortalLanguage } from "@/lib/portal-i18n/server";
 
@@ -45,11 +45,9 @@ export default async function EmployeeRequestsPage({
       <PageHeader
         title={t("workspace.requests.title")}
         description={t("workspace.requests.description")}
-        actions={
-          <RequestDialog
-            initialType={sp.type === "BENEFITS_INQUIRY" ? "BENEFITS_INQUIRY" : undefined}
-          />
-        }
+      />
+      <RequestForm
+        initialType={sp.type === "BENEFITS_INQUIRY" ? "BENEFITS_INQUIRY" : undefined}
       />
       <Card>
         <CardHeader>
@@ -77,14 +75,16 @@ export default async function EmployeeRequestsPage({
                         : "outline";
               return (
                 <li key={r.id} className="space-y-1 p-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
                     <p className="text-sm font-medium">{r.title}</p>
-                    <Badge variant="outline" className="text-[10px]">
-                      {enumLabel(r.type)}
-                    </Badge>
-                    <Badge variant={variant} className="ml-auto text-[10px]">
-                      {enumLabel(r.status)}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                      <Badge variant="outline" className="text-[10px]">
+                        {enumLabel(r.type)}
+                      </Badge>
+                      <Badge variant={variant} className="text-[10px]">
+                        {enumLabel(r.status)}
+                      </Badge>
+                    </div>
                   </div>
                   <p className="line-clamp-2 text-xs text-muted-foreground">
                     {r.description}

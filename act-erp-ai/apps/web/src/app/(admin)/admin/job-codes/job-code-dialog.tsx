@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,7 +49,8 @@ type Props = {
 
 const NONE = "__none__";
 
-export function JobCodeDialog({ departments, existing, open: controlledOpen, onOpenChange }: Props) {
+export function JobCodePanel({ departments, existing, open: controlledOpen, onOpenChange }: Props) {
+  const fieldId = useId();
   const editing = Boolean(existing);
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
@@ -104,37 +105,37 @@ export function JobCodeDialog({ departments, existing, open: controlledOpen, onO
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <InlinePanel disabled={pending} open={open} onOpenChange={setOpen}>
       {!isControlled && (
-        <DialogTrigger asChild>
+        <InlinePanelTrigger asChild>
           <Button>
             <Plus className="mr-2 h-4 w-4" /> New job code
           </Button>
-        </DialogTrigger>
+        </InlinePanelTrigger>
       )}
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editing ? "Edit job code" : "New job code"}</DialogTitle>
-        </DialogHeader>
+      <InlinePanelContent>
+        <InlinePanelHeader>
+          <InlinePanelTitle>{editing ? "Edit job code" : "New job code"}</InlinePanelTitle>
+        </InlinePanelHeader>
         <form onSubmit={onSubmit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Code</Label>
-              <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. FAB100" maxLength={20} required className="font-mono" />
+              <Label htmlFor={`${fieldId}-1`} className="text-xs">Code</Label>
+              <Input id={`${fieldId}-1`} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. FAB100" maxLength={20} required className="font-mono" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Rate</Label>
-              <Input value={rate} onChange={(e) => setRate(e.target.value)} placeholder="$22.00 / NA" />
+              <Label htmlFor={`${fieldId}-2`} className="text-xs">Rate</Label>
+              <Input id={`${fieldId}-2`} value={rate} onChange={(e) => setRate(e.target.value)} placeholder="$22.00 / NA" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Title</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
+            <Label htmlFor={`${fieldId}-3`} className="text-xs">Title</Label>
+            <Input id={`${fieldId}-3`} value={title} onChange={(e) => setTitle(e.target.value)} required />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Department (optional)</Label>
+            <Label htmlFor={`${fieldId}-4`} className="text-xs">Department (optional)</Label>
             <Select value={departmentId} onValueChange={setDepartmentId}>
-              <SelectTrigger>
+              <SelectTrigger id={`${fieldId}-4`}>
                 <SelectValue placeholder="No department" />
               </SelectTrigger>
               <SelectContent>
@@ -146,8 +147,8 @@ export function JobCodeDialog({ departments, existing, open: controlledOpen, onO
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <Label htmlFor={`${fieldId}-5`} className="text-xs">Description</Label>
+            <Textarea id={`${fieldId}-5`} value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           </div>
           <div className="flex items-center justify-between rounded-md border p-3">
             <div>
@@ -165,15 +166,15 @@ export function JobCodeDialog({ departments, existing, open: controlledOpen, onO
               <Switch checked={isActive} onCheckedChange={setIsActive} />
             </div>
           )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <InlinePanelFooter>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={pending || code.length < 2 || title.length < 2}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? "Save" : "Create"}
             </Button>
-          </DialogFooter>
+          </InlinePanelFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }

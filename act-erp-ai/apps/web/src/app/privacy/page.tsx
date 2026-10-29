@@ -8,12 +8,12 @@ export const metadata = { title: "Privacy notice" };
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="flex items-center justify-between p-6">
+      <header className="flex items-center justify-between p-4 sm:p-6">
         <Logo priority width={140} height={56} className="h-9" />
         <ThemeToggle />
       </header>
 
-      <main className="flex-1 mx-auto w-full max-w-2xl space-y-6 p-6 pb-16">
+      <main className="mx-auto w-full min-w-0 max-w-2xl flex-1 space-y-6 break-words p-4 pb-16 sm:p-6">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Employee data privacy notice</h1>
           <p className="text-sm text-muted-foreground">
@@ -25,7 +25,7 @@ export default function PrivacyPage() {
 
         <Card>
           <CardHeader><CardTitle className="text-base">What we collect</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <CardContent className="space-y-2 break-words text-sm text-muted-foreground">
             <p>To administer employment, we collect and store:</p>
             <ul className="list-disc space-y-1 pl-5">
               <li>Name, contact information, and address</li>
@@ -42,7 +42,7 @@ export default function PrivacyPage() {
 
         <Card>
           <CardHeader><CardTitle className="text-base">Why</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
+          <CardContent className="break-words text-sm text-muted-foreground">
             <p>
               Solely to run HR and payroll operations: paying you correctly,
               tracking time and leave, verifying your identity at login and at
@@ -55,7 +55,7 @@ export default function PrivacyPage() {
 
         <Card>
           <CardHeader><CardTitle className="text-base">How it&apos;s protected</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <CardContent className="space-y-2 break-words text-sm text-muted-foreground">
             <ul className="list-disc space-y-1 pl-5">
               <li>Every login requires a password <em>and</em> a one-time code emailed to your personal email</li>
               <li>Access is role-based — most records are visible only to you and HR admins</li>
@@ -68,7 +68,7 @@ export default function PrivacyPage() {
 
         <Card>
           <CardHeader><CardTitle className="text-base">How long we keep it</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
+          <CardContent className="break-words text-sm text-muted-foreground">
             <p>
               Payroll records are kept at least 3 years and time/wage
               computation records at least 2 years, per federal (FLSA) and
@@ -81,7 +81,7 @@ export default function PrivacyPage() {
 
         <Card>
           <CardHeader><CardTitle className="text-base">Your choices</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <CardContent className="space-y-2 break-words text-sm text-muted-foreground">
             <ul className="list-disc space-y-1 pl-5">
               <li>You choose and can update the personal email your sign-in codes go to (Settings)</li>
               <li>Your W-2 is delivered on paper unless you separately opt in to electronic delivery — and you can withdraw that at any time (Settings)</li>
@@ -93,7 +93,7 @@ export default function PrivacyPage() {
 
         <Card>
           <CardHeader><CardTitle className="text-base">If something goes wrong</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
+          <CardContent className="break-words text-sm text-muted-foreground">
             <p>
               If a security incident affects your personal information, we
               will notify you within 60 days of discovering it, consistent
@@ -104,7 +104,7 @@ export default function PrivacyPage() {
 
         <Card>
           <CardHeader><CardTitle className="text-base">Questions</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
+          <CardContent className="break-words text-sm text-muted-foreground">
             <p>
               Contact HR or your administrator. This notice describes what
               this system does today and may be updated as the system changes.

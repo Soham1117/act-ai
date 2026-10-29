@@ -34,14 +34,14 @@ export async function NotificationPagination({
       <span>{t("notifications.pagination.page", { page, totalPages })}</span>
       <div className="flex gap-2">
         {page > 1 && (
-          <Button asChild size="sm" variant="outline">
+          <Button asChild size="sm" variant="outline" className="min-h-11 md:min-h-9">
             <Link href={notificationPageHref(page - 1)}>
               {t("notifications.pagination.previous")}
             </Link>
           </Button>
         )}
         {page < totalPages && (
-          <Button asChild size="sm" variant="outline">
+          <Button asChild size="sm" variant="outline" className="min-h-11 md:min-h-9">
             <Link href={notificationPageHref(page + 1)}>
               {t("notifications.pagination.next")}
             </Link>

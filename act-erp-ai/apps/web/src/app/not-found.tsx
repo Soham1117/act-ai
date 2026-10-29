@@ -15,11 +15,11 @@ export default function NotFound() {
             The page you&apos;re looking for doesn&apos;t exist or has been moved.
           </p>
         </div>
-        <div className="flex justify-center gap-2">
-          <Button asChild>
+        <div className="flex flex-col justify-center gap-2 sm:flex-row">
+          <Button asChild className="min-h-11 md:min-h-9">
             <Link href="/dashboard">Go to dashboard</Link>
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="min-h-11 md:min-h-9">
             <Link href="/login">Sign in</Link>
           </Button>
         </div>

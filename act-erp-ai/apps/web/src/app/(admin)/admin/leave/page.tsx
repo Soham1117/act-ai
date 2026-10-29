@@ -3,14 +3,15 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { DataListCard, MobileTabsList, ResponsiveDataList } from "@/components/mobile";
 import { Badge } from "@/components/ui/badge";
 import { Plane } from "lucide-react";
 import { businessDateOnly, formatDateOnly, getAvatarUrl } from "@/lib/format";
 import { LEAVE_TYPES, fmtDays, policyFor } from "@/lib/leave-balance";
 import { loadLeaveBalancesFor, loadPolicies } from "@/lib/leave-balance-db";
 import { LeaveReviewButtons, LeaveRevertButton } from "./leave-review-buttons";
-import { AdjustBalanceDialog } from "./adjust-balance-dialog";
+import { AdjustBalancePanel } from "./adjust-balance-dialog";
 import { PolicyEditor } from "./policy-editor";
 
 export const metadata = { title: "Leave management" };
@@ -90,19 +91,19 @@ export default async function AdminLeavePage() {
       </div>
 
       <Tabs defaultValue="pending" className="mt-6 space-y-4">
-        <TabsList>
+        <MobileTabsList>
           <TabsTrigger value="pending">Pending ({pending.length})</TabsTrigger>
           <TabsTrigger value="recent">Recent decisions</TabsTrigger>
           <TabsTrigger value="balances">Balances</TabsTrigger>
           <TabsTrigger value="policy">Policy</TabsTrigger>
-        </TabsList>
+        </MobileTabsList>
 
         <TabsContent value="pending">
           <Card>
             <CardContent className="p-0">
               <ul className="divide-y">
                 {pending.map((r) => (
-                  <li key={r.id} className="grid grid-cols-[36px_1fr_auto_auto_auto] items-center gap-3 p-3">
+                  <li key={r.id} className="flex flex-col gap-2 p-3 sm:grid sm:grid-cols-[36px_1fr_auto_auto_auto] sm:items-center sm:gap-3">
                     <Avatar src={r.employee.profilePic ?? getAvatarUrl(r.employee.email)} name={r.employee.name} />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{r.employee.name}</p>
@@ -139,7 +140,7 @@ export default async function AdminLeavePage() {
                     r.status === "REJECTED" ? "destructive" :
                     r.status === "PENDING" ? "warning" : "outline";
                   return (
-                    <li key={r.id} className="grid grid-cols-[36px_1fr_auto_auto_auto] items-center gap-3 p-3">
+                    <li key={r.id} className="flex flex-col gap-2 p-3 sm:grid sm:grid-cols-[36px_1fr_auto_auto_auto] sm:items-center sm:gap-3">
                       <Avatar src={r.employee.profilePic ?? getAvatarUrl(r.employee.email)} name={r.employee.name} />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{r.employee.name}</p>
@@ -170,50 +171,104 @@ export default async function AdminLeavePage() {
 
         <TabsContent value="balances">
           <Card>
-            <CardContent className="overflow-x-auto p-0">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <th className="p-3">Employee ({year})</th>
-                    <th className="p-3 text-right">Allowed</th>
-                    <th className="p-3 text-right">Taken</th>
-                    <th className="p-3 text-right">Upcoming</th>
-                    <th className="p-3 text-right">Pending</th>
-                    <th className="p-3 text-right">Remaining</th>
-                    <th className="p-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {employees.map((e) => {
-                    const t = balances.get(e.id)?.totals;
-                    return (
-                      <tr key={e.id}>
-                        <td className="p-3">
-                          <Link href={`/admin/employees/${e.id}`} className="font-medium hover:underline">
-                            {e.name}
-                          </Link>
-                          <p className="text-[11px] text-muted-foreground">{e.department?.name ?? "—"}</p>
-                        </td>
-                        <td className="p-3 text-right font-mono tabular-nums">{t?.allowed ?? "—"}</td>
-                        <td className="p-3 text-right font-mono tabular-nums">{t?.taken ?? "—"}</td>
-                        <td className="p-3 text-right font-mono tabular-nums">{t?.upcoming ?? "—"}</td>
-                        <td className="p-3 text-right font-mono tabular-nums">{t?.pending ?? "—"}</td>
-                        <td className="p-3 text-right font-mono font-semibold tabular-nums">{t?.available ?? "—"}</td>
-                        <td className="p-3 text-right">
-                          <AdjustBalanceDialog employeeId={e.id} employeeName={e.name} year={year} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {employees.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
+            <CardContent className="p-0">
+              <ResponsiveDataList
+                mobile={
+                  <div className="space-y-2 p-2">
+                    {employees.length === 0 ? (
+                      <p className="rounded-md border p-8 text-center text-xs text-muted-foreground">
                         No active employees.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                      </p>
+                    ) : (
+                      employees.map((e) => {
+                        const t = balances.get(e.id)?.totals;
+                        return (
+                          <DataListCard key={e.id}>
+                            <div className="space-y-2">
+                              <div>
+                                <Link href={`/admin/employees/${e.id}`} className="font-medium hover:underline">
+                                  {e.name}
+                                </Link>
+                                <p className="text-[11px] text-muted-foreground">{e.department?.name ?? "—"}</p>
+                              </div>
+                              <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                <div>
+                                  <dt className="text-muted-foreground">Allowed</dt>
+                                  <dd className="font-mono tabular-nums">{t?.allowed ?? "—"}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Taken</dt>
+                                  <dd className="font-mono tabular-nums">{t?.taken ?? "—"}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Upcoming</dt>
+                                  <dd className="font-mono tabular-nums">{t?.upcoming ?? "—"}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Pending</dt>
+                                  <dd className="font-mono tabular-nums">{t?.pending ?? "—"}</dd>
+                                </div>
+                                <div className="col-span-2">
+                                  <dt className="text-muted-foreground">Remaining</dt>
+                                  <dd className="font-mono text-sm font-semibold tabular-nums">{t?.available ?? "—"}</dd>
+                                </div>
+                              </dl>
+                              <AdjustBalancePanel employeeId={e.id} employeeName={e.name} year={year} />
+                            </div>
+                          </DataListCard>
+                        );
+                      })
+                    )}
+                  </div>
+                }
+                desktop={
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                          <th className="p-3">Employee ({year})</th>
+                          <th className="p-3 text-right">Allowed</th>
+                          <th className="p-3 text-right">Taken</th>
+                          <th className="p-3 text-right">Upcoming</th>
+                          <th className="p-3 text-right">Pending</th>
+                          <th className="p-3 text-right">Remaining</th>
+                          <th className="p-3" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {employees.map((e) => {
+                          const t = balances.get(e.id)?.totals;
+                          return (
+                            <tr key={e.id}>
+                              <td className="p-3">
+                                <Link href={`/admin/employees/${e.id}`} className="font-medium hover:underline">
+                                  {e.name}
+                                </Link>
+                                <p className="text-[11px] text-muted-foreground">{e.department?.name ?? "—"}</p>
+                              </td>
+                              <td className="p-3 text-right font-mono tabular-nums">{t?.allowed ?? "—"}</td>
+                              <td className="p-3 text-right font-mono tabular-nums">{t?.taken ?? "—"}</td>
+                              <td className="p-3 text-right font-mono tabular-nums">{t?.upcoming ?? "—"}</td>
+                              <td className="p-3 text-right font-mono tabular-nums">{t?.pending ?? "—"}</td>
+                              <td className="p-3 text-right font-mono font-semibold tabular-nums">{t?.available ?? "—"}</td>
+                              <td className="p-3 text-right">
+                                <AdjustBalancePanel employeeId={e.id} employeeName={e.name} year={year} />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {employees.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
+                              No active employees.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              />
               <p className="p-3 text-[11px] text-muted-foreground">
                 Totals cover balance-limited leave types only. Pending days are reserved against the balance.
               </p>

@@ -74,11 +74,11 @@ export default async function OnboardTokenPage({
       <header className="p-6">
         <Brand href="/" />
       </header>
-      <main className="flex flex-1 items-center justify-center p-6">
-        <Card className="w-full max-w-3xl">
+      <main className="flex flex-1 justify-center p-4 sm:p-6">
+        <Card className="w-full min-w-0 max-w-3xl">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>{t("auth.onboard.welcome")}</CardTitle>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <CardTitle className="min-w-0">{t("auth.onboard.welcome")}</CardTitle>
               {closed && (
                 <Badge variant={completed ? "success" : "destructive"}>
                   {completed ? t("auth.onboard.completed") : t("auth.onboard.expired")}
@@ -97,7 +97,7 @@ export default async function OnboardTokenPage({
             {terms.length > 0 && (
               <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
                 <p className="mb-1 font-medium text-foreground">{t("auth.onboard.position")}</p>
-                <p>{terms.join(" · ")}</p>
+                <p className="break-words">{terms.join(" · ")}</p>
                 <p className="mt-1">
                   {t("auth.onboard.adminSetsTerms")}
                 </p>

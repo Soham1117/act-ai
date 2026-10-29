@@ -1,21 +1,31 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Loader2, LogOut, Pencil, Plus, RotateCcw, UserX, Pause } from "lucide-react";
+import {
+  KeyRound,
+  Loader2,
+  LogOut,
+  Pencil,
+  Plus,
+  RotateCcw,
+  UserX,
+  Pause,
+} from "lucide-react";
 import { toast } from "sonner";
+import { InlineConfirmAction } from "@/components/inline-confirm-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { businessDateOnly } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
@@ -28,14 +38,19 @@ import {
   updateContractWorker,
   setContractWorkerActive,
 } from "@/server/actions/contract-workers";
-import { selectClass, type AgencyOption, type JobCodeOption, type WorkerRow } from "./shared";
+import {
+  selectClass,
+  type AgencyOption,
+  type JobCodeOption,
+  type WorkerRow,
+} from "./shared";
 
 function todayString() {
   return dateOnlyToString(businessDateOnly());
 }
 
 /** Add (no `worker`) or edit a contract worker. */
-export function WorkerFormDialog({
+export function WorkerForm({
   worker,
   agencies,
   jobCodes,
@@ -46,6 +61,7 @@ export function WorkerFormDialog({
   jobCodes: JobCodeOption[];
   trigger?: "add" | "edit";
 }) {
+  const formId = useId();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -108,37 +124,53 @@ export function WorkerFormDialog({
   return (
     <>
       {trigger === "add" ? (
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button className="min-h-11 md:min-h-9" size="sm" onClick={() => { if (!pending) setOpen(true); }}>
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           Add contract worker
         </Button>
       ) : (
-        <Button size="sm" variant="ghost" onClick={() => setOpen(true)} aria-label={`Edit ${worker?.name}`}>
+        <Button
+          className="min-h-11 md:min-h-9"
+          size="sm"
+          variant="ghost"
+          onClick={() => { if (!pending) setOpen(true); }}
+          aria-label={`Edit ${worker?.name}`}
+        >
           <Pencil className="mr-1 h-3.5 w-3.5" />
           Edit
         </Button>
       )}
-      <Dialog
+      <InlinePanel
         open={open}
         onOpenChange={(v) => {
+          if (pending) return;
           setOpen(v);
           if (v && worker) reset();
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{worker ? `Edit ${worker.workerId}` : "Add contract worker"}</DialogTitle>
-            <DialogDescription>Agency staff only. Pay rates are not stored here.</DialogDescription>
-          </DialogHeader>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>
+              {worker ? `Edit ${worker.workerId}` : "Add contract worker"}
+            </InlinePanelTitle>
+            <InlinePanelDescription>
+              Agency staff only. Pay rates are not stored here.
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="cw-name">Name</Label>
-              <Input id="cw-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+              <Label htmlFor={`${formId}-name`}>Name</Label>
+              <Input
+                id={`${formId}-name`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={120}
+              />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cw-agency">Agency</Label>
+              <Label htmlFor={`${formId}-agency`}>Agency</Label>
               <select
-                id="cw-agency"
+                id={`${formId}-agency`}
                 className={selectClass}
                 value={agencyId}
                 onChange={(e) => setAgencyId(e.target.value)}
@@ -153,13 +185,18 @@ export function WorkerFormDialog({
               </select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cw-phone">Phone</Label>
-              <Input id="cw-phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={40} />
+              <Label htmlFor={`${formId}-phone`}>Phone</Label>
+              <Input
+                id={`${formId}-phone`}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                maxLength={40}
+              />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cw-job">Job code</Label>
+              <Label htmlFor={`${formId}-job`}>Job code</Label>
               <select
-                id="cw-job"
+                id={`${formId}-job`}
                 className={selectClass}
                 value={jobCode}
                 onChange={(e) => setJobCode(e.target.value)}
@@ -173,23 +210,43 @@ export function WorkerFormDialog({
               </select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cw-project">Project</Label>
-              <Input id="cw-project" value={project} onChange={(e) => setProject(e.target.value)} maxLength={200} />
+              <Label htmlFor={`${formId}-project`}>Project</Label>
+              <Input
+                id={`${formId}-project`}
+                value={project}
+                onChange={(e) => setProject(e.target.value)}
+                maxLength={200}
+              />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cw-start">Start date</Label>
-              <Input id="cw-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <Label htmlFor={`${formId}-start`}>Start date</Label>
+              <Input
+                id={`${formId}-start`}
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cw-end">End date (optional)</Label>
-              <Input id="cw-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <Label htmlFor={`${formId}-end`}>End date (optional)</Label>
+              <Input
+                id={`${formId}-end`}
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="cw-notes">Notes</Label>
-              <Textarea id="cw-notes" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} />
+              <Label htmlFor={`${formId}-notes`}>Notes</Label>
+              <Textarea
+                id={`${formId}-notes`}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                maxLength={2000}
+              />
             </div>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
               Cancel
             </Button>
@@ -197,9 +254,9 @@ export function WorkerFormDialog({
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {worker ? "Save changes" : "Add worker"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }
@@ -213,40 +270,64 @@ export function WorkerActiveButton({ worker }: { worker: WorkerRow }) {
   const label = active ? "Make inactive" : "Activate";
   return (
     <>
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} disabled={pending}>
-        {active ? <Pause className="mr-1 h-3.5 w-3.5" /> : <RotateCcw className="mr-1 h-3.5 w-3.5" />}
+      <Button
+        className="min-h-11 md:min-h-9"
+        size="sm"
+        variant="ghost"
+        onClick={() => { if (!pending) setOpen(true); }}
+        disabled={pending}
+      >
+        {active ? (
+          <Pause className="mr-1 h-3.5 w-3.5" />
+        ) : (
+          <RotateCcw className="mr-1 h-3.5 w-3.5" />
+        )}
         {label}
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{label}: {worker.name}?</DialogTitle>
-            <DialogDescription>
+      <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>
+              {label}: {worker.name}?
+            </InlinePanelTitle>
+            <InlinePanelDescription>
               {active
                 ? "The worker cannot clock in while inactive. The assignment dates and history are kept. Any open shift is clocked out for approval. You can activate them again later."
                 : "The worker becomes active again with the same assignment dates. They can clock in within those dates."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>Cancel</Button>
-            <Button disabled={pending} onClick={() => startTransition(async () => {
-              const res = await runAction(() => setContractWorkerActive(worker.id, !active));
-              if (!toastAction(res)) return;
-              toast.success(`${worker.name} ${active ? "made inactive" : "activated"}${res.closedOpenEntries ? ". Open shifts closed for approval." : ""}`);
-              setOpen(false);
-              router.refresh();
-            })}>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
+          <InlinePanelFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const res = await runAction(() =>
+                    setContractWorkerActive(worker.id, !active),
+                  );
+                  if (!toastAction(res)) return;
+                  toast.success(
+                    `${worker.name} ${active ? "made inactive" : "activated"}${res.closedOpenEntries ? ". Open shifts closed for approval." : ""}`,
+                  );
+                  setOpen(false);
+                  router.refresh();
+                })
+              }
+            >
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {label}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }
 
 export function EndAssignmentButton({ worker }: { worker: WorkerRow }) {
+  const formId = useId();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [endDate, setEndDate] = useState("");
@@ -254,7 +335,9 @@ export function EndAssignmentButton({ worker }: { worker: WorkerRow }) {
 
   function confirm() {
     startTransition(async () => {
-      const res = await runAction(() => endContractWorker(worker.id, endDate || undefined));
+      const res = await runAction(() =>
+        endContractWorker(worker.id, endDate || undefined),
+      );
       if (!toastAction(res)) return;
       toast.success(
         res.closedOpenEntry
@@ -269,30 +352,35 @@ export function EndAssignmentButton({ worker }: { worker: WorkerRow }) {
 
   return (
     <>
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+      <Button
+        className="min-h-11 md:min-h-9"
+        size="sm"
+        variant="ghost"
+        onClick={() => { if (!pending) setOpen(true); }}
+      >
         <UserX className="mr-1 h-3.5 w-3.5" />
         End
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>End assignment for {worker.name}?</DialogTitle>
-            <DialogDescription>
-              The worker cannot clock in after this. If the worker is clocked in now, the shift is
-              closed and goes to approval. You can reactivate the worker later.
-            </DialogDescription>
-          </DialogHeader>
+      <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>End assignment for {worker.name}?</InlinePanelTitle>
+            <InlinePanelDescription>
+              The worker cannot clock in after this. If the worker is clocked in now, the
+              shift is closed and goes to approval. You can reactivate the worker later.
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="space-y-1">
-            <Label htmlFor={`end-${worker.id}`}>End date (optional, default today)</Label>
+            <Label htmlFor={`${formId}-end`}>End date (optional, default today)</Label>
             <Input
-              id={`end-${worker.id}`}
+              id={`${formId}-end`}
               type="date"
               value={endDate}
               min={worker.startDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
               Cancel
             </Button>
@@ -300,14 +388,15 @@ export function EndAssignmentButton({ worker }: { worker: WorkerRow }) {
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               End assignment
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }
 
 export function ReactivateButton({ worker }: { worker: WorkerRow }) {
+  const formId = useId();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [endDate, setEndDate] = useState("");
@@ -315,7 +404,9 @@ export function ReactivateButton({ worker }: { worker: WorkerRow }) {
 
   function confirm() {
     startTransition(async () => {
-      const res = await runAction(() => reactivateContractWorker(worker.id, endDate || undefined));
+      const res = await runAction(() =>
+        reactivateContractWorker(worker.id, endDate || undefined),
+      );
       if (!toastAction(res)) return;
       toast.success(`${worker.name} reactivated`);
       setOpen(false);
@@ -326,28 +417,34 @@ export function ReactivateButton({ worker }: { worker: WorkerRow }) {
 
   return (
     <>
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+      <Button
+        className="min-h-11 md:min-h-9"
+        size="sm"
+        variant="ghost"
+        onClick={() => { if (!pending) setOpen(true); }}
+      >
         <RotateCcw className="mr-1 h-3.5 w-3.5" />
         Reactivate
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reactivate {worker.name}?</DialogTitle>
-            <DialogDescription>
-              The worker can clock in again. Set a new end date if the new assignment has one.
-            </DialogDescription>
-          </DialogHeader>
+      <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Reactivate {worker.name}?</InlinePanelTitle>
+            <InlinePanelDescription>
+              The worker can clock in again. Set a new end date if the new assignment has
+              one.
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="space-y-1">
-            <Label htmlFor={`re-${worker.id}`}>New end date (optional)</Label>
+            <Label htmlFor={`${formId}-end`}>New end date (optional)</Label>
             <Input
-              id={`re-${worker.id}`}
+              id={`${formId}-end`}
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
               Cancel
             </Button>
@@ -355,9 +452,9 @@ export function ReactivateButton({ worker }: { worker: WorkerRow }) {
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Reactivate
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }
@@ -379,19 +476,24 @@ export function ClockOutButton({ workerId, name }: { workerId: string; name: str
 
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+      <Button
+        className="min-h-11 md:min-h-9"
+        size="sm"
+        variant="outline"
+        onClick={() => { if (!pending) setOpen(true); }}
+      >
         <LogOut className="mr-1 h-3.5 w-3.5" />
         Clock out
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Clock out {name}?</DialogTitle>
-            <DialogDescription>
+      <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Clock out {name}?</InlinePanelTitle>
+            <InlinePanelDescription>
               This closes the open shift at the current time. The entry goes to approval.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
               Cancel
             </Button>
@@ -399,33 +501,29 @@ export function ClockOutButton({ workerId, name }: { workerId: string; name: str
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Clock out
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }
 
 export function ResetPinButton({ workerId, name }: { workerId: string; name: string }) {
-  const [pending, startTransition] = useTransition();
-
-  function onClick() {
-    if (!confirm(`Reset ${name}'s kiosk PIN to the temporary default 3214?`)) return;
-    startTransition(async () => {
-      const res = await runAction(() => resetContractWorkerKioskPin(workerId));
-      if (!toastAction(res)) return;
-      toast.success("Kiosk PIN reset to 3214");
-    });
-  }
-
   return (
-    <Button size="sm" variant="outline" onClick={onClick} disabled={pending}>
-      {pending ? (
-        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <KeyRound className="mr-1 h-3.5 w-3.5" />
-      )}
+    <InlineConfirmAction
+      label="Reset PIN"
+      cancelLabel="Cancel"
+      variant="outline"
+      message={`Reset ${name}'s kiosk PIN to the temporary default 3214?`}
+      onConfirm={async () => {
+        const res = await runAction(() => resetContractWorkerKioskPin(workerId));
+        if (!toastAction(res)) return false;
+        toast.success("Kiosk PIN reset to 3214");
+        return true;
+      }}
+    >
+      <KeyRound className="mr-1 h-3.5 w-3.5" />
       Reset PIN
-    </Button>
+    </InlineConfirmAction>
   );
 }

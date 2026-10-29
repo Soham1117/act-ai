@@ -47,8 +47,8 @@ export default async function KioskTerminalPage({
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6">
-      <Card className="w-full">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-4 sm:p-6">
+      <Card className="w-full min-w-0">
         <CardHeader>
           <div className="mb-3 flex items-center gap-2">
             <MonitorCheck className="h-5 w-5 text-primary" />
@@ -60,9 +60,9 @@ export default async function KioskTerminalPage({
             </Badge>
           </div>
           <CardTitle>Activate kiosk on this device</CardTitle>
-          <CardDescription>
+          <CardDescription className="break-words">
             Activating this kiosk binds the cookie on this browser to{" "}
-            <span className="font-mono text-xs">{kiosk.label ?? slug}</span>{" "}
+            <span className="break-all font-mono text-xs">{kiosk.label ?? slug}</span>{" "}
             for the next 90 days. Anyone with physical access to this terminal
             will be able to clock employees in/out by ID.
           </CardDescription>

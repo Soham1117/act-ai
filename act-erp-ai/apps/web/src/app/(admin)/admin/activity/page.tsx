@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { Download } from "lucide-react";
+import { FilterStack } from "@/components/mobile";
 import { activityPrefixes, activityWhere, prefixLabel } from "@/server/queries/activity";
 
 export const metadata = { title: "Activity" };
@@ -22,7 +23,12 @@ export default async function AdminActivityPage({
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
 
   const safe = async <T,>(p: Promise<T>, fallback: T): Promise<T> => {
-    try { return await p; } catch (e) { console.error("[activity] query failed", e); return fallback; }
+    try {
+      return await p;
+    } catch (e) {
+      console.error("[activity] query failed", e);
+      return fallback;
+    }
   };
 
   const where = activityWhere(q, actionFilter);
@@ -68,9 +74,10 @@ export default async function AdminActivityPage({
     return `/admin/activity/export${str ? `?${str}` : ""}`;
   })();
   // Keep a filter chosen via URL selectable even if no rows use it any more.
-  const options = prefixes.some((p) => p.value === actionFilter) || !actionFilter
-    ? prefixes
-    : [...prefixes, { value: actionFilter, label: prefixLabel(actionFilter) }];
+  const options =
+    prefixes.some((p) => p.value === actionFilter) || !actionFilter
+      ? prefixes
+      : [...prefixes, { value: actionFilter, label: prefixLabel(actionFilter) }];
 
   return (
     <>
@@ -79,37 +86,41 @@ export default async function AdminActivityPage({
         description="Every audited action — who, what, and when."
       />
 
-      <form className="mb-4 flex flex-wrap gap-2" action="/admin/activity">
-        <input
-          name="q"
-          defaultValue={q}
-          placeholder="Search by user, resource, or action…"
-          className="h-9 flex-1 min-w-[200px] rounded-md border bg-background px-3 text-sm"
-        />
-        <select
-          name="action"
-          defaultValue={actionFilter}
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-        >
-          <option value="">All actions</option>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          className="h-9 rounded-md border bg-primary px-4 text-sm font-medium text-primary-foreground"
-        >
-          Filter
-        </button>
-        <a
-          href={exportHref}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted"
-        >
-          <Download className="h-4 w-4" /> Export CSV
-        </a>
+      <form className="mb-4" action="/admin/activity">
+        <FilterStack>
+          <input
+            aria-label="Search activity"
+            name="q"
+            defaultValue={q}
+            placeholder="Search by user, resource, or action…"
+            className="min-h-11 w-full flex-1 rounded-md border bg-background px-3 text-base sm:min-w-[200px] md:min-h-9 md:text-sm"
+          />
+          <select
+            aria-label="Activity action"
+            name="action"
+            defaultValue={actionFilter}
+            className="min-h-11 w-full rounded-md border bg-background px-2 text-base sm:w-auto md:min-h-9 md:text-sm"
+          >
+            <option value="">All actions</option>
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="min-h-11 w-full rounded-md border bg-primary px-4 text-sm font-medium text-primary-foreground sm:w-auto md:min-h-9"
+          >
+            Filter
+          </button>
+          <a
+            href={exportHref}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-muted sm:w-auto md:min-h-9"
+          >
+            <Download className="h-4 w-4" /> Export CSV
+          </a>
+        </FilterStack>
       </form>
 
       <Card>
@@ -124,17 +135,26 @@ export default async function AdminActivityPage({
                 const diff = (a.diff ?? null) as Record<string, unknown> | null;
                 const detail = describeDiff(diff);
                 return (
-                  <li key={a.id} className="grid grid-cols-[1fr_auto] items-start gap-3 p-3 text-sm">
+                  <li
+                    key={a.id}
+                    className="grid grid-cols-1 items-start gap-3 p-3 text-sm sm:grid-cols-[1fr_auto]"
+                  >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium truncate">{a.actorEmail ?? "system"}</span>
+                        <span className="truncate font-medium">
+                          {a.actorEmail ?? "system"}
+                        </span>
                         <Badge variant="outline" className="font-mono text-[10px]">
                           {a.action}
                         </Badge>
-                        <span className="text-[11px] text-muted-foreground truncate">{a.resource}</span>
+                        <span className="truncate text-[11px] text-muted-foreground">
+                          {a.resource}
+                        </span>
                       </div>
                       {detail && (
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p>
+                        <p className="mt-0.5 break-words text-xs text-muted-foreground">
+                          {detail}
+                        </p>
                       )}
                     </div>
                     <span
@@ -152,9 +172,15 @@ export default async function AdminActivityPage({
       </Card>
 
       {pages > 1 && (
-        <nav className="mt-3 flex items-center justify-between text-xs" aria-label="Pagination">
+        <nav
+          className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs"
+          aria-label="Pagination"
+        >
           {page > 1 ? (
-            <Link href={qs(page - 1)} className="underline">
+            <Link
+              href={qs(page - 1)}
+              className="inline-flex min-h-11 items-center underline"
+            >
               Newer
             </Link>
           ) : (
@@ -164,7 +190,10 @@ export default async function AdminActivityPage({
             Page {page} of {pages} · {total} entries
           </span>
           {page < pages ? (
-            <Link href={qs(page + 1)} className="underline">
+            <Link
+              href={qs(page + 1)}
+              className="inline-flex min-h-11 items-center underline"
+            >
               Older
             </Link>
           ) : (

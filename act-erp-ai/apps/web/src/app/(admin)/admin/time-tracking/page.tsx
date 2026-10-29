@@ -4,7 +4,7 @@ import type { Prisma, TimeEntrySource } from "@prisma/client";
 import { db } from "@/lib/db";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import {
   startOfBusinessWeek,
 } from "@/lib/time-rules";
 import { PunchPhotos } from "@/components/punch-photos";
+import { FilterStack, MobileTabsList } from "@/components/mobile";
 import { EntryActions, ManualEntryButton, PendingQueue } from "./time-tools";
 import type { EntryRowData } from "./time-types";
 
@@ -301,12 +302,12 @@ export default async function AdminTimeTrackingPage({
       </div>
 
       <Tabs defaultValue={defaultTab} className="mt-6 space-y-4">
-        <TabsList className="flex-wrap">
+        <MobileTabsList>
           <TabsTrigger value="attention">Needs attention ({attentionCount})</TabsTrigger>
           <TabsTrigger value="pending">Pending approval ({pendingCount})</TabsTrigger>
           <TabsTrigger value="entries">Entries ({entriesCount})</TabsTrigger>
           <TabsTrigger value="now">Clocked in ({live.length})</TabsTrigger>
-        </TabsList>
+        </MobileTabsList>
 
         <TabsContent value="attention" className="space-y-4">
           <Card>
@@ -321,17 +322,21 @@ export default async function AdminTimeTrackingPage({
               ) : (
                 <ul className="divide-y">
                   {staleRows.map((e) => (
-                    <li key={e.id} className="flex flex-wrap items-center gap-3 p-3">
-                      <Avatar src={e.avatar} name={e.employeeName} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{e.employeeName}</p>
-                        <p className="text-[11px] text-destructive">
-                          Clocked in {formatDateOnly(e.date)} at {formatBusinessTime(e.clockIn)} and
-                          never clocked out ({Math.floor((now.getTime() - new Date(e.clockIn).getTime()) / 3_600_000)}h ago).
-                          The employee can still clock in again; this shift is closed and flagged then.
-                        </p>
+                    <li key={e.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:gap-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <Avatar src={e.avatar} name={e.employeeName} />
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-sm font-medium">{e.employeeName}</p>
+                          <p className="text-[11px] text-destructive">
+                            Clocked in {formatDateOnly(e.date)} at {formatBusinessTime(e.clockIn)} and
+                            never clocked out ({Math.floor((now.getTime() - new Date(e.clockIn).getTime()) / 3_600_000)}h ago).
+                            The employee can still clock in again; this shift is closed and flagged then.
+                          </p>
+                        </div>
                       </div>
-                      <EntryActions entry={e} jobCodes={jobCodes} />
+                      <div className="flex shrink-0 flex-wrap gap-2 pl-12 sm:pl-0">
+                        <EntryActions entry={e} jobCodes={jobCodes} />
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -374,24 +379,26 @@ export default async function AdminTimeTrackingPage({
         <TabsContent value="entries" className="space-y-4">
           <Card>
             <CardContent className="p-4">
-              <form method="get" action="/admin/time-tracking" className="flex flex-wrap items-end gap-3">
-                <input type="hidden" name="tab" value="entries" />
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground" htmlFor="tt-from">From</label>
-                  <Input id="tt-from" type="date" name="from" defaultValue={dateOnlyToString(rangeFrom)} className="h-9 w-40" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground" htmlFor="tt-to">To</label>
-                  <Input id="tt-to" type="date" name="to" defaultValue={dateOnlyToString(rangeTo)} className="h-9 w-40" />
-                </div>
-                <div className="min-w-[200px] flex-1 space-y-1">
-                  <label className="text-xs text-muted-foreground" htmlFor="tt-q">Employee</label>
-                  <Input id="tt-q" name="q" defaultValue={q} placeholder="Search name, ID, or email" className="h-9" />
-                </div>
-                <Button type="submit" size="sm">Apply</Button>
-                <Button asChild type="button" variant="ghost" size="sm">
-                  <Link href="/admin/time-tracking?tab=entries">Current week</Link>
-                </Button>
+              <form method="get" action="/admin/time-tracking">
+                <FilterStack className="items-end">
+                  <input type="hidden" name="tab" value="entries" />
+                  <div className="w-full space-y-1 sm:w-auto">
+                    <label className="text-xs text-muted-foreground" htmlFor="tt-from">From</label>
+                    <Input id="tt-from" type="date" name="from" defaultValue={dateOnlyToString(rangeFrom)} className="h-9 w-full sm:w-40" />
+                  </div>
+                  <div className="w-full space-y-1 sm:w-auto">
+                    <label className="text-xs text-muted-foreground" htmlFor="tt-to">To</label>
+                    <Input id="tt-to" type="date" name="to" defaultValue={dateOnlyToString(rangeTo)} className="h-9 w-full sm:w-40" />
+                  </div>
+                  <div className="w-full flex-1 space-y-1">
+                    <label className="text-xs text-muted-foreground" htmlFor="tt-q">Employee</label>
+                    <Input id="tt-q" name="q" defaultValue={q} placeholder="Search name, ID, or email" className="h-9" />
+                  </div>
+                  <Button type="submit" size="sm" className="w-full sm:w-auto">Apply</Button>
+                  <Button asChild type="button" variant="ghost" size="sm" className="w-full sm:w-auto">
+                    <Link href="/admin/time-tracking?tab=entries">Current week</Link>
+                  </Button>
+                </FilterStack>
               </form>
             </CardContent>
           </Card>
@@ -408,11 +415,14 @@ export default async function AdminTimeTrackingPage({
               ) : (
                 <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
                   {totals.map((t) => (
-                    <li key={t.employeeId} className="flex items-center justify-between border-b py-1.5 text-sm">
-                      <span className="truncate">
-                        {t.name} <span className="text-[11px] text-muted-foreground">{t.count} entr{t.count === 1 ? "y" : "ies"}</span>
+                    <li key={t.employeeId} className="flex items-baseline justify-between gap-3 border-b py-1.5 text-sm">
+                      <span className="min-w-0 break-words">
+                        {t.name}{" "}
+                        <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                          {t.count} entr{t.count === 1 ? "y" : "ies"}
+                        </span>
                       </span>
-                      <span className="font-mono tabular-nums">{formatHours(t.minutes)}</span>
+                      <span className="shrink-0 font-mono tabular-nums">{formatHours(t.minutes)}</span>
                     </li>
                   ))}
                 </ul>
@@ -508,59 +518,65 @@ function EntryList({
   return (
     <ul className="divide-y">
       {entries.map((e) => (
-        <li key={e.id} className="flex flex-wrap items-center gap-3 p-3">
-          <Avatar src={e.avatar} name={e.employeeName} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              {e.employeeName}{" "}
-              <span className="text-[11px] font-normal text-muted-foreground">{formatDateOnly(e.date)}</span>
-            </p>
-            <p className="truncate font-mono text-[11px] text-muted-foreground">
-              {e.jobCode} · {formatBusinessTime(e.clockIn)}
-              {e.clockOut && ` → ${formatBusinessTime(e.clockOut)}`}
-              {e.totalBreakMin > 0 && ` · breaks ${formatHours(e.totalBreakMin)}`}
-            </p>
-            {e.editReason && (
-              <p className="truncate text-[11px] text-muted-foreground">{e.editReason}</p>
-            )}
+        <li key={e.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <Avatar src={e.avatar} name={e.employeeName} />
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-sm font-medium">
+                {e.employeeName}{" "}
+                <span className="whitespace-nowrap text-[11px] font-normal text-muted-foreground">
+                  {formatDateOnly(e.date)}
+                </span>
+              </p>
+              <p className="break-words font-mono text-[11px] text-muted-foreground">
+                {e.jobCode} · {formatBusinessTime(e.clockIn)}
+                {e.clockOut && ` → ${formatBusinessTime(e.clockOut)}`}
+                {e.totalBreakMin > 0 && ` · breaks ${formatHours(e.totalBreakMin)}`}
+              </p>
+              {e.editReason && (
+                <p className="break-words text-[11px] text-muted-foreground">{e.editReason}</p>
+              )}
+            </div>
           </div>
-          {e.autoClosed && (
-            <Badge variant="destructive" className="text-[10px]">Auto-closed</Badge>
-          )}
-          <PunchPhotos
-            type="employee"
-            entryId={e.id}
-            hasIn={e.hasClockInPhoto}
-            hasOut={e.hasClockOutPhoto}
-            source={e.source}
-            clockIn={e.clockIn}
-            clockOut={e.clockOut}
-          />
-          <SourceBadge source={e.source} kioskLabel={e.kioskLabel} />
-          {live ? (
-            <Badge variant={e.status === "ON_BREAK" ? "warning" : "success"} className="text-[10px]">
-              {e.status === "ON_BREAK" ? "On break" : "Working"}
-            </Badge>
-          ) : (
-            <>
-              <Badge
-                variant={
-                  e.approvalStatus === "APPROVED"
-                    ? "success"
-                    : e.approvalStatus === "REJECTED"
-                      ? "destructive"
-                      : "warning"
-                }
-                className="text-[10px]"
-              >
-                {e.status === "ACTIVE" || e.status === "ON_BREAK" ? "Open" : e.approvalStatus}
+          <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
+            {e.autoClosed && (
+              <Badge variant="destructive" className="text-[10px]">Auto-closed</Badge>
+            )}
+            <PunchPhotos
+              type="employee"
+              entryId={e.id}
+              hasIn={e.hasClockInPhoto}
+              hasOut={e.hasClockOutPhoto}
+              source={e.source}
+              clockIn={e.clockIn}
+              clockOut={e.clockOut}
+            />
+            <SourceBadge source={e.source} kioskLabel={e.kioskLabel} />
+            {live ? (
+              <Badge variant={e.status === "ON_BREAK" ? "warning" : "success"} className="text-[10px]">
+                {e.status === "ON_BREAK" ? "On break" : "Working"}
               </Badge>
-              <span className="w-16 text-right font-mono text-sm tabular-nums">
-                {formatHours(e.totalWorkMin)}
-              </span>
-            </>
-          )}
-          <EntryActions entry={e} jobCodes={jobCodes} compact />
+            ) : (
+              <>
+                <Badge
+                  variant={
+                    e.approvalStatus === "APPROVED"
+                      ? "success"
+                      : e.approvalStatus === "REJECTED"
+                        ? "destructive"
+                        : "warning"
+                  }
+                  className="text-[10px]"
+                >
+                  {e.status === "ACTIVE" || e.status === "ON_BREAK" ? "Open" : e.approvalStatus}
+                </Badge>
+                <span className="min-w-14 text-right font-mono text-sm tabular-nums">
+                  {formatHours(e.totalWorkMin)}
+                </span>
+              </>
+            )}
+            <EntryActions entry={e} jobCodes={jobCodes} compact />
+          </div>
         </li>
       ))}
     </ul>

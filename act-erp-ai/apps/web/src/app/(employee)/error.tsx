@@ -33,7 +33,7 @@ export default function ErrorBoundary({
           </p>
         )}
       </div>
-      <Button onClick={reset} variant="outline" size="sm">
+      <Button onClick={reset} variant="outline" className="min-h-11 md:min-h-9">
         <RotateCcw className="mr-2 h-3.5 w-3.5" /> {t("common.tryAgain")}
       </Button>
     </div>

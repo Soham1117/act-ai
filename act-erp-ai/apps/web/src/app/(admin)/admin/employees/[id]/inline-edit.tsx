@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { Pencil, Loader2, Save, X, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -111,20 +111,26 @@ function EditableCard({
   edit: React.ReactNode;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="flex flex-col gap-2 space-y-0 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-base">{title}</CardTitle>
         {editing ? (
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto">
             <Button
               size="sm"
               variant="outline"
+              className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
               onClick={() => setEditing(false)}
               disabled={pending}
             >
               <X className="mr-1 h-3.5 w-3.5" /> Cancel
             </Button>
-            <Button size="sm" onClick={onSave} disabled={pending}>
+            <Button
+              size="sm"
+              className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
+              onClick={onSave}
+              disabled={pending}
+            >
               {pending ? (
                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
               ) : (
@@ -134,12 +140,18 @@ function EditableCard({
             </Button>
           </div>
         ) : (
-          <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+          <Button size="sm" variant="ghost" className="min-h-10 self-start sm:min-h-0" onClick={() => setEditing(true)}>
             <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
           </Button>
         )}
       </CardHeader>
-      <CardContent className={editing ? "grid grid-cols-2 gap-3 text-sm" : "grid grid-cols-2 gap-x-6 gap-y-3 text-sm"}>
+      <CardContent
+        className={
+          editing
+            ? "grid grid-cols-1 gap-3 text-sm sm:grid-cols-2"
+            : "grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2"
+        }
+      >
         {editing ? edit : view}
       </CardContent>
     </Card>
@@ -176,10 +188,11 @@ function EditField({
   type?: string;
   placeholder?: string;
 }) {
+  const fieldId = useId();
   return (
     <div className="space-y-1">
-      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</Label>
-      <Input
+      <Label htmlFor={`${fieldId}-1`} className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</Label>
+      <Input id={`${fieldId}-1`}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -202,11 +215,12 @@ function EditSelect({
   options: Array<{ value: string; label: string }>;
   allowNone?: boolean;
 }) {
+  const fieldId = useId();
   return (
     <div className="space-y-1">
-      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</Label>
+      <Label htmlFor={`${fieldId}-2`} className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</Label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger>
+        <SelectTrigger id={`${fieldId}-2`}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -400,6 +414,7 @@ export function EmploymentEditableCard({
   supervisors: Option[];
   terminationInfo: { date: string | null; reason: string | null };
 }) {
+  const fieldId = useId();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -503,8 +518,8 @@ export function EmploymentEditableCard({
           <EditField label="Work email" value={form.workEmail} onChange={(v) => set("workEmail", v)} />
           <EditField label="Work phone" value={form.workPhoneNumber} onChange={(v) => set("workPhoneNumber", v)} />
           <div className="col-span-2 space-y-1">
-            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Job description</Label>
-            <Textarea
+            <Label htmlFor={`${fieldId}-3`} className="text-[10px] uppercase tracking-wider text-muted-foreground">Job description</Label>
+            <Textarea id={`${fieldId}-3`}
               rows={3}
               value={form.jobDescription}
               onChange={(e) => set("jobDescription", e.target.value)}

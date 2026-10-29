@@ -1,31 +1,26 @@
 "use client";
 
-import { useTransition } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { InlineConfirmAction } from "@/components/inline-confirm-action";
 import { runAction } from "@/lib/toast-action";
 import { cancelRequest } from "@/server/actions/requests";
 import { usePortalLanguage } from "@/components/portal-language";
 
 export function CancelRequestButton({ id }: { id: string }) {
   const { t, toastAction } = usePortalLanguage();
-  const [pending, startTransition] = useTransition();
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-6 px-2 text-[11px]"
-      disabled={pending}
-      onClick={() => {
-        if (!window.confirm(t("workspace.requests.withdrawConfirm"))) return;
-        startTransition(async () => {
-          const res = await runAction(() => cancelRequest(id));
-          if (!toastAction(res)) return;
-          toast.success(t("workspace.requests.withdrawnToast"));
-        });
+    <InlineConfirmAction
+      label={t("workspace.requests.withdraw")}
+      message={t("workspace.requests.withdrawConfirm")}
+      cancelLabel={t("workspace.cancel")}
+      onConfirm={async () => {
+        const res = await runAction(() => cancelRequest(id));
+        if (!toastAction(res)) return false;
+        toast.success(t("workspace.requests.withdrawnToast"));
+        return true;
       }}
     >
       {t("workspace.requests.withdraw")}
-    </Button>
+    </InlineConfirmAction>
   );
 }

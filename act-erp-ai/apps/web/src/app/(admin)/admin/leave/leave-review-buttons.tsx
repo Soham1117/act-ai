@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Check, Loader2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { runAction, toastAction } from "@/lib/toast-action";
@@ -42,7 +42,7 @@ const COPY: Record<Mode, { title: string; desc: string; confirm: string; require
   },
 };
 
-function ReviewDialog({
+function ReviewPanel({
   id,
   mode,
   open,
@@ -53,6 +53,7 @@ function ReviewDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const fieldId = useId();
   const [pending, startTransition] = useTransition();
   const [notes, setNotes] = useState("");
   const [override, setOverride] = useState(false);
@@ -79,18 +80,18 @@ function ReviewDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{c.title}</DialogTitle>
-          <DialogDescription>{c.desc}</DialogDescription>
-        </DialogHeader>
+    <InlinePanel disabled={pending} open={open} onOpenChange={onOpenChange}>
+      <InlinePanelContent>
+        <InlinePanelHeader>
+          <InlinePanelTitle>{c.title}</InlinePanelTitle>
+          <InlinePanelDescription>{c.desc}</InlinePanelDescription>
+        </InlinePanelHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">
+            <Label htmlFor={`${fieldId}-1`} className="text-xs">
               {c.required ? "Reason (required)" : override ? "Override reason (required)" : "Note (optional)"}
             </Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={1000} />
+            <Textarea id={`${fieldId}-1`} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={1000} />
           </div>
           {mode === "APPROVE" && (
             <label className="flex items-start gap-2 text-xs">
@@ -101,8 +102,8 @@ function ReviewDialog({
             </label>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+        <InlinePanelFooter>
+          <Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Close</Button>
           <Button
             variant={mode === "APPROVE" ? "success" : "destructive"}
             disabled={pending || missing}
@@ -111,24 +112,24 @@ function ReviewDialog({
             {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {c.confirm}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </InlinePanelFooter>
+      </InlinePanelContent>
+    </InlinePanel>
   );
 }
 
 export function LeaveReviewButtons({ id }: { id: string }) {
   const [mode, setMode] = useState<Mode | null>(null);
   return (
-    <div className="flex gap-1">
-      <Button size="sm" variant="destructive" onClick={() => setMode("REJECT")} aria-label="Reject">
+    <div className="flex min-w-0 flex-wrap gap-2">
+      <Button size="sm" variant="destructive" aria-expanded={mode === "REJECT"} onClick={() => setMode("REJECT")} aria-label="Reject">
         <X className="h-4 w-4" />
       </Button>
-      <Button size="sm" variant="success" onClick={() => setMode("APPROVE")}>
+      <Button size="sm" variant="success" aria-expanded={mode === "APPROVE"} onClick={() => setMode("APPROVE")}>
         <Check className="h-4 w-4" /> Approve
       </Button>
       {mode && (
-        <ReviewDialog id={id} mode={mode} open onOpenChange={(o) => !o && setMode(null)} />
+        <ReviewPanel id={id} mode={mode} open onOpenChange={(o) => !o && setMode(null)} />
       )}
     </div>
   );
@@ -139,10 +140,10 @@ export function LeaveRevertButton({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)} title="Cancel this approved leave">
+      <Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen(true)} title="Cancel this approved leave">
         <Undo2 className="mr-1 h-3.5 w-3.5" /> Cancel
       </Button>
-      {open && <ReviewDialog id={id} mode="REVERT" open onOpenChange={setOpen} />}
+      {open && <ReviewPanel id={id} mode="REVERT" open onOpenChange={setOpen} />}
     </>
   );
 }

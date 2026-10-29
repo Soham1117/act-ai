@@ -15,6 +15,7 @@ import {
 } from "./notification-pagination";
 import { getPortalLanguage } from "@/lib/portal-i18n/server";
 import { localizeNotification } from "@/lib/portal-i18n/notifications";
+import { ResponsiveDataList } from "@/components/mobile";
 
 export async function generateMetadata() {
   const { t } = await getPortalLanguage();
@@ -83,91 +84,172 @@ export default async function NotificationsPage({
       />
       <Card>
         <CardContent className="p-0">
-          <ul className="divide-y">
-            {items.length === 0 && (
-              <li className="grid h-32 place-items-center text-center text-xs text-muted-foreground">
-                <div>
-                  <Bell className="mx-auto mb-2 h-5 w-5" />
-                  {t("notifications.empty")}
-                </div>
-              </li>
-            )}
-            {items.map((i) => {
-              const n = i.notification;
-              const content = localizeNotification(n, translator);
-              const variant =
-                n.priority === "URGENT"
-                  ? "destructive"
-                  : n.priority === "HIGH"
-                    ? "warning"
-                    : n.priority === "LOW"
-                      ? "outline"
-                      : "default";
-              return (
-                <li
-                  key={i.id}
-                  className={`grid grid-cols-[auto_1fr_auto] items-start gap-3 p-3 ${i.read ? "" : "bg-muted/30"}`}
-                >
-                  <span
-                    className={`mt-1 h-2 w-2 rounded-full ${i.read ? "bg-transparent" : "bg-primary"}`}
-                    aria-label={t(i.read ? "notifications.read" : "notifications.unread")}
-                    role="status"
-                  />
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium">{content.title}</p>
-                      <Badge variant="outline" className="text-[10px]">
-                        {enumLabel(n.type)}
-                      </Badge>
-                      <Badge variant={variant} className="text-[10px]">
-                        {enumLabel(n.priority)}
-                      </Badge>
-                    </div>
-                    <p className="mt-0.5 whitespace-pre-wrap break-words text-xs text-muted-foreground">
-                      {content.message}
-                    </p>
-                    {(() => {
-                      const l = safeHref(n.link);
-                      if (!l) return null;
-                      return l.external ? (
-                        <a
-                          href={l.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 inline-block text-xs text-primary hover:underline"
-                        >
-                          {t("notifications.openLink")}
-                        </a>
-                      ) : (
-                        <Link
-                          href={l.href}
-                          className="mt-1 inline-block text-xs text-primary hover:underline"
-                        >
-                          {t("notifications.viewDetails")}
-                        </Link>
-                      );
-                    })()}
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      {formatRelative(n.createdAt)}
-                    </p>
-                  </div>
-                  {!i.read && <MarkReadButton id={n.id} />}
-                  {i.read && (
-                    <span
-                      aria-label={t("notifications.read")}
-                      role="status"
-                      className="text-[10px] text-muted-foreground"
-                    >
-                      <CheckCheck aria-hidden="true" className="h-3 w-3" />
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          {items.length === 0 ? (
+            <p className="grid h-32 place-items-center text-center text-xs text-muted-foreground">
+              <span>
+                <Bell className="mx-auto mb-2 h-5 w-5" />
+                {t("notifications.empty")}
+              </span>
+            </p>
+          ) : (
+            <ResponsiveDataList
+              mobile={
+                <ul className="divide-y">
+                  {items.map((i) => (
+                    <NotificationItem
+                      key={i.id}
+                      i={i}
+                      layout="mobile"
+                      t={t}
+                      enumLabel={enumLabel}
+                      formatRelative={formatRelative}
+                      translator={translator}
+                    />
+                  ))}
+                </ul>
+              }
+              desktop={
+                <ul className="divide-y">
+                  {items.map((i) => (
+                    <NotificationItem
+                      key={i.id}
+                      i={i}
+                      layout="desktop"
+                      t={t}
+                      enumLabel={enumLabel}
+                      formatRelative={formatRelative}
+                      translator={translator}
+                    />
+                  ))}
+                </ul>
+              }
+            />
+          )}
         </CardContent>
       </Card>
       <NotificationPagination page={page} totalPages={totalPages} />
     </>
+  );
+}
+
+type NotificationRow = {
+  id: string;
+  read: boolean;
+  notification: {
+    id: string;
+    type: string;
+    priority: string;
+    link: string | null;
+    createdAt: Date;
+    title: string;
+    message: string;
+  };
+};
+
+function NotificationItem({
+  i,
+  layout,
+  t,
+  enumLabel,
+  formatRelative,
+  translator,
+}: {
+  i: NotificationRow;
+  layout: "mobile" | "desktop";
+  t: (key: string, params?: Record<string, string | number>) => string;
+  enumLabel: (code: string) => string;
+  formatRelative: (value: Date | string) => string;
+  translator: Awaited<ReturnType<typeof getPortalLanguage>>;
+}) {
+  const n = i.notification;
+  const content = localizeNotification(n, translator);
+  const variant =
+    n.priority === "URGENT"
+      ? "destructive"
+      : n.priority === "HIGH"
+        ? "warning"
+        : n.priority === "LOW"
+          ? "outline"
+          : "default";
+  const linkNode = (() => {
+    const l = safeHref(n.link);
+    if (!l) return null;
+    return l.external ? (
+      <a
+        href={l.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1 inline-block min-h-10 py-2 text-xs text-primary hover:underline"
+      >
+        {t("notifications.openLink")}
+      </a>
+    ) : (
+      <Link
+        href={l.href}
+        className="mt-1 inline-block min-h-10 py-2 text-xs text-primary hover:underline"
+      >
+        {t("notifications.viewDetails")}
+      </Link>
+    );
+  })();
+  const body = (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 break-words text-sm font-medium">{content.title}</p>
+        <Badge variant="outline" className="text-[10px]">
+          {enumLabel(n.type)}
+        </Badge>
+        <Badge variant={variant} className="text-[10px]">
+          {enumLabel(n.priority)}
+        </Badge>
+      </div>
+      <p className="mt-0.5 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+        {content.message}
+      </p>
+      {linkNode}
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        {formatRelative(n.createdAt)}
+      </p>
+    </>
+  );
+  const unreadDot = (
+    <span
+      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${i.read ? "bg-transparent" : "bg-primary"}`}
+      aria-label={t(i.read ? "notifications.read" : "notifications.unread")}
+      role="status"
+    />
+  );
+  const readAction = !i.read ? (
+    <MarkReadButton id={n.id} />
+  ) : (
+    <span
+      aria-label={t("notifications.read")}
+      role="status"
+      className="text-[10px] text-muted-foreground"
+    >
+      <CheckCheck aria-hidden="true" className="h-3 w-3" />
+    </span>
+  );
+
+  if (layout === "mobile") {
+    return (
+      <li className={`space-y-2 p-3 ${i.read ? "" : "bg-muted/30"}`}>
+        <div className="flex gap-3">
+          {unreadDot}
+          <div className="min-w-0 flex-1">{body}</div>
+        </div>
+        <div className="flex justify-end pl-5">{readAction}</div>
+      </li>
+    );
+  }
+
+  return (
+    <li
+      className={`grid grid-cols-[auto_1fr_auto] items-start gap-3 p-3 ${i.read ? "" : "bg-muted/30"}`}
+    >
+      {unreadDot}
+      <div className="min-w-0">{body}</div>
+      {readAction}
+    </li>
   );
 }

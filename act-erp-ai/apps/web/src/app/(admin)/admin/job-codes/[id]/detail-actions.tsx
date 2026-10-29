@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Pencil, UserPlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { InlineConfirmAction } from "@/components/inline-confirm-action";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+  InlinePanelTrigger,
+} from "@/components/inline-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -22,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { JobCodeDialog } from "../job-code-dialog";
+import { JobCodePanel } from "../job-code-dialog";
 import { assignJobCode, unassignJobCode } from "@/server/actions/job-codes";
 import { runAction, toastAction } from "@/lib/toast-action";
 
@@ -48,6 +49,7 @@ export function JobCodeDetailActions({
   departments: Array<{ id: string; name: string }>;
   assignableEmployees: Employee[];
 }) {
+  const fieldId = useId();
   const [editOpen, setEditOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -74,21 +76,21 @@ export function JobCodeDetailActions({
         <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
       </Button>
 
-      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
-        <DialogTrigger asChild>
+      <InlinePanel disabled={pending} open={assignOpen} onOpenChange={setAssignOpen}>
+        <InlinePanelTrigger asChild>
           <Button size="sm" disabled={assignableEmployees.length === 0}>
             <UserPlus className="mr-2 h-3.5 w-3.5" /> Assign employee
           </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Assign employee to {jobCode.code}</DialogTitle>
-          </DialogHeader>
+        </InlinePanelTrigger>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Assign employee to {jobCode.code}</InlinePanelTitle>
+          </InlinePanelHeader>
           <form onSubmit={onAssign} className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Employee</Label>
+              <Label htmlFor={`${fieldId}-1`} className="text-xs">Employee</Label>
               <Select value={employeeId} onValueChange={setEmployeeId}>
-                <SelectTrigger>
+                <SelectTrigger id={`${fieldId}-1`}>
                   <SelectValue placeholder="Select an employee" />
                 </SelectTrigger>
                 <SelectContent>
@@ -101,8 +103,8 @@ export function JobCodeDetailActions({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Assigned rate</Label>
-              <Input value={rate} onChange={(e) => setRate(e.target.value)} placeholder="$22.00 / NA" />
+              <Label htmlFor={`${fieldId}-2`} className="text-xs">Assigned rate</Label>
+              <Input id={`${fieldId}-2`} value={rate} onChange={(e) => setRate(e.target.value)} placeholder="$22.00 / NA" />
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
@@ -113,7 +115,7 @@ export function JobCodeDetailActions({
               </div>
               <Switch checked={isPrimary} onCheckedChange={setIsPrimary} />
             </div>
-            <DialogFooter>
+            <InlinePanelFooter>
               <Button type="button" variant="outline" onClick={() => setAssignOpen(false)}>
                 Cancel
               </Button>
@@ -121,12 +123,12 @@ export function JobCodeDetailActions({
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Assign
               </Button>
-            </DialogFooter>
+            </InlinePanelFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </InlinePanelContent>
+      </InlinePanel>
 
-      <JobCodeDialog
+      <JobCodePanel
         departments={departments}
         existing={jobCode}
         open={editOpen}
@@ -137,22 +139,14 @@ export function JobCodeDetailActions({
 }
 
 export function UnassignButton({ jobCodeId, employeeId }: { jobCodeId: string; employeeId: string }) {
-  const [pending, startTransition] = useTransition();
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-7 w-7"
-      disabled={pending}
-      onClick={() =>
-        startTransition(async () => {
-          const res = await runAction(() => unassignJobCode(jobCodeId, employeeId));
-          if (!toastAction(res)) return;
-          toast.success("Unassigned");
-        })
-      }
-    >
+    <InlineConfirmAction label="Unassign employee" message="Remove this employee's assignment to this job code?" cancelLabel="Cancel" onConfirm={async () => {
+      const res = await runAction(() => unassignJobCode(jobCodeId, employeeId));
+      if (!toastAction(res)) return false;
+      toast.success("Unassigned");
+      return true;
+    }}>
       <X className="h-3.5 w-3.5" />
-    </Button>
+    </InlineConfirmAction>
   );
 }

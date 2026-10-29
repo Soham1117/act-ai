@@ -12,13 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  InlinePanel,
+  InlinePanelContent,
+  InlinePanelDescription,
+  InlinePanelFooter,
+  InlinePanelHeader,
+  InlinePanelTitle,
+} from "@/components/inline-panel";
 import { PunchPhotos } from "@/components/punch-photos";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
@@ -29,9 +29,11 @@ import {
   reviewContractTimeEntry,
 } from "@/server/actions/contract-workers";
 import { exportContractHoursCsv } from "./export-actions";
+import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 import { ApprovalBadge, type HoursRow } from "./shared";
 
-const canReview = (r: HoursRow) => !r.isOpen && r.clockOut !== null && r.approvalStatus === "PENDING";
+const canReview = (r: HoursRow) =>
+  !r.isOpen && r.clockOut !== null && r.approvalStatus === "PENDING";
 
 export function DownloadHoursCsvButton({
   from,
@@ -45,7 +47,9 @@ export function DownloadHoursCsvButton({
   const [pending, startTransition] = useTransition();
   function download() {
     startTransition(async () => {
-      const res = await runAction(() => exportContractHoursCsv({ from, to, agencyId: agencyId || undefined }));
+      const res = await runAction(() =>
+        exportContractHoursCsv({ from, to, agencyId: agencyId || undefined }),
+      );
       if (!toastAction(res)) return;
       // Header row only: nothing to export.
       if (!res.csv.includes("\n")) {
@@ -63,7 +67,13 @@ export function DownloadHoursCsvButton({
     });
   }
   return (
-    <Button type="button" variant="outline" size="sm" onClick={download} disabled={pending}>
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={download}
+      disabled={pending}
+    >
       {pending ? (
         <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
       ) : (
@@ -88,7 +98,8 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
   const reviewable = rows.filter(canReview);
   // Drop selections that are no longer reviewable after a refresh.
   const activeSelected = reviewable.filter((r) => selected.has(r.id)).map((r) => r.id);
-  const allSelected = reviewable.length > 0 && activeSelected.length === reviewable.length;
+  const allSelected =
+    reviewable.length > 0 && activeSelected.length === reviewable.length;
 
   function toggle(id: string, on: boolean) {
     setSelected((prev) => {
@@ -102,11 +113,15 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
   function approve(ids: string[]) {
     startTransition(async () => {
       if (ids.length === 1) {
-        const res = await runAction(() => reviewContractTimeEntry({ id: ids[0]!, decision: "APPROVED" }));
+        const res = await runAction(() =>
+          reviewContractTimeEntry({ id: ids[0]!, decision: "APPROVED" }),
+        );
         if (!toastAction(res)) return;
         toast.success("Entry approved");
       } else {
-        const res = await runAction(() => bulkReviewContractTimeEntries({ ids, decision: "APPROVED" }));
+        const res = await runAction(() =>
+          bulkReviewContractTimeEntries({ ids, decision: "APPROVED" }),
+        );
         if (!toastAction(res)) return;
         toast.success(
           res.skipped > 0
@@ -126,11 +141,15 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
     if (!notes) return toast.error("Enter a reason for rejecting.");
     startTransition(async () => {
       if (ids.length === 1) {
-        const res = await runAction(() => reviewContractTimeEntry({ id: ids[0]!, decision: "REJECTED", notes }));
+        const res = await runAction(() =>
+          reviewContractTimeEntry({ id: ids[0]!, decision: "REJECTED", notes }),
+        );
         if (!toastAction(res)) return;
         toast.success("Entry rejected");
       } else {
-        const res = await runAction(() => bulkReviewContractTimeEntries({ ids, decision: "REJECTED", notes }));
+        const res = await runAction(() =>
+          bulkReviewContractTimeEntries({ ids, decision: "REJECTED", notes }),
+        );
         if (!toastAction(res)) return;
         toast.success(
           res.skipped > 0
@@ -146,6 +165,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
   }
 
   function openEdit(r: HoursRow) {
+    if (pending) return;
     setEditRow(r);
     setClockIn(dateToBusinessLocal(new Date(r.clockIn)));
     setClockOut(r.clockOut ? dateToBusinessLocal(new Date(r.clockOut)) : "");
@@ -155,14 +175,17 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
   function saveEdit() {
     if (!editRow) return;
     if (!clockIn || !clockOut) return toast.error("Enter both clock-in and clock-out.");
-    if (reason.trim().length < 3) return toast.error("Enter a reason (at least 3 characters).");
+    if (reason.trim().length < 3)
+      return toast.error("Enter a reason (at least 3 characters).");
     startTransition(async () => {
-      const res = await runAction(() => adminEditContractTimeEntry({
-        id: editRow.id,
-        clockIn,
-        clockOut,
-        reason: reason.trim(),
-      }));
+      const res = await runAction(() =>
+        adminEditContractTimeEntry({
+          id: editRow.id,
+          clockIn,
+          clockOut,
+          reason: reason.trim(),
+        }),
+      );
       if (!toastAction(res)) return;
       toast.success("Times updated. The entry is pending approval again.");
       setEditRow(null);
@@ -171,7 +194,11 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
   }
 
   if (rows.length === 0)
-    return <p className="py-10 text-center text-sm text-muted-foreground">No entries in this range.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        No entries in this range.
+      </p>
+    );
 
   return (
     <>
@@ -198,112 +225,83 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
           </Button>
         </div>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="w-10 p-3">
-                <Checkbox
-                  aria-label="Select all pending entries"
-                  disabled={reviewable.length === 0}
-                  checked={allSelected}
-                  onCheckedChange={(v) => setSelected(v === true ? new Set(reviewable.map((r) => r.id)) : new Set())}
-                />
-              </th>
-              <th className="p-3 font-medium">Date</th>
-              <th className="p-3 font-medium">Worker</th>
-              <th className="p-3 font-medium">Agency</th>
-              <th className="p-3 font-medium">Times</th>
-              <th className="p-3 text-right font-medium">Breaks</th>
-              <th className="p-3 text-right font-medium">Work</th>
-              <th className="p-3 font-medium">Photos</th>
-              <th className="p-3 font-medium">Status</th>
-              <th className="p-3 text-right font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+      <ResponsiveDataList
+        mobile={
+          <div className="space-y-2 p-2">
             {rows.map((r) => (
-              <tr key={r.id} className="border-b align-middle last:border-0">
-                <td className="p-3">
-                  {canReview(r) && (
-                    <Checkbox
-                      aria-label={`Select entry for ${r.workerName}`}
-                      checked={selected.has(r.id)}
-                      onCheckedChange={(v) => toggle(r.id, v === true)}
-                    />
-                  )}
-                </td>
-                <td className="whitespace-nowrap p-3 text-xs">{formatDateOnly(r.date)}</td>
-                <td className="p-3">
-                  <Link href={`/admin/contract-workers/${r.workerDbId}`} className="font-medium hover:underline">
-                    {r.workerName}
-                  </Link>
-                  <div className="font-mono text-[11px] text-muted-foreground">
-                    {r.workerCode}
-                    {r.project ? ` · ${r.project}` : ""}
-                  </div>
-                </td>
-                <td className="p-3">{r.agencyName}</td>
-                <td className="whitespace-nowrap p-3 font-mono text-xs">
-                  {formatBusinessTime(r.clockIn)}
-                  {r.clockOut ? ` → ${formatBusinessTime(r.clockOut)}` : " → open"}
-                  {r.editReason && (
-                    <div className="max-w-[220px] truncate font-sans text-[11px] text-muted-foreground" title={r.editReason}>
-                      {r.editReason}
-                    </div>
-                  )}
-                  {r.approvalStatus === "REJECTED" && r.approvalNotes && (
-                    <div className="max-w-[220px] truncate font-sans text-[11px] text-destructive" title={r.approvalNotes}>
-                      {r.approvalNotes}
-                    </div>
-                  )}
-                </td>
-                <td className="p-3 text-right font-mono text-xs tabular-nums">{formatHours(r.totalBreakMin)}</td>
-                <td className="p-3 text-right font-mono tabular-nums">{r.isOpen ? "—" : formatHours(r.totalWorkMin)}</td>
-                <td className="p-3">
-                  <PunchPhotos
-                    type="contract"
-                    entryId={r.id}
-                    hasIn={r.hasClockInPhoto}
-                    hasOut={r.hasClockOutPhoto}
-                    source={r.fromKiosk ? "KIOSK" : null}
-                    clockIn={r.clockIn}
-                    clockOut={r.clockOut}
-                  />
-                </td>
-                <td className="p-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <ApprovalBadge status={r.approvalStatus} open={r.isOpen} />
-                    {r.autoClosed && (
-                      <Badge variant="destructive" className="text-[10px]">
-                        Auto-closed
-                      </Badge>
+              <DataListCard key={r.id}>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    {canReview(r) && (
+                      <Checkbox
+                        aria-label={`Select entry for ${r.workerName}`}
+                        checked={selected.has(r.id)}
+                        onCheckedChange={(v) => toggle(r.id, v === true)}
+                        className="mt-0.5"
+                      />
                     )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground">
+                        {formatDateOnly(r.date)}
+                      </p>
+                      <Link
+                        href={`/admin/contract-workers/${r.workerDbId}`}
+                        className="text-sm font-medium hover:underline"
+                      >
+                        {r.workerName}
+                      </Link>
+                      <p className="font-mono text-[11px] text-muted-foreground">
+                        {r.workerCode}
+                        {r.project ? ` · ${r.project}` : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{r.agencyName}</p>
+                      <p className="font-mono text-xs">
+                        {formatBusinessTime(r.clockIn)}
+                        {r.clockOut ? ` → ${formatBusinessTime(r.clockOut)}` : " → open"}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <ApprovalBadge status={r.approvalStatus} open={r.isOpen} />
+                        {r.autoClosed && (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Auto-closed
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 font-mono text-xs tabular-nums">
+                        Work {r.isOpen ? "—" : formatHours(r.totalWorkMin)} · breaks{" "}
+                        {formatHours(r.totalBreakMin)}
+                      </p>
+                      <PunchPhotos
+                        type="contract"
+                        entryId={r.id}
+                        hasIn={r.hasClockInPhoto}
+                        hasOut={r.hasClockOutPhoto}
+                        source={r.fromKiosk ? "KIOSK" : null}
+                        clockIn={r.clockIn}
+                        clockOut={r.clockOut}
+                      />
+                    </div>
                   </div>
-                </td>
-                <td className="p-3">
-                  <div className="flex justify-end gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {canReview(r) && (
                       <>
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="outline"
                           disabled={pending}
                           onClick={() => approve([r.id])}
-                          aria-label={`Approve entry for ${r.workerName}`}
                         >
                           <Check className="mr-1 h-3.5 w-3.5" />
                           Approve
                         </Button>
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="outline"
                           disabled={pending}
                           onClick={() => {
                             setRejectNotes("");
                             setRejectIds([r.id]);
                           }}
-                          aria-label={`Reject entry for ${r.workerName}`}
                         >
                           <X className="mr-1 h-3.5 w-3.5" />
                           Reject
@@ -311,29 +309,179 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                       </>
                     )}
                     {!r.isOpen && r.clockOut && (
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>
+                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEdit(r)}>
                         <PenLine className="mr-1 h-3.5 w-3.5" />
                         Edit times
                       </Button>
                     )}
                   </div>
-                </td>
-              </tr>
+                </div>
+              </DataListCard>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        }
+        desktop={
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="w-10 p-3">
+                    <Checkbox
+                      aria-label="Select all pending entries"
+                      disabled={reviewable.length === 0}
+                      checked={allSelected}
+                      onCheckedChange={(v) =>
+                        setSelected(
+                          v === true ? new Set(reviewable.map((r) => r.id)) : new Set(),
+                        )
+                      }
+                    />
+                  </th>
+                  <th className="p-3 font-medium">Date</th>
+                  <th className="p-3 font-medium">Worker</th>
+                  <th className="p-3 font-medium">Agency</th>
+                  <th className="p-3 font-medium">Times</th>
+                  <th className="p-3 text-right font-medium">Breaks</th>
+                  <th className="p-3 text-right font-medium">Work</th>
+                  <th className="p-3 font-medium">Photos</th>
+                  <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b align-middle last:border-0">
+                    <td className="p-3">
+                      {canReview(r) && (
+                        <Checkbox
+                          aria-label={`Select entry for ${r.workerName}`}
+                          checked={selected.has(r.id)}
+                          onCheckedChange={(v) => toggle(r.id, v === true)}
+                        />
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap p-3 text-xs">
+                      {formatDateOnly(r.date)}
+                    </td>
+                    <td className="p-3">
+                      <Link
+                        href={`/admin/contract-workers/${r.workerDbId}`}
+                        className="font-medium hover:underline"
+                      >
+                        {r.workerName}
+                      </Link>
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        {r.workerCode}
+                        {r.project ? ` · ${r.project}` : ""}
+                      </div>
+                    </td>
+                    <td className="p-3">{r.agencyName}</td>
+                    <td className="whitespace-nowrap p-3 font-mono text-xs">
+                      {formatBusinessTime(r.clockIn)}
+                      {r.clockOut ? ` → ${formatBusinessTime(r.clockOut)}` : " → open"}
+                      {r.editReason && (
+                        <div
+                          className="max-w-[220px] truncate font-sans text-[11px] text-muted-foreground"
+                          title={r.editReason}
+                        >
+                          {r.editReason}
+                        </div>
+                      )}
+                      {r.approvalStatus === "REJECTED" && r.approvalNotes && (
+                        <div
+                          className="max-w-[220px] truncate font-sans text-[11px] text-destructive"
+                          title={r.approvalNotes}
+                        >
+                          {r.approvalNotes}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-3 text-right font-mono text-xs tabular-nums">
+                      {formatHours(r.totalBreakMin)}
+                    </td>
+                    <td className="p-3 text-right font-mono tabular-nums">
+                      {r.isOpen ? "—" : formatHours(r.totalWorkMin)}
+                    </td>
+                    <td className="p-3">
+                      <PunchPhotos
+                        type="contract"
+                        entryId={r.id}
+                        hasIn={r.hasClockInPhoto}
+                        hasOut={r.hasClockOutPhoto}
+                        source={r.fromKiosk ? "KIOSK" : null}
+                        clockIn={r.clockIn}
+                        clockOut={r.clockOut}
+                      />
+                    </td>
+                    <td className="p-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <ApprovalBadge status={r.approvalStatus} open={r.isOpen} />
+                        {r.autoClosed && (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Auto-closed
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex justify-end gap-1">
+                        {canReview(r) && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={pending}
+                              onClick={() => approve([r.id])}
+                              aria-label={`Approve entry for ${r.workerName}`}
+                            >
+                              <Check className="mr-1 h-3.5 w-3.5" />
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={pending}
+                              onClick={() => {
+                                setRejectNotes("");
+                                setRejectIds([r.id]);
+                              }}
+                              aria-label={`Reject entry for ${r.workerName}`}
+                            >
+                              <X className="mr-1 h-3.5 w-3.5" />
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                        {!r.isOpen && r.clockOut && (
+                          <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEdit(r)}>
+                            <PenLine className="mr-1 h-3.5 w-3.5" />
+                            Edit times
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        }
+      />
 
-      <Dialog open={rejectIds !== null} onOpenChange={(v) => !v && setRejectIds(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Reject {rejectIds?.length ?? 0} {rejectIds?.length === 1 ? "entry" : "entries"}?
-            </DialogTitle>
-            <DialogDescription>
+      <InlinePanel
+        open={rejectIds !== null}
+        onOpenChange={(v) => !pending && !v && setRejectIds(null)}
+      >
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>
+              Reject {rejectIds?.length ?? 0}{" "}
+              {rejectIds?.length === 1 ? "entry" : "entries"}?
+            </InlinePanelTitle>
+            <InlinePanelDescription>
               Rejected hours are not counted in the totals or the CSV. A note is required.
-            </DialogDescription>
-          </DialogHeader>
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="space-y-1">
             <Label htmlFor="cw-reject-notes">Reason</Label>
             <Textarea
@@ -343,26 +491,35 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
               maxLength={1000}
             />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectIds(null)} disabled={pending}>
+          <InlinePanelFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRejectIds(null)}
+              disabled={pending}
+            >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={reject} disabled={pending || !rejectNotes.trim()}>
+            <Button
+              variant="destructive"
+              onClick={reject}
+              disabled={pending || !rejectNotes.trim()}
+            >
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Reject
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
 
-      <Dialog open={editRow !== null} onOpenChange={(v) => !v && setEditRow(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit times for {editRow?.workerName}</DialogTitle>
-            <DialogDescription>
-              Times are Central. Breaks are kept. After saving, the entry is pending approval again.
-            </DialogDescription>
-          </DialogHeader>
+      <InlinePanel open={editRow !== null} onOpenChange={(v) => !pending && !v && setEditRow(null)}>
+        <InlinePanelContent>
+          <InlinePanelHeader>
+            <InlinePanelTitle>Edit times for {editRow?.workerName}</InlinePanelTitle>
+            <InlinePanelDescription>
+              Times are Central. Breaks are kept. After saving, the entry is pending
+              approval again.
+            </InlinePanelDescription>
+          </InlinePanelHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="cw-edit-in">Clock in</Label>
@@ -392,7 +549,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
               />
             </div>
           </div>
-          <DialogFooter>
+          <InlinePanelFooter>
             <Button variant="outline" onClick={() => setEditRow(null)} disabled={pending}>
               Cancel
             </Button>
@@ -400,9 +557,9 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
               {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Save times
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </InlinePanelFooter>
+        </InlinePanelContent>
+      </InlinePanel>
     </>
   );
 }
