@@ -18,7 +18,7 @@ Operational runbook for continuous archiving and restore. Tasks are numbered in 
 | User | Purpose | Policy file | Credentials location |
 |------|---------|-------------|----------------------|
 | `act-persona-walg-backup` | WAL-G upload only (`PutObject`, multipart helpers, scoped `ListBucket`) | `walg-backup-put-policy.json` | `/home/ubuntu/act-erp-ai/act-erp-ai/infra/walg.env` on the Lightsail box (`chmod 600`) |
-| `act-persona-walg-restore` | Offline restore/read; optional governance-bypass delete for emergency prune | `walg-restore-policy.json` | Password manager only — **not** on the app server |
+| `act-persona-walg-restore` | Offline restore/read; optional governance-bypass delete for emergency prune | `walg-restore-policy.json` | Password manager; for **drills only** copy to `infra/walg-restore.env` on Lightsail (`chmod 600`), remove after success when possible — never commit |
 
 **App isolation:** The web app and its IAM user / `.env.prod` S3 credentials must **never** be granted access to `act-persona-db-backups`. Document uploads use a separate bucket. Do not put WAL-G keys in `apps/web/.env.prod`.
 
@@ -128,3 +128,20 @@ CRON_TZ=America/Chicago
 ### Monthly restore drill
 
 Run `infra/scripts/walg-restore-test.sh` on the **first Monday of each month**; keep logs under `/home/ubuntu/act-releases/walg-drill-*/`. Document the release directory path in this file under **Acceptance** (no secrets).
+
+```bash
+RELEASE=/home/ubuntu/act-releases/walg-drill-$(date -u +%Y%m%dT%H%M%SZ)
+mkdir -p "$RELEASE"
+export RESTORE_TO="$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
+export WALG_RESTORE_ENV_FILE=/home/ubuntu/act-erp-ai/act-erp-ai/infra/walg-restore.env
+# Restore IAM env only (GetObject); do not point at infra/walg.env (put-only backup user).
+/home/ubuntu/act-erp-ai/act-erp-ai/infra/scripts/walg-restore-test.sh | tee "$RELEASE/walg-restore-test.log"
+curl -fsS https://persona.americancompletiontools.com/api/health
+# Prefer: rm -f "$WALG_RESTORE_ENV_FILE" after a successful drill
+```
+
+## Acceptance (Task 5)
+
+First non-destructive drill (2026-10-29): `/home/ubuntu/act-releases/walg-drill-20261029T163548Z/walg-restore-test.log` — exit 0; `TimeEntry=105`; live `/api/health` ok. Restore IAM env was removed from the box after the run.
+
+When building `walg-restore.env` from an operator import file, strip CRLF (`sed 's/\r$//'`) before `docker --env-file` or wal-g will not see S3 storage.
