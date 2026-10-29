@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListPrefix",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": "arn:aws:s3:::act-persona-db-backups",
+      "Condition": {
+        "StringLike": { "s3:prefix": ["act-erp/wal-g", "act-erp/wal-g/*"] }
+      }
+    },
+    {
+      "Sid": "PutOnly",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
+      "Resource": "arn:aws:s3:::act-persona-db-backups/act-erp/wal-g/*"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListPrefix",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": "arn:aws:s3:::act-persona-db-backups",
+      "Condition": {
+        "StringLike": { "s3:prefix": ["act-erp/wal-g", "act-erp/wal-g/*"] }
+      }
+    },
+    {
+      "Sid": "ReadObjects",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": "arn:aws:s3:::act-persona-db-backups/act-erp/wal-g/*"
+    },
+    {
+      "Sid": "EmergencyPruneGovernanceBypass",
+      "Effect": "Allow",
+      "Action": ["s3:DeleteObject", "s3:DeleteObjectVersion"],
+      "Resource": "arn:aws:s3:::act-persona-db-backups/act-erp/wal-g/*",
+      "Condition": {
+        "StringEquals": {
+          "s3:x-amz-bypass-governance-retention": "true"
+        }
+      }
+    }
+  ]
+}
