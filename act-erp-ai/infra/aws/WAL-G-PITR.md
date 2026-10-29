@@ -86,6 +86,45 @@ Verify put-only backup user: `PutObject` to `act-erp/wal-g/*` succeeds; `GetObje
 
 ---
 
-## Later tasks
+## Ops cadence (Task 4)
 
-Postgres `archive_mode`, WAL-G in Docker, base backup schedule, and restore drills are documented in subsequent plan tasks.
+### Scheduled base backup
+
+Example crontab for the `ubuntu` user on Lightsail: `infra/scripts/walg.cron.example`.
+
+```bash
+sudo touch /var/log/act-erp-walg-backup.log
+sudo chown ubuntu:ubuntu /var/log/act-erp-walg-backup.log
+crontab -e   # paste the example schedule (CRON_TZ=America/Chicago, daily 05:15)
+```
+
+After install, run once manually and confirm the log ends with `walg-backup: OK`:
+
+```bash
+/home/ubuntu/act-erp-ai/act-erp-ai/infra/scripts/walg-backup-push.sh >> /var/log/act-erp-walg-backup.log 2>&1
+tail -3 /var/log/act-erp-walg-backup.log
+```
+
+If backups fail, page ops (email or a healthchecks.io ping wrapping the cron command).
+
+### Archive lag / archiver health
+
+Weekly (or after any backup alert), check the archiver stats. **`failed_count` must stay at 0.** If it rises, treat as incident: fix archiving before relying on PITR.
+
+From the repo root on the server (`/home/ubuntu/act-erp-ai/act-erp-ai`):
+
+```bash
+docker compose -f infra/docker-compose.prod-lite.yml exec -T postgres \
+  psql -U act -d act -c "SELECT archived_count, last_archived_wal, last_archived_time, failed_count, last_failed_wal FROM pg_stat_archiver;"
+```
+
+Optional weekly cron (same user as backup):
+
+```cron
+CRON_TZ=America/Chicago
+0 6 * * 1 docker compose -f /home/ubuntu/act-erp-ai/act-erp-ai/infra/docker-compose.prod-lite.yml exec -T postgres psql -U act -d act -c "SELECT archived_count, last_archived_wal, last_archived_time, failed_count, last_failed_wal FROM pg_stat_archiver;" >> /var/log/act-erp-walg-archive-check.log 2>&1
+```
+
+### Monthly restore drill
+
+Run `infra/scripts/walg-restore-test.sh` on the **first Monday of each month**; keep logs under `/home/ubuntu/act-releases/walg-drill-*/`. Document the release directory path in this file under **Acceptance** (no secrets).

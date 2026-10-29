@@ -1,0 +1,8 @@
+# WAL-G base backup daily 05:15 America/Chicago ≈ 10:15 UTC (adjust for DST awareness via CRON_TZ)
+# Install: sudo touch /var/log/act-erp-walg-backup.log && sudo chown ubuntu:ubuntu /var/log/act-erp-walg-backup.log
+# Then `crontab -e` as ubuntu and paste the schedule lines below.
+#
+# Success prints a line ending with "walg-backup: OK". Wire exit code or log grep to healthchecks.io if desired.
+MAILTO=""
+CRON_TZ=America/Chicago
+15 5 * * * /home/ubuntu/act-erp-ai/act-erp-ai/infra/scripts/walg-backup-push.sh >> /var/log/act-erp-walg-backup.log 2>&1
