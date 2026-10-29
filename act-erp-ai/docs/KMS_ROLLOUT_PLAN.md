@@ -145,7 +145,7 @@ Completed on Lightsail:
 - Release dir: `/home/ubuntu/act-releases/kms-rollout-20261029T142641Z/` (DB dump + source backup + build/switch logs)
 - SQL applied: `Employee.privateDetails`, `HirePacketImport.processingToken`
 - Web image switched healthy; public `/api/health` and `/login` = 200
-- `SENSITIVE_DATA_KMS_KEY_ARN` set; `SENSITIVE_DATA_REQUIRE_ENCRYPTED=false` (compatibility window kept)
+- `SENSITIVE_DATA_KMS_KEY_ARN` set; `SENSITIVE_DATA_REQUIRE_ENCRYPTED=true` (enabled 2026-10-29 after migrate/verify + profile smoke)
 - Migrations: onboarding draft encrypted (1); employee private details updated 69 / empty 22 / verify 69; hire-packet and notes had 0 rows
 - Prior web image retained as `act-erp-lite-web:before-kms-20261029`
 
