@@ -5,12 +5,13 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
-import { parseDateOnly } from "@/lib/time-rules";
+import { dateOnlyToString, parseDateOnly } from "@/lib/time-rules";
 import {
   DEFAULT_EXPORT_COLUMNS,
   buildHoursExportCsv,
   type HoursExportOptions,
 } from "@/lib/hours-export";
+import { loadHoursExportEntries } from "@/server/hours-export-data";
 import { executeHoursExportSchedule } from "@/server/hours-export-runner";
 import { revalidatePath } from "next/cache";
 
@@ -26,37 +27,6 @@ const optionsSchema = z.object({
   templateId: z.string().optional(),
   departmentId: z.string().optional(),
 });
-
-async function loadEntries(from: Date, to: Date, departmentId?: string) {
-  return db.timeEntry.findMany({
-    where: {
-      date: { gte: from, lte: to },
-      ...(departmentId ? { employee: { departmentId } } : {}),
-    },
-    select: {
-      id: true,
-      employeeId: true,
-      date: true,
-      clockIn: true,
-      totalWorkMin: true,
-      jobCode: true,
-      rate: true,
-      source: true,
-      approvalStatus: true,
-      employee: {
-        select: {
-          employeeId: true,
-          name: true,
-          exportCode: true,
-          defaultHourlyRate: true,
-          compensationType: true,
-          department: { select: { name: true } },
-        },
-      },
-    },
-    orderBy: [{ date: "asc" }, { clockIn: "asc" }],
-  });
-}
 
 export async function generateHoursPeriodExport(
   input: z.infer<typeof optionsSchema>,
@@ -93,7 +63,7 @@ export async function generateHoursPeriodExport(
       };
     }
 
-    const entries = await loadEntries(from, to, data.departmentId || undefined);
+    const entries = await loadHoursExportEntries(data.from, data.to, data.departmentId || undefined);
     const csv = buildHoursExportCsv(entries, options);
     const filename = `hours-export-${data.from}_${data.to}.csv`;
     await audit({
@@ -103,13 +73,13 @@ export async function generateHoursPeriodExport(
         actorId: admin.id,
         options,
         bytes: csv.length,
-        entryCount: entries.length,
+        entryCount: entries.filter((e) => dateOnlyToString(e.date) >= data.from).length,
       },
     });
     return ok({
       csv,
       filename,
-      rowHint: `${entries.length} source entries`,
+      rowHint: `${entries.filter((e) => dateOnlyToString(e.date) >= data.from).length} source entries`,
     });
   } catch (err) {
     return failFromUnknown(err);
@@ -199,6 +169,11 @@ export async function runHoursExportScheduleNow(
     revalidatePath("/admin/hours/period-export");
     return ok({ key });
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await db.hoursExportSchedule
+      .update({ where: { id: scheduleId }, data: { lastError: message.slice(0, 2000) } })
+      .catch(() => undefined);
+    revalidatePath("/admin/hours/period-export");
     return failFromUnknown(err);
   }
 }

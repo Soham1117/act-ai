@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { allocateWeeklyOvertime, csvRow } from "@/lib/payroll-overtime";
+import { csvRow, isoWeekStart, splitEntryOvertime } from "@/lib/payroll-overtime";
 import { dateOnlyToString } from "@/lib/time-rules";
 import { effectiveRate } from "@/lib/time-rate";
 
@@ -71,7 +71,7 @@ type FlatRow = {
   department: string;
   date: string;
   jobCode: string;
-  rate: number;
+  rate: number | "";
   regularHours: number;
   otHours: number;
   totalHours: number;
@@ -88,60 +88,51 @@ function groupKey(e: HoursExportEntry, splitBy: HoursExportOptions["splitBy"]): 
   const day = dateOnlyToString(e.date);
   const rate = effectiveRate(e.rate, e.employee.defaultHourlyRate);
   if (splitBy === "JOB_CODE") return `${e.employeeId}|${day}|${e.jobCode}`;
-  if (splitBy === "RATE") return `${e.employeeId}|${day}|${rate.toFixed(2)}`;
-  return `${e.employeeId}|${day}|${e.jobCode}|${rate.toFixed(2)}|${e.id}`;
+  if (splitBy === "RATE") return `${e.employeeId}|${day}|${rate === null ? "none" : rate.toFixed(2)}`;
+  return `${e.employeeId}|${day}|${e.id}`;
 }
 
-/** Assign OT minutes to entries (latest first) using weekly allocator totals. */
-function otSplitByEntry(
-  empEntries: HoursExportEntry[],
-  from: string,
-  to: string,
-): Map<string, { regular: number; ot: number }> {
-  const sorted = [...empEntries].sort(
-    (a, b) => a.date.getTime() - b.date.getTime() || a.clockIn.getTime() - b.clockIn.getTime(),
-  );
-  const alloc = allocateWeeklyOvertime(
-    sorted.map((e) => ({
-      date: dateOnlyToString(e.date),
-      clockIn: e.clockIn.getTime(),
-      minutes: e.totalWorkMin,
-    })),
-    from,
-    to,
-  );
-  const out = new Map<string, { regular: number; ot: number }>();
-  let otLeft = alloc.overtimeMin;
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    const e = sorted[i]!;
-    const take = Math.min(e.totalWorkMin, otLeft);
-    out.set(e.id, { regular: e.totalWorkMin - take, ot: take });
-    otLeft -= take;
-  }
-  return out;
+/**
+ * First day to load so every week touched by the range is whole: the weekly
+ * overtime threshold needs the hours worked earlier in the same ISO week.
+ */
+export function exportLoadFrom(from: string): string {
+  return isoWeekStart(from);
 }
 
 export function buildHoursExportCsv(
   entries: HoursExportEntry[],
   options: HoursExportOptions,
 ): string {
-  let list = entries.filter((e) => e.totalWorkMin > 0);
+  // Rejected hours are never paid. Overtime is walked over everything worked
+  // (approved or still pending) so a pending Tuesday still counts toward the
+  // 40-hour line for an approved Friday; only the approved rows are written.
+  const worked = entries.filter((e) => e.totalWorkMin > 0 && e.approvalStatus !== "REJECTED");
+  let list = worked;
   if (options.approvedOnly) list = list.filter((e) => e.approvalStatus === "APPROVED");
   if (!options.includeSalaried) {
     list = list.filter((e) => e.employee.compensationType === "HOURLY_RATE");
   }
 
   const byEmployee = new Map<string, HoursExportEntry[]>();
-  for (const e of list) {
+  for (const e of worked) {
     const arr = byEmployee.get(e.employeeId) ?? [];
     arr.push(e);
     byEmployee.set(e.employeeId, arr);
   }
   const otByEntryId = new Map<string, { regular: number; ot: number }>();
   for (const [, empEntries] of byEmployee) {
-    for (const [id, split] of otSplitByEntry(empEntries, options.from, options.to)) {
-      otByEntryId.set(id, split);
-    }
+    const split = splitEntryOvertime(
+      empEntries.map((e) => ({
+        id: e.id,
+        date: dateOnlyToString(e.date),
+        clockIn: e.clockIn.getTime(),
+        minutes: e.totalWorkMin,
+      })),
+      options.from,
+      options.to,
+    );
+    for (const [id, v] of split) otByEntryId.set(id, { regular: v.regularMin, ot: v.overtimeMin });
   }
 
   const buckets = new Map<string, FlatRow>();
@@ -174,7 +165,7 @@ export function buildHoursExportCsv(
       department: e.employee.department?.name ?? "",
       date: day,
       jobCode: e.jobCode,
-      rate,
+      rate: rate ?? "",
       regularHours: hours(split.regular),
       otHours: hours(split.ot),
       totalHours: hours(e.totalWorkMin),

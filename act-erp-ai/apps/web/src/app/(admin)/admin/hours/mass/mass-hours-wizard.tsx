@@ -24,6 +24,7 @@ type PreviewRow = {
   employeeId: string;
   name: string;
   overlap: boolean;
+  inactive: boolean;
   workMin: number;
 };
 
@@ -42,7 +43,9 @@ export function MassHoursWizard({
   const [clockInTime, setClockInTime] = useState("07:00");
   const [clockOutTime, setClockOutTime] = useState("15:30");
   const [jobCode, setJobCode] = useState(jobCodes[0]?.code ?? "");
+  const [breakMin, setBreakMin] = useState(0);
   const [reason, setReason] = useState("");
+  const [periodEnded, setPeriodEnded] = useState(false);
   const [approve, setApprove] = useState(false);
   const [preview, setPreview] = useState<PreviewRow[] | null>(null);
   const [pending, start] = useTransition();
@@ -65,6 +68,7 @@ export function MassHoursWizard({
     clockInTime,
     clockOutTime,
     jobCode,
+    breakMin,
     reason: reason.trim(),
     approve,
   });
@@ -175,6 +179,23 @@ export function MassHoursWizard({
               </div>
             </div>
             <div className="space-y-1">
+              <Label htmlFor="mh-break">Unpaid break (minutes)</Label>
+              <Input
+                id="mh-break"
+                type="number"
+                min={0}
+                max={240}
+                step={5}
+                value={breakMin}
+                onChange={(e) =>
+                  setBreakMin(Math.max(0, Math.min(240, Math.round(Number(e.target.value) || 0))))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Taken as one break in the middle of the shift. Leave at 0 for none.
+              </p>
+            </div>
+            <div className="space-y-1">
               <Label htmlFor="mh-job">Job code</Label>
               <select
                 id="mh-job"
@@ -219,6 +240,7 @@ export function MassHoursWizard({
                     toastAction(res);
                     if (res.ok) {
                       setPreview(res.rows);
+                      setPeriodEnded(res.periodEnded);
                       setStep(3);
                     }
                   });
@@ -242,6 +264,11 @@ export function MassHoursWizard({
                 <li key={r.employeeId} className="flex items-center justify-between gap-3 px-3 py-2">
                   <span>
                     {r.name}
+                    {r.inactive ? (
+                      <span className="ml-2 text-[11px] text-destructive">
+                        Not active. Remove before committing
+                      </span>
+                    ) : null}
                     {r.overlap ? (
                       <span className="ml-2 text-[11px] text-destructive">
                         Skip — overlaps existing entry
@@ -252,6 +279,12 @@ export function MassHoursWizard({
                 </li>
               ))}
             </ul>
+            {periodEnded && (
+              <p className="rounded-md border p-2 text-xs">
+                This date is in a pay period that has already ended. If hours were already exported
+                for it, these entries will not be in that export.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               Overlaps are skipped so kiosk punches are not overwritten.
             </p>
@@ -261,7 +294,7 @@ export function MassHoursWizard({
               </Button>
               <Button
                 type="button"
-                disabled={pending || preview.every((r) => r.overlap)}
+                disabled={pending || preview.every((r) => r.overlap) || preview.some((r) => r.inactive)}
                 onClick={() => {
                   start(async () => {
                     const res = await runAction(() => commitMassHours(payload()));

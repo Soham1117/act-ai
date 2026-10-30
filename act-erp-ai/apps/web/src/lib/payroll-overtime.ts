@@ -103,6 +103,42 @@ export function allocateWeeklyOvertime(
   };
 }
 
+export type EntryOvertimeInput = SlipEntry & { id: string };
+
+/**
+ * Per-entry split of the same weekly rule used by `allocateWeeklyOvertime`:
+ * walk entries chronologically, minutes past the 2400th of an ISO week are
+ * overtime. Only entries on days inside [periodStart, periodEnd] are returned,
+ * but earlier entries of the same week still count toward the threshold, so
+ * pass the whole leading week.
+ */
+export function splitEntryOvertime(
+  entries: EntryOvertimeInput[],
+  periodStart: string,
+  periodEnd: string,
+): Map<string, { regularMin: number; overtimeMin: number }> {
+  const sorted = [...entries]
+    .filter((e) => e.minutes > 0)
+    .sort((a, b) =>
+      a.date < b.date ? -1 : a.date > b.date ? 1 : (a.clockIn ?? 0) - (b.clockIn ?? 0),
+    );
+  const cumulative = new Map<string, number>();
+  const out = new Map<string, { regularMin: number; overtimeMin: number }>();
+  for (const e of sorted) {
+    const wk = isoWeekStart(e.date);
+    const before = cumulative.get(wk) ?? 0;
+    const after = before + e.minutes;
+    cumulative.set(wk, after);
+    if (e.date < periodStart || e.date > periodEnd) continue;
+    const regularMin = Math.max(
+      0,
+      Math.min(after, OVERTIME_THRESHOLD_MIN) - Math.min(before, OVERTIME_THRESHOLD_MIN),
+    );
+    out.set(e.id, { regularMin, overtimeMin: e.minutes - regularMin });
+  }
+  return out;
+}
+
 // ── CSV helpers (RFC 4180 + formula-injection guard) ───────────────────────
 
 /** Quote every field; neutralise text cells a spreadsheet would treat as formulas. */

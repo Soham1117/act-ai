@@ -268,7 +268,13 @@ export async function adminUpdateTimeEntry(
       const totals = clockOut
         ? computeEntryTotals({ clockIn: ci.date, clockOut, breaks: nextBreaks })
         : null;
-      const rate = await resolveHourlyRate(tx, entry.employeeId, data.jobCode);
+      // Keep the rate stamped when the entry was worked; only re-resolve when the
+      // job code changes or no rate was ever stamped. A note or time fix must not
+      // rewrite pay after the employee's rate has changed.
+      const rate =
+        data.jobCode !== entry.jobCode || entry.rate == null
+          ? await resolveHourlyRate(tx, entry.employeeId, data.jobCode)
+          : entry.rate;
       const reapprovalRequired =
         entry.approvalStatus === "APPROVED" &&
         payableTimeChanged(entry, {

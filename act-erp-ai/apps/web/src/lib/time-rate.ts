@@ -9,7 +9,7 @@ export async function resolveHourlyRate(
   tx: Tx,
   employeeId: string,
   jobCode: string,
-): Promise<Prisma.Decimal> {
+): Promise<Prisma.Decimal | null> {
   const assignment = await tx.jobCodeAssignment.findFirst({
     where: { employeeId, jobCode: { code: jobCode, isActive: true } },
     select: { assignedRate: true },
@@ -23,18 +23,23 @@ export async function resolveHourlyRate(
     where: { id: employeeId },
     select: { defaultHourlyRate: true },
   });
-  const fallback = Number(employee?.defaultHourlyRate?.toString() ?? 25);
-  return new Prisma.Decimal((Number.isFinite(fallback) && fallback >= 0 ? fallback : 25).toFixed(2));
+  const fallback = Number(employee?.defaultHourlyRate?.toString() ?? NaN);
+  return Number.isFinite(fallback) && fallback >= 0 ? new Prisma.Decimal(fallback.toFixed(2)) : null;
 }
 
-/** Effective rate for display/export when TimeEntry.rate is null. */
+/**
+ * Effective rate for display/export when TimeEntry.rate is null. Returns null
+ * when neither value is a usable rate, so callers show a blank instead of
+ * inventing a number.
+ */
 export function effectiveRate(
   entryRate: Prisma.Decimal | number | string | null | undefined,
   employeeDefault: Prisma.Decimal | number | string | null | undefined,
-): number {
-  const a = entryRate == null ? NaN : Number(entryRate.toString());
-  if (Number.isFinite(a) && a >= 0) return a;
-  const b = employeeDefault == null ? NaN : Number(employeeDefault.toString());
-  if (Number.isFinite(b) && b >= 0) return b;
-  return 25;
+): number | null {
+  for (const v of [entryRate, employeeDefault]) {
+    if (v == null) continue;
+    const n = Number(v.toString());
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return null;
 }

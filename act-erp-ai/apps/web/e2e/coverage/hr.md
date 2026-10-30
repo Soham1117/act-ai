@@ -24,3 +24,4 @@ New feature checks are implemented in the named specs; execution evidence is rec
 | --- | --- |
 | `api/company-documents/[versionId]/file` | `hr-company-library.spec.ts` and `hr-onboarding.spec.ts`: company payroll isolation and exact assigned employee bytes; route unit tests deny unknown assignments |
 | `onboard/[token]/files/[versionId]` | `hr-onboarding.spec.ts`: exact invite binding, expiry/completion, and assigned-template bytes |
+| `saveOnboardingDraft` | planned: no scenario yet. |

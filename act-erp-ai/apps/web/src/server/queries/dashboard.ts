@@ -1,3 +1,4 @@
+import { effectiveRate } from "@/lib/time-rate";
 import { cache } from "react";
 import { db } from "@/lib/db";
 import {
@@ -395,7 +396,7 @@ export async function payrollCostTrend(periods = 6) {
       let hours = 0;
       for (const e of entries) {
         if (e.date < p.payPeriodStart || e.date > p.payPeriodEnd) continue;
-        const rate = Number(e.rate ?? e.employee.defaultHourlyRate ?? 25);
+        const rate = effectiveRate(e.rate as string | number | null, e.employee.defaultHourlyRate as string | number | null) ?? 0;
         const hrs = e.totalWorkMin / 60;
         hours += hrs;
         cost += hrs * rate;

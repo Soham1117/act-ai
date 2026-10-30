@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { buildHoursExportCsv } from "@/lib/hours-export";
+import { loadHoursExportEntries } from "@/server/hours-export-data";
 import { uploadFile } from "@/lib/storage";
 import { BUSINESS_TZ } from "@/lib/time-rules";
 
@@ -56,34 +57,6 @@ function rangeEndingYesterday(rangeDays: number, now = new Date()) {
   };
 }
 
-async function loadEntries(from: Date, to: Date) {
-  return db.timeEntry.findMany({
-    where: { date: { gte: from, lte: to } },
-    select: {
-      id: true,
-      employeeId: true,
-      date: true,
-      clockIn: true,
-      totalWorkMin: true,
-      jobCode: true,
-      rate: true,
-      source: true,
-      approvalStatus: true,
-      employee: {
-        select: {
-          employeeId: true,
-          name: true,
-          exportCode: true,
-          defaultHourlyRate: true,
-          compensationType: true,
-          department: { select: { name: true } },
-        },
-      },
-    },
-    orderBy: [{ date: "asc" }, { clockIn: "asc" }],
-  });
-}
-
 /** Upload one schedule's CSV to S3. No auth — for cron + admin "run now". */
 export async function executeHoursExportSchedule(scheduleId: string): Promise<{ key: string }> {
   const schedule = await db.hoursExportSchedule.findUnique({
@@ -93,8 +66,8 @@ export async function executeHoursExportSchedule(scheduleId: string): Promise<{ 
   if (!schedule) throw new Error("Schedule not found.");
   if (!schedule.enabled) throw new Error("Schedule is disabled.");
 
-  const { from, to, fromStr, toStr } = rangeEndingYesterday(schedule.rangeDays);
-  const entries = await loadEntries(from, to);
+  const { fromStr, toStr } = rangeEndingYesterday(schedule.rangeDays);
+  const entries = await loadHoursExportEntries(fromStr, toStr);
   const csv = buildHoursExportCsv(entries, {
     columns: schedule.template.columns,
     splitBy: schedule.template.splitBy,
@@ -117,8 +90,8 @@ export async function executeHoursExportSchedule(scheduleId: string): Promise<{ 
 }
 
 /**
- * Due schedules: enabled, matching Chicago weekday, within ±15 min of
- * minuteOfDay, and not already run today (Chicago).
+ * Due schedules: enabled, matching Chicago weekday, from minuteOfDay up to an
+ * hour after it, and not already run today (Chicago).
  */
 export async function listDueHoursExportSchedules(now = new Date()) {
   const clock = chicagoClock(now);
@@ -127,11 +100,12 @@ export async function listDueHoursExportSchedules(now = new Date()) {
     include: { template: true },
   });
   return schedules.filter((s) => {
-    const delta = Math.abs(s.minuteOfDay - clock.minuteOfDay);
-    if (delta > 15 && delta < 24 * 60 - 15) return false;
+    // Never before the scheduled minute (approvals made overnight must be in),
+    // and up to an hour after so one missed cron tick does not skip the week.
+    const since = clock.minuteOfDay - s.minuteOfDay;
+    if (since < 0 || since >= 60) return false;
     if (!s.lastRunAt) return true;
-    const lastKey = chicagoClock(s.lastRunAt).dateKey;
-    return lastKey !== clock.dateKey;
+    return chicagoClock(s.lastRunAt).dateKey !== clock.dateKey;
   });
 }
 

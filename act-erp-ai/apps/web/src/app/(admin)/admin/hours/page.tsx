@@ -1,3 +1,4 @@
+import { effectiveRate } from "@/lib/time-rate";
 import Image from "next/image";
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
@@ -50,10 +51,7 @@ function toRow(e: EntryWithRels): EntryRowData {
     clockIn: e.clockIn.toISOString(),
     clockOut: e.clockOut?.toISOString() ?? null,
     jobCode: e.jobCode,
-    rate:
-      e.rate != null
-        ? Number(e.rate.toString())
-        : Number(e.employee.defaultHourlyRate?.toString() ?? 25),
+    rate: effectiveRate(e.rate, e.employee.defaultHourlyRate),
     notes: e.timesheetNotes,
     status: e.status,
     approvalStatus: e.approvalStatus,
