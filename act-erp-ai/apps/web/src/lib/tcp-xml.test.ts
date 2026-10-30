@@ -7,6 +7,8 @@ import {
   parseRoster,
   parseSheetRows,
   parseWeeklyPunch,
+  parseScheduledShifts,
+  usualWeek,
 } from "@/lib/tcp-xml";
 
 const sheet = (rows: string[][]) =>
@@ -82,5 +84,18 @@ describe("tcp-xml", () => {
     expect(rows[0]!.date).toBeNull();
     expect(rows[1]).toMatchObject({ number: "84", bankId: 1, accrued: 1.54 });
     expect(rows[2]!.taken).toBe(8);
+  });
+  it("pairs scheduled in/out rows and finds the usual week", () => {
+    const rows = [["458", "Hannah Cobern", "", "In", "10/12/2026 07:00 AM"], ["", "", "", "Out", "10/12/2026 03:30 PM"]];
+    for (const d of ["10/19", "10/26", "11/2"]) {
+      rows.push(["", "", "", "In", `${d}/2026 07:00 AM`], ["", "", "", "Out", `${d}/2026 03:30 PM`]);
+    }
+    rows.push(["", "", "", "In", "10/20/2026 06:00 AM"], ["", "", "", "Out", "10/20/2026 02:00 PM"]);
+    const shifts = parseScheduledShifts(rows);
+    expect(shifts).toHaveLength(5);
+    expect(shifts[0]).toEqual({ number: "458", date: "2026-10-12", start: "07:00", end: "15:30" });
+    const week = usualWeek(shifts, "2026-10-01", "2026-11-30");
+    expect(week.days[1]).toEqual({ start: "07:00", end: "15:30", weeks: 4 }); // Mondays
+    expect(week.days[2]).toBeUndefined(); // one Tuesday only
   });
 });

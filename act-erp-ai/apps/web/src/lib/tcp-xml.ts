@@ -326,3 +326,101 @@ export function parseAccrualUsage(rows: SheetRow[]): TcpAccrualRow[] {
   }
   return out;
 }
+
+// ── Schedule Variance (scheduled shifts) ────────────────────────────────────
+
+export type TcpScheduledShift = {
+  number: string;
+  /** Calendar day of the scheduled start, "YYYY-MM-DD" (business time). */
+  date: string;
+  /** "HH:MM" 24h, business time. */
+  start: string;
+  end: string;
+};
+
+function iso(y: number, m: number, d: number) {
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+function hhmm(t: [number, number]) {
+  return `${String(t[0]).padStart(2, "0")}:${String(t[1]).padStart(2, "0")}`;
+}
+
+/**
+ * Schedule Variance rows hold one scheduled In or Out each; pair them into
+ * shifts. An Out with no In (or an In with no Out) is dropped.
+ */
+export function parseScheduledShifts(rows: SheetRow[]): TcpScheduledShift[] {
+  const out: TcpScheduledShift[] = [];
+  let number = "";
+  let open: { date: [number, number, number]; time: [number, number] } | null = null;
+  for (const r of rows) {
+    if (/^\d+$/.test(cell(r, 0)) && cell(r, 1)) {
+      number = cell(r, 0);
+      open = null;
+    }
+    const op = cell(r, 3);
+    if (!number || (op !== "In" && op !== "Out")) continue;
+    const [d, ...t] = cell(r, 4).split(" ");
+    const date = parseUsDate(d ?? "");
+    const time = parseUsTime(t.join(" "));
+    if (!date || !time) continue;
+    if (op === "In") {
+      open = { date, time };
+    } else if (open) {
+      const sameDay = open.date.join("-") === date.join("-");
+      const next = new Date(Date.UTC(open.date[0], open.date[1] - 1, open.date[2] + 1));
+      const overnight =
+        date[0] === next.getUTCFullYear() && date[1] === next.getUTCMonth() + 1 && date[2] === next.getUTCDate();
+      if (sameDay || overnight) {
+        out.push({
+          number,
+          date: iso(open.date[0], open.date[1], open.date[2]),
+          start: hhmm(open.time),
+          end: hhmm(time),
+        });
+      }
+      open = null;
+    }
+  }
+  return out;
+}
+
+export type WeeklyPattern = {
+  /** 0 = Sunday … 6 = Saturday */
+  days: Record<number, { start: string; end: string; weeks: number }>;
+};
+
+/**
+ * The usual week: for each weekday, the most common (start, end) seen in the
+ * window, kept only if it appeared in at least `minWeeks` different weeks.
+ */
+export function usualWeek(
+  shifts: readonly TcpScheduledShift[],
+  from: string,
+  to: string,
+  minWeeks = 3,
+): WeeklyPattern {
+  const byDay = new Map<number, Map<string, Set<string>>>();
+  for (const s of shifts) {
+    if (s.date < from || s.date > to) continue;
+    const [y, m, d] = s.date.split("-").map(Number) as [number, number, number];
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    const dow = dt.getUTCDay();
+    const monday = new Date(dt.getTime() - ((dow + 6) % 7) * 86_400_000).toISOString().slice(0, 10);
+    const key = `${s.start}-${s.end}`;
+    const forDay = byDay.get(dow) ?? new Map<string, Set<string>>();
+    const weeks = forDay.get(key) ?? new Set<string>();
+    weeks.add(monday);
+    forDay.set(key, weeks);
+    byDay.set(dow, forDay);
+  }
+  const days: WeeklyPattern["days"] = {};
+  for (const [dow, forDay] of byDay) {
+    const best = [...forDay.entries()].sort((a, b) => b[1].size - a[1].size || (a[0] < b[0] ? 1 : -1))[0]!;
+    if (best[1].size >= minWeeks) {
+      const [start, end] = best[0].split("-") as [string, string];
+      days[dow] = { start, end, weeks: best[1].size };
+    }
+  }
+  return { days };
+}
