@@ -159,6 +159,12 @@ export default async function ContractWorkersPage({
   const fromStr = dateOnlyToString(rangeFrom);
   const toStr = dateOnlyToString(rangeTo);
 
+  const onSiteByAgency = Array.from(
+    onSite
+      .filter((e) => !e.stale)
+      .reduce((m, e) => m.set(e.contractWorker.agency.name, (m.get(e.contractWorker.agency.name) ?? 0) + 1), new Map<string, number>()),
+  ).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+
   return (
     <>
       <PageHeader
@@ -185,6 +191,19 @@ export default async function ContractWorkersPage({
           icon={<Timer className="h-4 w-4" />}
         />
       </div>
+      {onSiteByAgency.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-2" aria-label="On site now by agency">
+          {onSiteByAgency.map(([agency, count]) => (
+            <li
+              key={agency}
+              className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs"
+            >
+              <span className="font-medium">{agency}</span>
+              <span className="font-mono tabular-nums text-muted-foreground">{count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <Tabs defaultValue={tab} className="mt-6 space-y-4">
         <MobileTabsList>

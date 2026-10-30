@@ -63,13 +63,13 @@ export function CreatePayrollPeriodForm() {
   return (
     <InlinePanel open={open} onOpenChange={setOpen}>
       <InlinePanelTrigger asChild disabled={pending}>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" /> New pay period
+        <Button variant="outline" size="sm">
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Add a period manually
         </Button>
       </InlinePanelTrigger>
       <InlinePanelContent>
         <InlinePanelHeader>
-          <InlinePanelTitle>New pay period</InlinePanelTitle>
+          <InlinePanelTitle>Add a pay period manually</InlinePanelTitle>
         </InlinePanelHeader>
         <form onSubmit={onSubmit} className="min-w-0 space-y-3">
           <div className="space-y-1.5">
