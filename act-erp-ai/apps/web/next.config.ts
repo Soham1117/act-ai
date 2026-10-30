@@ -15,6 +15,8 @@ const nextConfig: NextConfig = {
   generateBuildId: async () => buildId,
   env: { NEXT_PUBLIC_BUILD_ID: buildId },
   reactStrictMode: true,
+  // Set only by the Docker build (infra/Dockerfile.web) to save a minute per deploy.
+  typescript: { ignoreBuildErrors: process.env.NEXT_SKIP_TYPECHECK === "1" },
   // Standalone server bundle for the Docker image (infra/Dockerfile.web).
   output: "standalone",
   outputFileTracingRoot: path.resolve(__dirname),
@@ -38,6 +40,8 @@ const nextConfig: NextConfig = {
     // uploads between 10 MB and the per-file limits broke with "Unexpected end
     // of form". Keep this equal to the server action limit.
     proxyClientMaxBodySize: "60mb",
+    // Reuse compiled output between Docker builds (BuildKit cache mount).
+    turbopackFileSystemCacheForBuild: process.env.NEXT_FS_CACHE === "1",
   },
   poweredByHeader: false,
   async headers() {
