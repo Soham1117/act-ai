@@ -8,6 +8,7 @@ import { ExternalLink } from "lucide-react";
 import { CreateKioskPanel } from "./create-kiosk-dialog";
 import { RequirePinSwitch } from "./require-pin-switch";
 import { KioskRowActions } from "./kiosk-row-actions";
+import { PanelSlot } from "@/components/inline-panel";
 import { TrustedNetworksCard } from "./trusted-networks-card";
 import { listKioskNetworks } from "@/server/actions/kiosk";
 
@@ -142,6 +143,7 @@ export default async function KiosksPage() {
                     {s.id.slice(0, 8)}…
                   </span>
                   <KioskRowActions id={s.id} slug={s.slug} isActive={active} />
+                  <PanelSlot id={`kiosk-${s.id}`} />
                 </li>
               );
             })}

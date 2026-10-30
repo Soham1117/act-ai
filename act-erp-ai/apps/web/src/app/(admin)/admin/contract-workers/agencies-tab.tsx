@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { Fragment, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   InlinePanel,
   InlinePanelContent,
+  PanelSlot,
+  PanelSlotRow,
   InlinePanelDescription,
   InlinePanelFooter,
   InlinePanelHeader,
@@ -92,7 +94,7 @@ export function AgencyForm({ agency }: { agency?: AgencyRow }) {
           if (v) reset();
         }}
       >
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={agency ? `agency-${agency.id}` : undefined}>
           <InlinePanelHeader>
             <InlinePanelTitle>
               {agency ? `Edit ${agency.name}` : "Add agency"}
@@ -210,7 +212,8 @@ export function AgenciesTable({ agencies }: { agencies: AgencyRow[] }) {
         </thead>
         <tbody>
           {agencies.map((a) => (
-            <tr key={a.id} className="border-b last:border-0">
+            <Fragment key={a.id}>
+            <tr className="border-b last:border-0 [&:has(+tr_[data-panel-open])]:bg-primary/10">
               <td className="p-3 font-medium">{a.name}</td>
               <td className="p-3 text-xs">
                 <div>{a.contactName ?? "—"}</div>
@@ -234,6 +237,8 @@ export function AgenciesTable({ agencies }: { agencies: AgencyRow[] }) {
                 </div>
               </td>
             </tr>
+            <PanelSlotRow id={`agency-${a.id}`} colSpan={6} />
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -244,7 +249,8 @@ export function AgenciesTable({ agencies }: { agencies: AgencyRow[] }) {
       mobile={
         <div className="space-y-2 p-2">
           {agencies.map((a) => (
-            <DataListCard key={a.id}>
+            <Fragment key={a.id}>
+            <DataListCard>
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium">{a.name}</p>
@@ -270,6 +276,8 @@ export function AgenciesTable({ agencies }: { agencies: AgencyRow[] }) {
                 </div>
               </div>
             </DataListCard>
+            <PanelSlot id={`agency-${a.id}`} view="mobile" />
+            </Fragment>
           ))}
         </div>
       }

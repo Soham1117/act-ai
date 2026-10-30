@@ -95,7 +95,7 @@ export function KioskRowActions({
       </DropdownMenu>
 
       <InlinePanel disabled={pending} open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`kiosk-${id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>Delete this kiosk?</InlinePanelTitle>
             <InlinePanelDescription>

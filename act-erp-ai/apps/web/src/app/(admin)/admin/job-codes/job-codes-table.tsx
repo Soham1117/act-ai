@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { Star, MoreHorizontal, ToggleLeft, ToggleRight, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -23,6 +23,7 @@ import {
 import { deleteJobCode, toggleJobCodeActive } from "@/server/actions/job-codes";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { JobCodePanel } from "./job-code-dialog";
+import { PanelSlot, PanelSlotRow } from "@/components/inline-panel";
 import { getDepartmentConfig } from "@/lib/departments";
 import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 
@@ -66,7 +67,8 @@ export function JobCodesTable({ rows, departments }: Props) {
             const cfg = j.departmentName ? getDepartmentConfig(j.departmentName) : null;
             const Icon = cfg?.icon;
             return (
-              <TableRow key={j.id}>
+              <Fragment key={j.id}>
+              <TableRow className="[&:has(+tr_[data-panel-open])]:bg-primary/10">
                 <TableCell className="font-mono text-sm">
                   <Link href={`/admin/job-codes/${j.id}`} className="inline-flex items-center gap-1.5 hover:underline">
                     {j.isDefault && <Star className="h-3 w-3 fill-primary text-primary" />}
@@ -146,6 +148,8 @@ export function JobCodesTable({ rows, departments }: Props) {
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
+              <PanelSlotRow id={`job-code-${j.id}`} colSpan={7} />
+              </Fragment>
             );
           })}
           {rows.length === 0 && (
@@ -168,7 +172,8 @@ export function JobCodesTable({ rows, departments }: Props) {
               const cfg = j.departmentName ? getDepartmentConfig(j.departmentName) : null;
               const Icon = cfg?.icon;
               return (
-                <DataListCard key={j.id}>
+                <Fragment key={j.id}>
+                <DataListCard>
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <Link href={`/admin/job-codes/${j.id}`} className="font-mono text-sm font-medium hover:underline">
@@ -239,6 +244,8 @@ export function JobCodesTable({ rows, departments }: Props) {
                     </DropdownMenu>
                   </div>
                 </DataListCard>
+                <PanelSlot id={`job-code-${j.id}`} view="mobile" className="mt-2" />
+                </Fragment>
               );
             })}
             {rows.length === 0 && (
@@ -257,6 +264,7 @@ export function JobCodesTable({ rows, departments }: Props) {
           key={editing.id}
           departments={departments}
           existing={editing}
+          panelSlot={`job-code-${editing.id}`}
           open
           onOpenChange={(o) => { if (!o) setEditing(null); }}
         />

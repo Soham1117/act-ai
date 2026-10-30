@@ -63,7 +63,7 @@ export function PendingHireActions({
         </Button>
       </div>
       <InlinePanel disabled={pending} open={confirmReject} onOpenChange={setConfirmReject}>
-        <InlinePanelContent className="max-w-sm">
+        <InlinePanelContent panelSlot={`hire-${employeeId}`} className="max-w-sm">
           <InlinePanelHeader>
             <InlinePanelTitle>Reject {name}?</InlinePanelTitle>
             <InlinePanelDescription>

@@ -45,11 +45,13 @@ type Props = {
   /** Controlled-mode props. If `open` is provided, the dialog is controlled. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Where the form opens (see PanelSlot); defaults to inline. */
+  panelSlot?: string;
 };
 
 const NONE = "__none__";
 
-export function JobCodePanel({ departments, existing, open: controlledOpen, onOpenChange }: Props) {
+export function JobCodePanel({ departments, existing, open: controlledOpen, onOpenChange, panelSlot }: Props) {
   const fieldId = useId();
   const editing = Boolean(existing);
   const isControlled = controlledOpen !== undefined;
@@ -113,7 +115,7 @@ export function JobCodePanel({ departments, existing, open: controlledOpen, onOp
           </Button>
         </InlinePanelTrigger>
       )}
-      <InlinePanelContent>
+      <InlinePanelContent panelSlot={panelSlot}>
         <InlinePanelHeader>
           <InlinePanelTitle>{editing ? "Edit job code" : "New job code"}</InlinePanelTitle>
         </InlinePanelHeader>

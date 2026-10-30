@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import { Slot } from "@radix-ui/react-slot";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,38 @@ function usePanel() {
   return panel;
 }
 
-/** Task editor in normal document flow. No portal, overlay or focus trap. */
+/**
+ * Where a panel should open: a `PanelSlot` / `PanelSlotRow` the page places
+ * next to the thing being edited (right under its table row or card), so a form
+ * never opens inside a narrow cell or at the bottom of a long page. Phone and
+ * desktop layouts can each render their own slot for the same id.
+ */
+function findPanelSlot(id: string): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  const view = window.matchMedia("(min-width: 768px)").matches ? "desktop" : "mobile";
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>("[data-panel-slot]")).filter(
+    (el) => el.dataset.panelSlot === id,
+  );
+  return candidates.find((el) => el.dataset.panelView === view) ?? candidates.find((el) => !el.dataset.panelView) ?? null;
+}
+
+/** Empty landing spot for a panel, as a block (cards, list items). Hidden until a panel opens in it. */
+export function PanelSlot({ id, view, className }: { id: string; view?: "desktop" | "mobile"; className?: string }) {
+  return <div data-panel-slot={id} data-panel-view={view} className={cn("col-span-full empty:hidden sm:col-span-full", className)} />;
+}
+
+/** Landing spot as a full-width table row, directly under the row it belongs to. */
+export function PanelSlotRow({ id, colSpan }: { id: string; colSpan: number }) {
+  return (
+    <tr className="hidden border-b bg-muted/30 has-[[data-panel-open]]:table-row">
+      <td colSpan={colSpan} className="p-3 sm:p-4">
+        <div data-panel-slot={id} data-panel-view="desktop" />
+      </td>
+    </tr>
+  );
+}
+
+/** Task editor in normal document flow. No overlay or focus trap. */
 export function InlinePanel({
   open: controlledOpen, defaultOpen = false, onOpenChange, className, children,
   ...props
@@ -75,16 +107,18 @@ export const InlinePanelTrigger = React.forwardRef<
 InlinePanelTrigger.displayName = "InlinePanelTrigger";
 
 export const InlinePanelContent = React.forwardRef<
-  HTMLElement, React.ComponentPropsWithoutRef<"section">
->(({ className, children, ...props }, ref) => {
+  HTMLElement, React.ComponentPropsWithoutRef<"section"> & { panelSlot?: string }
+>(({ className, children, panelSlot, ...props }: React.ComponentPropsWithoutRef<"section"> & { panelSlot?: string }, ref) => {
   const { open } = usePanel();
   const localRef = React.useRef<HTMLElement | null>(null);
   React.useEffect(() => {
-    if (open) localRef.current?.focus();
+    if (open) localRef.current?.focus({ preventScroll: true });
+    if (open) localRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [open]);
-  return (
+  const target = panelSlot && open ? findPanelSlot(panelSlot) : null;
+  const content = (
     <Collapsible.Content asChild>
-      <section tabIndex={-1} ref={(node) => {
+      <section tabIndex={-1} data-panel-open={open ? "" : undefined} ref={(node) => {
         localRef.current = node;
         if (typeof ref === "function") ref(node);
         else if (ref) ref.current = node;
@@ -93,6 +127,7 @@ export const InlinePanelContent = React.forwardRef<
       </section>
     </Collapsible.Content>
   );
+  return target ? createPortal(content, target) : content;
 });
 InlinePanelContent.displayName = "InlinePanelContent";
 

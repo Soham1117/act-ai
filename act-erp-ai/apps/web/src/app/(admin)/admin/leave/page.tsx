@@ -10,6 +10,7 @@ import { Plane } from "lucide-react";
 import { businessDateOnly, formatDateOnly, getAvatarUrl } from "@/lib/format";
 import { LEAVE_TYPES, fmtDays, policyFor } from "@/lib/leave-balance";
 import { loadLeaveBalancesFor, loadPolicies } from "@/lib/leave-balance-db";
+import { PanelSlot } from "@/components/inline-panel";
 import { LeaveReviewButtons, LeaveRevertButton } from "./leave-review-buttons";
 import { AdjustBalancePanel } from "./adjust-balance-dialog";
 import { PolicyEditor } from "./policy-editor";
@@ -118,6 +119,7 @@ export default async function AdminLeavePage() {
                     <Badge variant="outline" className="text-[10px]">{r.leaveType}</Badge>
                     <span className="font-mono text-xs tabular-nums">{fmtDays(Number(r.totalDays))}</span>
                     <LeaveReviewButtons id={r.id} />
+                    <PanelSlot id={`leave-${r.id}`} />
                   </li>
                 ))}
                 {pending.length === 0 && (
@@ -156,6 +158,7 @@ export default async function AdminLeavePage() {
                         {when(r).toLocaleDateString()}
                       </span>
                       {r.status === "APPROVED" ? <LeaveRevertButton id={r.id} /> : <span />}
+                      <PanelSlot id={`leave-${r.id}`} />
                     </li>
                   );
                 })}

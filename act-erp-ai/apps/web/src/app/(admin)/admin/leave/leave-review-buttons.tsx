@@ -81,7 +81,7 @@ function ReviewPanel({
 
   return (
     <InlinePanel disabled={pending} open={open} onOpenChange={onOpenChange}>
-      <InlinePanelContent>
+      <InlinePanelContent panelSlot={`leave-${id}`}>
         <InlinePanelHeader>
           <InlinePanelTitle>{c.title}</InlinePanelTitle>
           <InlinePanelDescription>{c.desc}</InlinePanelDescription>

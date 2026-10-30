@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmployeesTable } from "./employees-table";
 import { AddEmployeePanel } from "./add-employee-dialog";
+import { PanelSlot } from "@/components/inline-panel";
 import { PendingHireActions } from "./pending-hire-actions";
 
 export const metadata = { title: "Employees" };
@@ -60,6 +61,7 @@ export default async function EmployeesPage() {
                   </p>
                 </Link>
                 <PendingHireActions employeeId={e.id} name={e.name} />
+                <PanelSlot id={`hire-${e.id}`} />
               </div>
             ))}
           </CardContent>

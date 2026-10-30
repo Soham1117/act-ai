@@ -11,6 +11,7 @@ import { Receipt } from "lucide-react";
 import { businessDateOnly, formatCurrency, formatDateOnly, getAvatarUrl } from "@/lib/format";
 import { businessYearRange, type ReimbursementStatus } from "@/lib/reimbursement";
 import { ReceiptLinks } from "@/components/receipt-links";
+import { PanelSlot } from "@/components/inline-panel";
 import { ReimbursementStatusButtons } from "./reimbursement-status-buttons";
 
 export const metadata = { title: "Reimbursements" };
@@ -185,6 +186,7 @@ function RList({ rows }: { rows: R[] }) {
                   )}
                   <ReceiptLinks receipts={r.receipts} />
                 </div>
+                <PanelSlot id={`reimb-${r.id}`} />
               </li>
             );
           })}

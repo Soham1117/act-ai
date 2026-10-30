@@ -33,10 +33,13 @@ export function DepartmentForm({
   existing,
   open: controlledOpen,
   onOpenChange,
+  panelSlot,
 }: {
   existing?: DepartmentFormValues;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Where the form opens (see PanelSlot); defaults to inline. */
+  panelSlot?: string;
 } = {}) {
   const formId = useId();
   const [innerOpen, setInnerOpen] = useState(false);
@@ -80,7 +83,7 @@ export function DepartmentForm({
           </Button>
         </InlinePanelTrigger>
       )}
-      <InlinePanelContent>
+      <InlinePanelContent panelSlot={panelSlot}>
         <InlinePanelHeader>
           <InlinePanelTitle>
             {existing ? "Edit department" : "New department"}

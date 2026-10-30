@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { OnboardingActions, RowActions } from "./actions";
+import { PanelSlot } from "@/components/inline-panel";
 import { PendingHireActions } from "../employees/pending-hire-actions";
 
 export const metadata = { title: "Onboarding" };
@@ -86,6 +87,7 @@ export default async function OnboardingPage() {
                   </p>
                 </Link>
                 <PendingHireActions employeeId={e.id} name={e.name} />
+                <PanelSlot id={`hire-${e.id}`} />
               </div>
             ))}
           </CardContent>

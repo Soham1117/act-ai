@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
@@ -6,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { getDepartmentConfig } from "@/lib/departments";
 import { DepartmentForm } from "./department-dialog";
 import { DepartmentActions } from "./department-actions";
+import { PanelSlot } from "@/components/inline-panel";
 
 export const metadata = { title: "Departments" };
 
@@ -37,10 +39,8 @@ export default async function DepartmentsPage() {
           const cfg = getDepartmentConfig(d.name);
           const Icon = cfg.icon;
           return (
-            <Card
-              key={d.id}
-              className="relative transition-colors hover:border-primary/50"
-            >
+            <Fragment key={d.id}>
+            <Card className="relative transition-colors hover:border-primary/50">
               <Link href={`/admin/departments/${d.id}`}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
@@ -76,6 +76,8 @@ export default async function DepartmentsPage() {
                 />
               </div>
             </Card>
+            <PanelSlot id={`dept-${d.id}`} />
+            </Fragment>
           );
         })}
       </div>

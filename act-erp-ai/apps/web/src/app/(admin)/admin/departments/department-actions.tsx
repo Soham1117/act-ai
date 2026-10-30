@@ -71,6 +71,7 @@ export function DepartmentActions({ department }: { department: DepartmentFormVa
         <DepartmentForm
           key={department.id}
           existing={department}
+          panelSlot={`dept-${department.id}`}
           open
           onOpenChange={(o) => {
             if (!o) setEditing(false);
@@ -79,7 +80,7 @@ export function DepartmentActions({ department }: { department: DepartmentFormVa
       )}
 
       <InlinePanel open={deleting} onOpenChange={(o) => !pending && setDeleting(o)}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`dept-${department.id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>Delete {department.name}?</InlinePanelTitle>
             <InlinePanelDescription>

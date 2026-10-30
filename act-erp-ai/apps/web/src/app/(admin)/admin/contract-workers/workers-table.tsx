@@ -1,6 +1,8 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
+import { PanelSlot, PanelSlotRow } from "@/components/inline-panel";
 import { Badge } from "@/components/ui/badge";
 import { formatDateOnly } from "@/lib/format";
 import { DataListCard, ResponsiveDataList } from "@/components/mobile";
@@ -75,7 +77,8 @@ export function WorkersTable({
         </thead>
         <tbody>
           {workers.map((w) => (
-            <tr key={w.id} className="border-b align-middle last:border-0">
+            <Fragment key={w.id}>
+            <tr className="border-b align-middle last:border-0 [&:has(+tr_[data-panel-open])]:bg-primary/10">
               <td className="p-3 font-mono text-xs">{w.workerId}</td>
               <td className="p-3 font-medium">
                 <Link
@@ -118,6 +121,8 @@ export function WorkersTable({
                 </div>
               </td>
             </tr>
+            <PanelSlotRow id={`worker-${w.id}`} colSpan={7} />
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -129,7 +134,8 @@ export function WorkersTable({
       mobile={
         <div className="space-y-2 p-2">
           {workers.map((w) => (
-            <DataListCard key={w.id}>
+            <Fragment key={w.id}>
+            <DataListCard>
               <div className="space-y-2">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -173,6 +179,8 @@ export function WorkersTable({
                 <WorkerActions w={w} agencies={agencies} jobCodes={jobCodes} />
               </div>
             </DataListCard>
+            <PanelSlot id={`worker-${w.id}`} view="mobile" />
+            </Fragment>
           ))}
         </div>
       }

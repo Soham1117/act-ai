@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, Download, Loader2, PenLine, X } from "lucide-react";
@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   InlinePanel,
+  PanelSlot,
+  PanelSlotRow,
   InlinePanelContent,
   InlinePanelDescription,
   InlinePanelFooter,
@@ -229,7 +231,8 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
         mobile={
           <div className="space-y-2 p-2">
             {rows.map((r) => (
-              <DataListCard key={r.id}>
+              <Fragment key={r.id}>
+              <DataListCard>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
                     {canReview(r) && (
@@ -317,6 +320,8 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                   </div>
                 </div>
               </DataListCard>
+              <PanelSlot id={`hours-${r.id}`} view="mobile" />
+              </Fragment>
             ))}
           </div>
         }
@@ -350,7 +355,8 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-b align-middle last:border-0">
+                  <Fragment key={r.id}>
+                  <tr className="border-b align-middle last:border-0 [&:has(+tr_[data-panel-open])]:bg-primary/10">
                     <td className="p-3">
                       {canReview(r) && (
                         <Checkbox
@@ -461,6 +467,8 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                       </div>
                     </td>
                   </tr>
+                  <PanelSlotRow id={`hours-${r.id}`} colSpan={10} />
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -472,7 +480,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
         open={rejectIds !== null}
         onOpenChange={(v) => !pending && !v && setRejectIds(null)}
       >
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={rejectIds?.length === 1 ? `hours-${rejectIds[0]}` : undefined}>
           <InlinePanelHeader>
             <InlinePanelTitle>
               Reject {rejectIds?.length ?? 0}{" "}
@@ -512,7 +520,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
       </InlinePanel>
 
       <InlinePanel open={editRow !== null} onOpenChange={(v) => !pending && !v && setEditRow(null)}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={editRow ? `hours-${editRow.id}` : undefined}>
           <InlinePanelHeader>
             <InlinePanelTitle>Edit times for {editRow?.workerName}</InlinePanelTitle>
             <InlinePanelDescription>

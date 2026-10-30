@@ -144,7 +144,7 @@ export function ReimbursementStatusButtons({
       </DropdownMenu>
 
       <InlinePanel open={panel === "reject"} onOpenChange={(o) => !o && closePanel()}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`reimb-${id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>Reject claim</InlinePanelTitle>
             <InlinePanelDescription>
@@ -180,7 +180,7 @@ export function ReimbursementStatusButtons({
       </InlinePanel>
 
       <InlinePanel open={panel === "pay"} onOpenChange={(o) => !o && closePanel()}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`reimb-${id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>Mark paid</InlinePanelTitle>
             <InlinePanelDescription>
@@ -235,7 +235,7 @@ export function ReimbursementStatusButtons({
       </InlinePanel>
 
       <InlinePanel open={panel === "reopen"} onOpenChange={(o) => !o && closePanel()}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`reimb-${id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>Reopen claim</InlinePanelTitle>
             <InlinePanelDescription>

@@ -148,7 +148,7 @@ export function WorkerForm({
           if (v && worker) reset();
         }}
       >
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={worker ? `worker-${worker.id}` : undefined}>
           <InlinePanelHeader>
             <InlinePanelTitle>
               {worker ? `Edit ${worker.workerId}` : "Add contract worker"}
@@ -285,7 +285,7 @@ export function WorkerActiveButton({ worker }: { worker: WorkerRow }) {
         {label}
       </Button>
       <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`worker-${worker.id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>
               {label}: {worker.name}?
@@ -362,7 +362,7 @@ export function EndAssignmentButton({ worker }: { worker: WorkerRow }) {
         End
       </Button>
       <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`worker-${worker.id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>End assignment for {worker.name}?</InlinePanelTitle>
             <InlinePanelDescription>
@@ -427,7 +427,7 @@ export function ReactivateButton({ worker }: { worker: WorkerRow }) {
         Reactivate
       </Button>
       <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`worker-${worker.id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>Reactivate {worker.name}?</InlinePanelTitle>
             <InlinePanelDescription>
@@ -486,7 +486,7 @@ export function ClockOutButton({ workerId, name }: { workerId: string; name: str
         Clock out
       </Button>
       <InlinePanel disabled={pending} open={open} onOpenChange={(nextOpen) => { if (!pending) setOpen(nextOpen); }}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`worker-${workerId}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>Clock out {name}?</InlinePanelTitle>
             <InlinePanelDescription>

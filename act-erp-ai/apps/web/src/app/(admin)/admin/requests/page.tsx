@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ClipboardList } from "lucide-react";
 import { getAvatarUrl } from "@/lib/format";
 import { MobileTabsList } from "@/components/mobile";
+import { PanelSlot } from "@/components/inline-panel";
 import { RequestStatusButtons } from "./request-status-buttons";
 import { formatDistanceToNow } from "date-fns";
 
@@ -133,6 +134,7 @@ function RequestList({ rows }: { rows: RequestRow[] }) {
                 <div className="min-w-0 sm:col-span-full">
                   <RequestStatusButtons id={r.id} current={r.status} />
                 </div>
+                <PanelSlot id={`request-${r.id}`} />
               </li>
             );
           })}

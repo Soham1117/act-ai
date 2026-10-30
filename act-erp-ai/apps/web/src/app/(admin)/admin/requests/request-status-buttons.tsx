@@ -134,7 +134,7 @@ export function RequestStatusButtons({
       </DropdownMenu>
 
       <InlinePanel open={!!action} onOpenChange={(o) => !o && setAction(null)}>
-        <InlinePanelContent>
+        <InlinePanelContent panelSlot={`request-${id}`}>
           <InlinePanelHeader>
             <InlinePanelTitle>{c?.title}</InlinePanelTitle>
             <InlinePanelDescription>{c?.desc}</InlinePanelDescription>
