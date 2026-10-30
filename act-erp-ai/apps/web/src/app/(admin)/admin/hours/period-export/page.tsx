@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { HoursSubnav } from "@/components/hours-subnav";
 import { resolveHoursRange, loadHoursPeriodPresets } from "@/lib/hours-period";
 import { DEFAULT_EXPORT_COLUMNS } from "@/lib/hours-export";
+import { PayrollWorkbookCard } from "@/components/payroll-workbook-card";
 import { PeriodExportClient } from "./period-export-client";
 
 export const metadata = { title: "Period export" };
@@ -20,7 +21,7 @@ export default async function PeriodExportPage({
   const { fromStr, toStr } = resolveHoursRange(one(sp.from), one(sp.to));
   const periodId = one(sp.period).trim();
 
-  const [presets, templates, schedules, departments, period] = await Promise.all([
+  const [presets, templates, schedules, departments, period, calendar, activeStaff] = await Promise.all([
     loadHoursPeriodPresets(),
     db.hoursExportTemplate.findMany({ orderBy: { name: "asc" } }).catch(() => []),
     db.hoursExportSchedule
@@ -33,7 +34,14 @@ export default async function PeriodExportPage({
     periodId
       ? db.payrollCalendar.findUnique({ where: { id: periodId } })
       : Promise.resolve(null),
+    db.payrollCalendar.findMany({ orderBy: { payPeriodEnd: "desc" }, take: 12 }),
+    db.employee.findMany({
+      where: { employmentStatus: { in: ["ACTIVE", "ON_LEAVE"] } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
+  const latestDone = calendar.find((p) => p.payPeriodEnd <= new Date()) ?? calendar[0] ?? null;
 
   const initialFrom = period
     ? period.payPeriodStart.toISOString().slice(0, 10)
@@ -57,6 +65,13 @@ export default async function PeriodExportPage({
             Clear
           </Link>
         </p>
+      ) : null}
+      {latestDone ? (
+        <PayrollWorkbookCard
+          periods={calendar.map((p) => ({ id: p.id, label: p.title }))}
+          employees={activeStaff.map((e) => ({ id: e.id, label: e.name }))}
+          defaultPeriodId={latestDone.id}
+        />
       ) : null}
       <PeriodExportClient
         initialFrom={initialFrom}

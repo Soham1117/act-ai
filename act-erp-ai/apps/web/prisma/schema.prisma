@@ -331,6 +331,7 @@ model Employee {
   privateNotes EmployeeNote[]
   accrualLedger          AccrualLedgerEntry[]
   accrualRules           EmployeeAccrualRule[]
+  payrollNotes           PayrollPeriodNote[]
   hirePacketImports      HirePacketImport[]
   paystubAliases         PaystubNameAlias[]
   onboardingPacket       OnboardingPacketSubmission?
@@ -1930,4 +1931,19 @@ model EmployeeAccrualRule {
   ruleDescription String
 
   @@unique([employeeId, bank, ruleId])
+}
+
+/// Free-text note HR adds to an employee for one pay period (shown in the payroll workbook).
+model PayrollPeriodNote {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  note        String   @db.Text
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+
+  @@unique([employeeId, periodStart, periodEnd])
+  @@index([periodStart, periodEnd])
 }
