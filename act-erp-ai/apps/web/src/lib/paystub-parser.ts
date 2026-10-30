@@ -65,7 +65,12 @@ export function parsePaystubPageRows(rows: readonly PaystubTextRow[]): ParsedPay
   const identityRow = ssnMatch
     ? rows.find((row) => row.text.includes(ssnMatch[0]))
     : undefined;
-  const name = identityRow?.text.split(",")[0]?.replace(SSN_RE, "").trim();
+  // Newer stubs print the payroll employee number after the name: "JANE TESTER (136), 1 Test St".
+  const name = identityRow?.text
+    .split(",")[0]
+    ?.replace(SSN_RE, "")
+    .replace(/\s*\(\d{1,8}\)\s*$/, "")
+    .trim();
   const employeeName =
     name &&
     name.length <= 160 &&

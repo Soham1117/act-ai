@@ -142,6 +142,16 @@ async function combinePages(...inputs: ArrayBuffer[]): Promise<ArrayBuffer> {
 }
 
 describe("classifyPaystubRows", () => {
+  it("accepts a name followed by the payroll employee number", () => {
+    const rows = stubRows().map((row, index) =>
+      index === 1 ? { ...row, text: "Jane A Tester (136), 1 Test St, Testville, TX 76028 ***-**-9999" } : row,
+    );
+    expect(classifyPaystubRows(rows)).toMatchObject({
+      status: "SUPPORTED",
+      parsed: { employeeName: "Jane A Tester", ssnLast4: "9999" },
+    });
+  });
+
   it("accepts a complete stub without requiring financial amounts", () => {
     expect(classifyPaystubRows(stubRows())).toMatchObject({
       status: "SUPPORTED",
