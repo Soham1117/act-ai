@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
+import { TableSorter } from "@/components/table-sorter";
 import { type PropsWithChildren } from "react";
 
 function makeQueryClient() {
@@ -48,6 +49,7 @@ export function Providers({ children }: PropsWithChildren) {
     >
       <QueryClientProvider client={queryClient}>
         {children}
+        <TableSorter />
         <Toaster richColors position="bottom-right" />
       </QueryClientProvider>
     </ThemeProvider>
