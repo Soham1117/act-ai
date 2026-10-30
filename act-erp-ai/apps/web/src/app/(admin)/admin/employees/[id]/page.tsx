@@ -11,6 +11,7 @@ import {
   MonitorSmartphone,
   Sparkles,
   PenLine,
+  History,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { readEmployeePrivateDetails } from "@/server/employee-private-data";
@@ -23,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { TcpIdentityCard, PtoLedgerCard, FullHistoryLink } from "@/components/tcp-history";
 import { MobileTabsList } from "@/components/mobile";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -106,6 +108,7 @@ export default async function EmployeeDetailPage({
 
   if (!storedEmployee) notFound();
   const employee = await readEmployeePrivateDetails(storedEmployee);
+  const punchCount = await db.timeEntry.count({ where: { employeeId: employee.id } });
 
   const leaveBalances = await loadLeaveBalances(employee.id).catch(() => null);
 
@@ -376,6 +379,11 @@ export default async function EmployeeDetailPage({
           </TabsContent>
 
           <TabsContent value="work" className="space-y-4">
+            <TcpIdentityCard
+              tcpNumber={employee.tcpNumber}
+              tcpExportCode={employee.tcpExportCode}
+              workLocation={employee.workLocation}
+            />
             <EmploymentEditableCard
               employeeId={employee.id}
               initialDepartmentName={employee.department?.name ?? null}
@@ -448,6 +456,7 @@ export default async function EmployeeDetailPage({
           </TabsContent>
 
           <TabsContent value="time-clock">
+            <FullHistoryLink employeeId={employee.id} count={punchCount} />
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
@@ -522,7 +531,8 @@ export default async function EmployeeDetailPage({
             </Card>
           </TabsContent>
 
-          <TabsContent value="leave">
+          <TabsContent value="leave" className="space-y-4">
+            <PtoLedgerCard employeeId={employee.id} />
             <Card className="min-w-0 overflow-hidden">
               <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="min-w-0 text-base leading-snug">
@@ -693,6 +703,7 @@ function SourceBadge({
     WEB: { label: "Web", icon: <Globe className="h-3 w-3" /> },
     AUTO: { label: "Auto", icon: <Sparkles className="h-3 w-3" /> },
     MANUAL: { label: "Manual", icon: <PenLine className="h-3 w-3" /> },
+    TCP: { label: "TCP import", icon: <History className="h-3 w-3" /> },
   };
   const { label, icon } = cfg[source];
   const display = source === "KIOSK" && kioskLabel ? kioskLabel : label;

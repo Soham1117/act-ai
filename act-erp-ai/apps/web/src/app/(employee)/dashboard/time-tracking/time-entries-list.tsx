@@ -1,7 +1,7 @@
 'use client';
 
 import { Badge } from "@/components/ui/badge";
-import { Globe, MonitorSmartphone, Sparkles, PenLine } from "lucide-react";
+import { Globe, MonitorSmartphone, Sparkles, PenLine, History } from "lucide-react";
 import type { TimeEntrySource } from "@prisma/client";
 import { usePortalLanguage } from "@/components/portal-language";
 import { DataListCard, ResponsiveDataList } from "@/components/mobile";
@@ -39,6 +39,7 @@ function SourceBadge({
     WEB: { label: t("timesheet.web"), icon: <Globe className="h-3 w-3" /> },
     AUTO: { label: t("timesheet.auto"), icon: <Sparkles className="h-3 w-3" /> },
     MANUAL: { label: t("timesheet.manual"), icon: <PenLine className="h-3 w-3" /> },
+    TCP: { label: "TCP import", icon: <History className="h-3 w-3" /> },
   };
   const { label, icon } = cfg[source];
   const display = source === "KIOSK" && kioskLabel ? kioskLabel : label;

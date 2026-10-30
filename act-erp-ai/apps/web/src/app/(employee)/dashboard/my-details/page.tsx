@@ -11,6 +11,7 @@ import {
   MonitorSmartphone,
   Sparkles,
   PenLine,
+  History,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { readEmployeePrivateDetails } from "@/server/employee-private-data";
@@ -644,6 +645,7 @@ function SourceBadge({
     WEB: <Globe className="h-3 w-3" />,
     AUTO: <Sparkles className="h-3 w-3" />,
     MANUAL: <PenLine className="h-3 w-3" />,
+    TCP: <History className="h-3 w-3" />,
   };
   const display = source === "KIOSK" && kioskLabel ? kioskLabel : sourceLabel;
   return (

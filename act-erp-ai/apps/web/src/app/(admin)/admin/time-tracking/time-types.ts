@@ -18,7 +18,7 @@ export type EntryRowData = {
   approvalNotes: string | null;
   editReason: string | null;
   autoClosed: boolean;
-  source: "WEB" | "KIOSK" | "AUTO" | "MANUAL";
+  source: "WEB" | "KIOSK" | "AUTO" | "MANUAL" | "TCP";
   kioskLabel: string | null;
   hasClockInPhoto: boolean;
   hasClockOutPhoto: boolean;

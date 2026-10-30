@@ -87,13 +87,15 @@ export default async function IndividualHoursPage({
   const [presets, employees, jobCodes, entries] = await Promise.all([
     loadHoursPeriodPresets(),
     db.employee.findMany({
-      where: { employmentStatus: "ACTIVE" },
+      where: { employmentStatus: { in: ["ACTIVE", "ON_LEAVE", "INACTIVE", "TERMINATED"] } },
       orderBy: { name: "asc" },
       select: {
         id: true,
         name: true,
         employeeId: true,
         exportCode: true,
+        tcpNumber: true,
+        employmentStatus: true,
         profilePic: true,
         email: true,
       },
@@ -114,6 +116,7 @@ export default async function IndividualHoursPage({
                   { name: { contains: q, mode: "insensitive" } },
                   { employeeId: { contains: q, mode: "insensitive" } },
                   { exportCode: { contains: q, mode: "insensitive" } },
+                  { tcpNumber: { contains: q } },
                 ],
               },
             }
@@ -152,7 +155,7 @@ export default async function IndividualHoursPage({
         description="Punch-level hours with rates and weekly OT. All times are Central."
         actions={
           <ManualEntryButton
-            employees={employees.map((e) => ({
+            employees={employees.filter((e) => e.employmentStatus === "ACTIVE").map((e) => ({
               id: e.id,
               name: e.name,
               employeeId: e.employeeId,
@@ -200,7 +203,8 @@ export default async function IndividualHoursPage({
                       !q ||
                       e.name.toLowerCase().includes(q.toLowerCase()) ||
                       e.employeeId.toLowerCase().includes(q.toLowerCase()) ||
-                      (e.exportCode ?? "").toLowerCase().includes(q.toLowerCase()),
+                      (e.exportCode ?? "").toLowerCase().includes(q.toLowerCase()) ||
+                      (e.tcpNumber ?? "").includes(q),
                   )
                   .map((e) => (
                     <li key={e.id}>
@@ -216,6 +220,8 @@ export default async function IndividualHoursPage({
                         <span className="block truncate">{e.name}</span>
                         <span className="block truncate text-[10px] text-muted-foreground">
                           {e.exportCode ?? e.employeeId}
+                          {e.tcpNumber ? ` · TCP ${e.tcpNumber}` : ""}
+                          {e.employmentStatus === "TERMINATED" ? " · former" : e.employmentStatus === "INACTIVE" ? " · inactive" : ""}
                         </span>
                       </Link>
                     </li>

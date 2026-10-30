@@ -17,6 +17,7 @@ import {
   MonitorSmartphone,
   PenLine,
   Sparkles,
+  History,
 } from "lucide-react";
 import {
   businessDateOnly,
@@ -603,6 +604,7 @@ function SourceBadge({
     WEB: { label: "Web", icon: <Globe className="h-3 w-3" /> },
     AUTO: { label: "Auto", icon: <Sparkles className="h-3 w-3" /> },
     MANUAL: { label: "Manual", icon: <PenLine className="h-3 w-3" /> },
+    TCP: { label: "TCP import", icon: <History className="h-3 w-3" /> },
   };
   const { label, icon } = cfg[source];
   const display = source === "KIOSK" && kioskLabel ? kioskLabel : label;

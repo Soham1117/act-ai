@@ -280,6 +280,12 @@ model Employee {
   terminationDate   DateTime?
   terminationReason String?
   exportCode        String?
+  /// Employee number in Timeclock Plus (lets HR look people up by their old number).
+  tcpNumber         String?          @unique
+  /// Export code TCP used for this person (Persona's exportCode is not overwritten).
+  tcpExportCode     String?
+  /// Work location from TCP (e.g. BURLESON, HOUSTON).
+  workLocation      String?
   workEmail         String?
   workPhoneNumber   String?
 
@@ -323,6 +329,8 @@ model Employee {
   retirementElections    RetirementElection[]
   eligibilityAssessments BenefitEligibilityAssessment[]
   privateNotes EmployeeNote[]
+  accrualLedger          AccrualLedgerEntry[]
+  accrualRules           EmployeeAccrualRule[]
   hirePacketImports      HirePacketImport[]
   paystubAliases         PaystubNameAlias[]
   onboardingPacket       OnboardingPacketSubmission?
@@ -379,6 +387,13 @@ model TimeEntry {
   editReason     String?  @db.Text
   /// Closed automatically because the shift ran past the max length.
   autoClosed     Boolean  @default(false)
+  /// Stable key for imported rows (re-running an import never duplicates).
+  importKey      String?  @unique
+  /// Raw punch times before rounding (Timeclock Plus keeps both).
+  actualClockIn  DateTime?
+  actualClockOut DateTime?
+  /// Hours were typed on a timesheet, not punched.
+  manualHours    Boolean  @default(false)
 
   @@index([employeeId, date])
   @@index([status])
@@ -1386,6 +1401,8 @@ enum TimeEntrySource {
   KIOSK
   AUTO
   MANUAL
+  /// Imported from Timeclock Plus history.
+  TCP
 }
 
 enum BreakType {
@@ -1878,4 +1895,39 @@ model HoursExportSchedule {
   updatedAt    DateTime @updatedAt
 
   @@index([enabled, weekday])
+}
+
+
+/// PTO / accrual history imported from Timeclock Plus ("Accrual Usage" report).
+model AccrualLedgerEntry {
+  id          String    @id @default(cuid())
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  bank        String    @default("PTO")
+  /// null = opening balance row ("Before 1/1/2006").
+  date        DateTime? @db.Date
+  dateExpired DateTime? @db.Date
+  accrued     Decimal   @default(0) @db.Decimal(9, 4)
+  expired     Decimal   @default(0) @db.Decimal(9, 4)
+  taken       Decimal   @default(0) @db.Decimal(9, 4)
+  adjustments Decimal   @default(0) @db.Decimal(9, 4)
+  /// Balance exactly as TCP printed it. Only some rows carry one (year-end resets),
+  /// so a running sum of the other columns is not the live balance.
+  remaining   Decimal?  @db.Decimal(9, 4)
+  importKey   String?   @unique
+  createdAt   DateTime  @default(now())
+
+  @@index([employeeId, bank, date])
+}
+
+/// Which accrual rule (e.g. "5-10 Years Vacation") an employee is on, per bank.
+model EmployeeAccrualRule {
+  id              String   @id @default(cuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  bank            String   @default("PTO")
+  ruleId          Int
+  ruleDescription String
+
+  @@unique([employeeId, bank, ruleId])
 }
