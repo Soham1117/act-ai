@@ -9,6 +9,7 @@ import { CreatePayrollPeriodForm } from "./create-period-form";
 import { PeriodActions } from "./period-actions";
 import { PERIOD_STATE_LABEL, periodState, type PeriodState } from "@/lib/payroll-period";
 import { loadPeriodCounts } from "@/server/payroll-close";
+import { ensureUpcomingPayrollPeriods } from "@/server/payroll-periods-auto";
 import { PanelSlot } from "@/components/inline-panel";
 import { PeriodClose } from "./period-close";
 import { formatDateOnly } from "@/lib/format";
@@ -26,6 +27,7 @@ const BADGE: Record<PeriodState, "outline" | "warning" | "success" | "secondary"
 };
 
 export default async function AdminPayrollPage() {
+  await ensureUpcomingPayrollPeriods();
   const rawCalendar = await db.payrollCalendar
     .findMany({ orderBy: { payDate: "desc" } })
     .catch(() => []);

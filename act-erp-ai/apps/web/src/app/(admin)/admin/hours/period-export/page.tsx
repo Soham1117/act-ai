@@ -5,6 +5,7 @@ import { HoursSubnav } from "@/components/hours-subnav";
 import { resolveHoursRange, loadHoursPeriodPresets } from "@/lib/hours-period";
 import { DEFAULT_EXPORT_COLUMNS } from "@/lib/hours-export";
 import { PayrollWorkbookCard } from "@/components/payroll-workbook-card";
+import { ensureUpcomingPayrollPeriods } from "@/server/payroll-periods-auto";
 import { PeriodExportClient } from "./period-export-client";
 
 export const metadata = { title: "Period export" };
@@ -20,6 +21,7 @@ export default async function PeriodExportPage({
   const sp = await searchParams;
   const { fromStr, toStr } = resolveHoursRange(one(sp.from), one(sp.to));
   const periodId = one(sp.period).trim();
+  await ensureUpcomingPayrollPeriods();
 
   const [presets, templates, schedules, departments, period, calendar, activeStaff] = await Promise.all([
     loadHoursPeriodPresets(),
