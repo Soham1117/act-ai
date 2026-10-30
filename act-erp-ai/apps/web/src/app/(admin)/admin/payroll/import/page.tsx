@@ -1,9 +1,6 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { PaystubImportClient } from "./import-client";
 
 export const metadata = { title: "Import pay stubs" };
@@ -24,16 +21,9 @@ export default async function PaystubImportPage() {
   return (
     <>
       <PageHeader
+        back={{ href: "/admin/payroll", label: "Payroll" }}
         title="Import pay stubs"
         description="Upload the PDF. Pay periods come from the dates on each stub, and pages that match cleanly are preselected. Only exceptions need your attention."
-        actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href="/admin/payroll">
-              <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-              Payroll
-            </Link>
-          </Button>
-        }
       />
       <PaystubImportClient employees={employees} />
     </>

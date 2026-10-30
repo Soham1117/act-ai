@@ -225,7 +225,7 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="min-w-0 max-w-full">
-      <div className="mb-4 flex flex-col gap-3">
+      <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <Button variant="ghost" size="sm" asChild className="-ml-2 self-start">
           <Link href="/admin/employees">
             <ArrowLeft className="mr-1 h-3.5 w-3.5" /> All employees

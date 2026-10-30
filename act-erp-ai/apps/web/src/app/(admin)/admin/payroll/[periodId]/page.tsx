@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,13 +56,8 @@ export default async function PayrollPeriodPage({
 
   return (
     <>
-      <Button variant="ghost" size="sm" asChild className="-ml-2 mb-4 print:hidden">
-        <Link href="/admin/payroll">
-          <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Pay calendar
-        </Link>
-      </Button>
-
       <PageHeader
+        back={{ href: "/admin/payroll", label: "Pay calendar" }}
         title={period.title}
         description={`${formatDateOnly(period.payPeriodStart)} → ${formatDateOnly(period.payPeriodEnd)} · pay date ${formatDateOnly(period.payDate)}`}
         actions={

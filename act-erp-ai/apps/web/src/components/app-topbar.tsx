@@ -30,12 +30,16 @@ export function AppTopbar({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-backdrop-filter:bg-background/60 sm:gap-3 sm:px-4">
+      <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-backdrop-filter:bg-background/60 sm:gap-3 sm:px-4">
         <SidebarTrigger className="-ml-1 shrink-0" />
         <Separator orientation="vertical" className="hidden h-5 sm:block" />
 
-        {/* Left-aligned brand title — compacts on small screens. */}
-        <div className="min-w-0 flex-1 truncate">
+        {/* Pages portal their title, hint and actions into the slot; the brand shows when none do. */}
+        <div
+          id="page-header-slot"
+          className="peer flex min-w-0 flex-1 items-center gap-3 empty:hidden"
+        />
+        <div className="min-w-0 flex-1 truncate peer-[:not(:empty)]:hidden">
           <span className="hidden text-sm font-semibold tracking-tight md:inline">
             American Completion Tools
           </span>

@@ -1,11 +1,9 @@
-import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { readEmployeePrivateDetails } from "@/server/employee-private-data";
 import { safeHirePacketError } from "@/server/hire-packet-sensitive-data";
-import { Button } from "@/components/ui/button";
 import { HireImportReviewForm } from "./review-form";
 
 export default async function HireImportReviewPage({
@@ -67,20 +65,11 @@ export default async function HireImportReviewPage({
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
-          <Link href={`/admin/employees/${employeeId}`}>
-            <ArrowLeft className="mr-1 h-3.5 w-3.5" /> {employee.name}
-          </Link>
-        </Button>
-      </div>
-
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold">Review hire packet import</h1>
-        <p className="text-sm text-muted-foreground">
-          {job.zipFileName} · Check each field before applying to the employee profile.
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: `/admin/employees/${employeeId}`, label: employee.name }}
+        title="Review hire packet import"
+        description={`${job.zipFileName} · Check each field before applying to the employee profile.`}
+      />
 
       <HireImportReviewForm
         jobId={jobId}

@@ -1,10 +1,9 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAvatarUrl } from "@/lib/format";
 
@@ -25,25 +24,18 @@ export default async function DepartmentDetailPage({
 
   return (
     <>
-      <Button variant="ghost" size="sm" asChild className="-ml-2 mb-4">
-        <Link href="/admin/departments">
-          <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Departments
-        </Link>
-      </Button>
-
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="break-words text-2xl font-bold">{dept.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {dept.description ?? "No description"}
-          </p>
-        </div>
-        {dept.code && (
-          <Badge variant="outline" className="font-mono">
-            {dept.code}
-          </Badge>
-        )}
-      </div>
+      <PageHeader
+        back={{ href: "/admin/departments", label: "Departments" }}
+        title={dept.name}
+        description={dept.description ?? "No description"}
+        actions={
+          dept.code ? (
+            <Badge variant="outline" className="font-mono">
+              {dept.code}
+            </Badge>
+          ) : undefined
+        }
+      />
 
       <Card>
         <CardHeader>

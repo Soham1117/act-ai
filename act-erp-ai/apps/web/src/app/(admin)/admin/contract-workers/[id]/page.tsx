@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PunchPhotos } from "@/components/punch-photos";
 import {
@@ -37,15 +35,8 @@ export default async function ContractWorkerDetailPage({
 
   return (
     <>
-      <div className="mb-3">
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/admin/contract-workers">
-            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-            Contract workers
-          </Link>
-        </Button>
-      </div>
       <PageHeader
+        back={{ href: "/admin/contract-workers", label: "Contract workers" }}
         title={worker.name}
         description={
           <span className="font-mono">

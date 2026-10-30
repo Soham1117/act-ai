@@ -1,10 +1,10 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAvatarUrl } from "@/lib/format";
 import { getDepartmentConfig } from "@/lib/departments";
@@ -63,41 +63,35 @@ export default async function JobCodeDetailPage({
 
   return (
     <>
-      <Button variant="ghost" size="sm" asChild className="-ml-2 mb-4">
-        <Link href="/admin/job-codes"><ArrowLeft className="mr-1 h-3.5 w-3.5" /> Job codes</Link>
-      </Button>
-
-      <div className="mb-6 min-w-0">
-        <div>
-          <h1 className="flex flex-wrap items-center gap-2 break-words text-2xl font-bold">
-            {jobCode.isDefault && <Star className="h-5 w-5 fill-primary text-primary" />}
+      <PageHeader
+        back={{ href: "/admin/job-codes", label: "Job codes" }}
+        title={
+          <>
+            {jobCode.isDefault && <Star className="h-4 w-4 fill-primary text-primary" />}
             <span className="font-mono">{jobCode.code}</span>
             <span className="text-muted-foreground">·</span>
             <span>{jobCode.title}</span>
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {jobCode.description ?? "No description"}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge variant={jobCode.isActive ? "success" : "secondary"} className="text-[10px]">
-              {jobCode.isActive ? "Active" : "Inactive"}
-            </Badge>
-            <Badge variant="outline" className="font-mono text-[10px]">{jobCode.rate}</Badge>
-            {cfg && Icon ? (
-              <span className="inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[11px]">
-                <span className={`flex h-4 w-4 items-center justify-center rounded ${cfg.bgColor} ${cfg.color}`}>
-                  <Icon className="h-2.5 w-2.5" />
-                </span>
-                {cfg.label}
-              </span>
-            ) : (
-              <span className="text-[11px] text-muted-foreground">No department</span>
-            )}
-          </div>
-        </div>
-
+          </>
+        }
+        description={jobCode.description ?? "No description"}
+      />
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Badge variant={jobCode.isActive ? "success" : "secondary"} className="text-[10px]">
+          {jobCode.isActive ? "Active" : "Inactive"}
+        </Badge>
+        <Badge variant="outline" className="font-mono text-[10px]">{jobCode.rate}</Badge>
+        {cfg && Icon ? (
+          <span className="inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[11px]">
+            <span className={`flex h-4 w-4 items-center justify-center rounded ${cfg.bgColor} ${cfg.color}`}>
+              <Icon className="h-2.5 w-2.5" />
+            </span>
+            {cfg.label}
+          </span>
+        ) : (
+          <span className="text-[11px] text-muted-foreground">No department</span>
+        )}
       </div>
-      <div className="mb-6">
+      <div className="mb-4">
         <JobCodeDetailActions
           jobCode={{
             id: jobCode.id,

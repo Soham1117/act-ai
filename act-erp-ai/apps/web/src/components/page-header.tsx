@@ -1,31 +1,87 @@
+"use client";
+
+import Link from "next/link";
+import { createPortal } from "react-dom";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useTopbarSlot } from "@/components/topbar-slot";
 import { cn } from "@/lib/utils";
 
+/**
+ * On md+ the title, hint and actions live in the top bar (AppTopbar owns the
+ * #page-header-slot target). Below md the header stays in the page flow.
+ */
 export function PageHeader({
   title,
   description,
   actions,
+  back,
   className,
 }: {
-  title: string;
+  title: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
+  back?: { href: string; label: string };
   className?: string;
 }) {
-  return (
-    <header
-      className={cn(
-        "mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4",
-        className,
-      )}
-    >
-      <div className="min-w-0 space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+  const slot = useTopbarSlot("(min-width: 768px)");
+
+  if (slot) {
+    return createPortal(
+      <>
+        {back && (
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className="order-1 -ml-1 h-8 w-8 shrink-0"
+            title={back.label}
+          >
+            <Link href={back.href} aria-label={`Back to ${back.label}`}>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+        )}
+        <h1 className="order-1 flex min-w-0 shrink-0 items-center gap-1.5 text-sm font-semibold tracking-tight">
+          {title}
+        </h1>
         {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p
+            className="order-3 hidden min-w-0 truncate text-xs text-muted-foreground 2xl:block"
+            title={typeof description === "string" ? description : undefined}
+          >
+            {description}
+          </p>
+        )}
+        {actions && (
+          <div className="order-4 ml-auto flex shrink-0 items-center gap-2 [&_button]:min-h-9">
+            {actions}
+          </div>
+        )}
+      </>,
+      slot,
+    );
+  }
+
+  return (
+    <header className={cn("mb-4 flex flex-col gap-2 md:hidden", className)}>
+      {back && (
+        <Button variant="ghost" size="sm" asChild className="-ml-2 w-fit">
+          <Link href={back.href}>
+            <ArrowLeft className="mr-1 h-3.5 w-3.5" /> {back.label}
+          </Link>
+        </Button>
+      )}
+      <div className="min-w-0 space-y-0.5">
+        <h1 className="flex flex-wrap items-center gap-1.5 break-words text-lg font-semibold tracking-tight">
+          {title}
+        </h1>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
         )}
       </div>
       {actions && (
-        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto [&_button]:min-h-11 md:[&_button]:min-h-9">
+        <div className="flex w-full flex-wrap items-center gap-2 [&_button]:min-h-11">
           {actions}
         </div>
       )}

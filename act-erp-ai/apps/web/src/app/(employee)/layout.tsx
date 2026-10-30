@@ -52,7 +52,7 @@ export default async function EmployeeLayout({
               terminationDate={readOnly?.terminationDate ?? null}
             />
           )}
-          <div className="min-w-0 flex-1 p-4 md:p-6">{children}</div>
+          <div className="min-w-0 flex-1 p-4 md:px-6 md:py-4">{children}</div>
         </SidebarInset>
       </SidebarProvider>
           </PortalLanguageProvider>
