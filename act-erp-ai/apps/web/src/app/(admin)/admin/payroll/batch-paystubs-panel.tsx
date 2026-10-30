@@ -127,8 +127,9 @@ export function BatchPaystubsPanel({
       !!row.start &&
       !!row.end &&
       rows.some(
-        (other) =>
-          other.key !== row.key &&
+        (other, index) =>
+          // Only a later copy counts as the duplicate, so the first one stays importable.
+          index < rows.findIndex((r) => r.key === row.key) &&
           other.employeeId === row.employeeId &&
           other.start === row.start &&
           other.end === row.end &&
