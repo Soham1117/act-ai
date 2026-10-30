@@ -41,7 +41,6 @@ import {
   Sparkles,
   Tags,
   Users,
-  UsersRound,
 } from "lucide-react";
 
 const NAV: Array<{
@@ -65,18 +64,9 @@ const NAV: Array<{
     ],
   },
   {
-    group: "Hours",
-    items: [
-      { href: "/admin/hours", label: "Individual", icon: Clock },
-      { href: "/admin/hours/group", label: "Group", icon: UsersRound },
-      { href: "/admin/hours/mass", label: "Mass", icon: ClipboardList },
-      { href: "/admin/hours/period-export", label: "Period export", icon: FileBarChart },
-      { href: "/admin/hours/timesheets", label: "Time sheets", icon: FileText },
-    ],
-  },
-  {
     group: "Operations",
     items: [
+      { href: "/admin/hours", label: "Hours", icon: Clock },
       { href: "/admin/contract-workers", label: "Contract workers", icon: HardHat },
       { href: "/admin/schedules", label: "Schedules", icon: CalendarDays },
       { href: "/admin/leave", label: "Leave", icon: Plane },
@@ -117,6 +107,15 @@ function useAdminNav(aiEnabled: boolean) {
       })).filter((section) => section.items.length > 0);
 }
 
+/** Hours owns Individual/Group/Mass/… tabs plus Approvals at /admin/time-tracking. */
+function isNavActive(pathname: string, href: string) {
+  if (pathname === href) return true;
+  if (href === "/admin") return false;
+  if (pathname.startsWith(`${href}/`)) return true;
+  if (href === "/admin/hours" && pathname.startsWith("/admin/time-tracking")) return true;
+  return false;
+}
+
 export function AdminSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
   const pathname = usePathname();
   const nav = useAdminNav(aiEnabled);
@@ -141,9 +140,7 @@ export function AdminSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
                 {section.items.map((item) => {
                   if (item.href === "/admin/chat")
                     return <AssistantNav key={item.href} basePath={item.href} />;
-                  const active =
-                    pathname === item.href ||
-                    (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
+                  const active = isNavActive(pathname, item.href);
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
@@ -189,9 +186,7 @@ export function AdminSidebarMobileNav({ aiEnabled = false }: { aiEnabled?: boole
             </p>
             <ul className="flex w-full list-none flex-col gap-0.5 p-0">
               {section.items.map((item) => {
-                const active =
-                  pathname === item.href ||
-                  (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
+                const active = isNavActive(pathname, item.href);
                 return (
                   <li key={item.href} className="w-full">
                     <Link

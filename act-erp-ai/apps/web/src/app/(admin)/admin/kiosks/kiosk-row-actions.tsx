@@ -30,6 +30,7 @@ import {
 } from "@/components/inline-panel";
 import { deleteKiosk, revokeKiosk } from "@/server/actions/kiosk";
 import { runAction, toastAction } from "@/lib/toast-action";
+import { useCopyToClipboard } from "@/components/interior/copy-button";
 
 export function KioskRowActions({
   id,
@@ -42,6 +43,9 @@ export function KioskRowActions({
 }) {
   const [pending, startTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { copy } = useCopyToClipboard({
+    onCopy: () => toast.success("URL copied"),
+  });
 
   return (
     <>
@@ -61,10 +65,7 @@ export function KioskRowActions({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
-                  navigator.clipboard.writeText(
-                    `${window.location.origin}/kiosk/${slug}`,
-                  );
-                  toast.success("URL copied");
+                  void copy(`${window.location.origin}/kiosk/${slug}`);
                 }}
               >
                 <Copy className="mr-2 h-3.5 w-3.5" /> Copy URL

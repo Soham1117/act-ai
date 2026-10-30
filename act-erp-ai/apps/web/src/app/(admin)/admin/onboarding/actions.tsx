@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
-import { Plus, Loader2, Copy, X } from "lucide-react";
+import { useEffect, useId, useState, useTransition } from "react";
+import { Plus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,9 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CopyButton } from "@/components/interior/copy-button";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
-import { copyText } from "@/lib/clipboard";
 import {
   createOnboardingInvite,
   revokeOnboardingInvite,
@@ -71,13 +71,6 @@ export function OnboardingActions({
     });
   }
 
-  async function copy() {
-    if (!generatedUrl) return;
-    const result = await copyText(generatedUrl);
-    if (result.ok) toast.success("Link copied");
-    else toast.error(result.error);
-  }
-
   function close() {
     setOpen(false);
     setEmail("");
@@ -121,14 +114,13 @@ export function OnboardingActions({
                 aria-label="Generated onboarding invite link"
                 className="min-w-0 font-mono text-base md:text-xs"
               />
-              <Button
-                type="button"
-                variant="secondary"
-                aria-label="Copy onboarding invite link"
-                onClick={copy}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
+              <CopyButton
+                value={generatedUrl}
+                label="Copy"
+                copiedLabel="Copied"
+                onCopy={() => toast.success("Link copied")}
+                onError={() => toast.error("Copy failed")}
+              />
             </div>
             <InlinePanelFooter>
               <Button onClick={close}>Done</Button>
@@ -263,34 +255,21 @@ export function OnboardingActions({
 
 export function RowActions({ inviteId, token }: { inviteId: string; token: string }) {
   const [pending, startTransition] = useTransition();
-  const [manualUrl, setManualUrl] = useState<string | null>(null);
-
-  async function copy() {
-    const url = `${window.location.origin}/onboard/${token}`;
-    const result = await copyText(url);
-    if (result.ok) {
-      setManualUrl(null);
-      toast.success("Link copied");
-    } else {
-      setManualUrl(url);
-      toast.error(result.error);
-    }
-  }
+  const [inviteUrl, setInviteUrl] = useState(`/onboard/${token}`);
+  useEffect(() => {
+    setInviteUrl(`${window.location.origin}/onboard/${token}`);
+  }, [token]);
 
   return (
     <div className="flex min-w-0 max-w-sm flex-wrap justify-end gap-1.5 [&_button]:min-h-11">
-      {manualUrl && (
-        <Input
-          value={manualUrl}
-          readOnly
-          aria-label="Invite link to copy manually"
-          className="min-h-11 w-full font-mono text-base md:text-xs"
-          onFocus={(event) => event.currentTarget.select()}
-        />
-      )}
-      <Button variant="outline" size="sm" onClick={copy}>
-        <Copy className="mr-2 h-3 w-3" /> Copy link
-      </Button>
+      <CopyButton
+        value={inviteUrl}
+        label="Copy link"
+        copiedLabel="Copied"
+        onCopy={() => toast.success("Link copied")}
+        onError={() => toast.error("Copy failed")}
+        className="h-11 md:h-9"
+      />
       <Button
         variant="ghost"
         size="sm"

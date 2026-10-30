@@ -26,6 +26,7 @@ import {
   InlinePanelHeader,
   InlinePanelTitle,
 } from "@/components/inline-panel";
+import { SimpleSelect } from "@/components/simple-select";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { businessDateOnly } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
@@ -39,7 +40,6 @@ import {
   setContractWorkerActive,
 } from "@/server/actions/contract-workers";
 import {
-  selectClass,
   type AgencyOption,
   type JobCodeOption,
   type WorkerRow,
@@ -169,20 +169,19 @@ export function WorkerForm({
             </div>
             <div className="space-y-1">
               <Label htmlFor={`${formId}-agency`}>Agency</Label>
-              <select
+              <SimpleSelect
                 id={`${formId}-agency`}
-                className={selectClass}
                 value={agencyId}
-                onChange={(e) => setAgencyId(e.target.value)}
-              >
-                <option value="">Choose an agency</option>
-                {agencyChoices.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                    {a.isActive ? "" : " (inactive)"}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setAgencyId}
+                placeholder="Choose an agency"
+                options={[
+                  { value: "", label: "Choose an agency" },
+                  ...agencyChoices.map((a) => ({
+                    value: a.id,
+                    label: a.isActive ? a.name : `${a.name} (inactive)`,
+                  })),
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor={`${formId}-phone`}>Phone</Label>
@@ -195,19 +194,19 @@ export function WorkerForm({
             </div>
             <div className="space-y-1">
               <Label htmlFor={`${formId}-job`}>Job code</Label>
-              <select
+              <SimpleSelect
                 id={`${formId}-job`}
-                className={selectClass}
                 value={jobCode}
-                onChange={(e) => setJobCode(e.target.value)}
-              >
-                <option value="">None</option>
-                {jobChoices.map((j) => (
-                  <option key={j.code} value={j.code}>
-                    {j.code} - {j.title}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setJobCode}
+                placeholder="None"
+                options={[
+                  { value: "", label: "None" },
+                  ...jobChoices.map((j) => ({
+                    value: j.code,
+                    label: `${j.code} - ${j.title}`,
+                  })),
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor={`${formId}-project`}>Project</Label>

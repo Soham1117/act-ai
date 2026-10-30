@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Eye, EyeOff, Wand2 } from "lucide-react";
+import { Eye, EyeOff, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CopyButton } from "@/components/interior/copy-button";
 import { generatePassword } from "@/lib/password-generator";
 
 /**
@@ -60,20 +61,14 @@ export function AdminPasswordField({
       >
         <Wand2 className="h-3.5 w-3.5" />
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="shrink-0"
-        title="Copy"
+      <CopyButton
+        value={value}
+        label="Copy"
+        copiedLabel="Copied"
         disabled={!value}
-        onClick={() => {
-          void navigator.clipboard.writeText(value);
-          toast.success("Password copied");
-        }}
-      >
-        <Copy className="h-3.5 w-3.5" />
-      </Button>
+        className="shrink-0 px-2.5"
+        onCopy={() => toast.success("Password copied")}
+      />
     </div>
   );
 }

@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FilterStack } from "@/components/mobile";
+import { FormDateField } from "@/components/date-field";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatBusinessTime, formatDateOnly, formatHours, getAvatarUrl } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
 import { allocateWeeklyOvertime } from "@/lib/payroll-overtime";
@@ -190,34 +192,36 @@ export default async function IndividualHoursPage({
             >
               All employees
             </Link>
-            <ul className="max-h-[50vh] space-y-0.5 overflow-y-auto">
-              {employees
-                .filter(
-                  (e) =>
-                    !q ||
-                    e.name.toLowerCase().includes(q.toLowerCase()) ||
-                    e.employeeId.toLowerCase().includes(q.toLowerCase()) ||
-                    (e.exportCode ?? "").toLowerCase().includes(q.toLowerCase()),
-                )
-                .map((e) => (
-                  <li key={e.id}>
-                    <Link
-                      href={href({ employee: e.id })}
-                      className={cn(
-                        "block rounded-md px-2 py-1.5 text-sm",
-                        employeeId === e.id
-                          ? "bg-sidebar-accent font-medium"
-                          : "hover:bg-muted",
-                      )}
-                    >
-                      <span className="block truncate">{e.name}</span>
-                      <span className="block truncate text-[10px] text-muted-foreground">
-                        {e.exportCode ?? e.employeeId}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-            </ul>
+            <ScrollArea className="h-[50vh]">
+              <ul className="space-y-0.5 pr-2">
+                {employees
+                  .filter(
+                    (e) =>
+                      !q ||
+                      e.name.toLowerCase().includes(q.toLowerCase()) ||
+                      e.employeeId.toLowerCase().includes(q.toLowerCase()) ||
+                      (e.exportCode ?? "").toLowerCase().includes(q.toLowerCase()),
+                  )
+                  .map((e) => (
+                    <li key={e.id}>
+                      <Link
+                        href={href({ employee: e.id })}
+                        className={cn(
+                          "block rounded-md px-2 py-1.5 text-sm",
+                          employeeId === e.id
+                            ? "bg-sidebar-accent font-medium"
+                            : "hover:bg-muted",
+                        )}
+                      >
+                        <span className="block truncate">{e.name}</span>
+                        <span className="block truncate text-[10px] text-muted-foreground">
+                          {e.exportCode ?? e.employeeId}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+              </ul>
+            </ScrollArea>
           </CardContent>
         </Card>
 
@@ -231,24 +235,22 @@ export default async function IndividualHoursPage({
                     <label className="text-xs text-muted-foreground" htmlFor="ih-from">
                       From
                     </label>
-                    <Input
+                    <FormDateField
                       id="ih-from"
-                      type="date"
                       name="from"
                       defaultValue={fromStr}
-                      className="h-9 w-full sm:w-40"
+                      aria-label="From date"
                     />
                   </div>
                   <div className="w-full space-y-1 sm:w-auto">
                     <label className="text-xs text-muted-foreground" htmlFor="ih-to">
                       To
                     </label>
-                    <Input
+                    <FormDateField
                       id="ih-to"
-                      type="date"
                       name="to"
                       defaultValue={toStr}
-                      className="h-9 w-full sm:w-40"
+                      aria-label="To date"
                     />
                   </div>
                   <Button type="submit" size="sm" className="w-full sm:w-auto">

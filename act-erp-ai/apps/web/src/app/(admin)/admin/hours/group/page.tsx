@@ -4,8 +4,9 @@ import { PageHeader } from "@/components/page-header";
 import { HoursSubnav } from "@/components/hours-subnav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { FilterStack } from "@/components/mobile";
+import { FormDateField } from "@/components/date-field";
+import { FormSimpleSelect } from "@/components/simple-select";
 import { formatDateOnly, formatHours } from "@/lib/format";
 import { addDaysDateOnly, dateOnlyToString } from "@/lib/time-rules";
 import { loadHoursPeriodPresets, resolveHoursRange } from "@/lib/hours-period";
@@ -89,31 +90,28 @@ export default async function GroupHoursPage({
                 <label className="text-xs text-muted-foreground" htmlFor="gh-from">
                   From
                 </label>
-                <Input id="gh-from" type="date" name="from" defaultValue={fromStr} className="h-9 w-full sm:w-40" />
+                <FormDateField id="gh-from" name="from" defaultValue={fromStr} aria-label="From date" />
               </div>
               <div className="w-full space-y-1 sm:w-auto">
                 <label className="text-xs text-muted-foreground" htmlFor="gh-to">
                   To
                 </label>
-                <Input id="gh-to" type="date" name="to" defaultValue={toStr} className="h-9 w-full sm:w-40" />
+                <FormDateField id="gh-to" name="to" defaultValue={toStr} aria-label="To date" />
               </div>
               <div className="w-full space-y-1 sm:w-48">
                 <label className="text-xs text-muted-foreground" htmlFor="gh-dept">
                   Department
                 </label>
-                <select
+                <FormSimpleSelect
                   id="gh-dept"
                   name="dept"
                   defaultValue={deptId}
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                >
-                  <option value="">All</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="All"
+                  options={[
+                    { value: "", label: "All" },
+                    ...departments.map((d) => ({ value: d.id, label: d.name })),
+                  ]}
+                />
               </div>
               <Button type="submit" size="sm">
                 Update

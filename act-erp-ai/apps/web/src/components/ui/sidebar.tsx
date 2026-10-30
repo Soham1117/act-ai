@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Tooltip,
   TooltipContent,
@@ -355,9 +356,11 @@ const SidebarMobileNav = React.forwardRef<
         {...props}
       >
         <SheetTitle className="sr-only">{t("common.toggleSidebar")}</SheetTitle>
-        <div className="flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-          {children}
-        </div>
+        <ScrollArea className="min-h-0 w-full flex-1 overscroll-contain">
+          <div className="flex flex-col px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+            {children}
+          </div>
+        </ScrollArea>
       </SheetContent>
     </Sheet>
   )
@@ -430,17 +433,18 @@ SidebarSeparator.displayName = "SidebarSeparator"
 const SidebarContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
->(({ className, ...props }, ref) => {
+>(({ className, children }, ref) => {
   return (
-    <div
+    <ScrollArea
       ref={ref}
       data-sidebar="content"
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        "min-h-0 flex-1 group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
-      {...props}
-    />
+    >
+      <div className="flex flex-col gap-2">{children}</div>
+    </ScrollArea>
   )
 })
 SidebarContent.displayName = "SidebarContent"

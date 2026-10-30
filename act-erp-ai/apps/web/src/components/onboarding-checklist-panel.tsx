@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { SimpleSelect } from "@/components/simple-select";
 import { CHECKLIST_LABELS, handbookReceiptText } from "@/lib/onboarding-checklist";
 import { acknowledgeHandbook, assignOnboardingTemplate, reviewOnboardingItem, submitChecklistDocument } from "@/server/actions/onboarding-checklist";
 import { runAction, toastAction } from "@/lib/toast-action";
@@ -22,8 +23,6 @@ export type ChecklistItemView = {
   acknowledgment: { method: string; acceptedAt: string } | null;
   documents: FileOption[];
 };
-
-const selectClass = "h-11 min-w-0 w-full rounded-md border border-input bg-background px-3 text-base md:h-10 md:text-sm";
 
 export function ChecklistAssignment({ owners, templates, initialOwner = "" }: {
   owners: Array<{ value: string; label: string }>;
@@ -40,13 +39,29 @@ export function ChecklistAssignment({ owners, templates, initialOwner = "" }: {
       <p className="text-sm text-muted-foreground">Choose a reviewed blank form or handbook from the Company library. This does not change account access.</p></div>
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="min-w-0 space-y-1 text-sm">Employee or open invite
-        <select className={selectClass} value={owner} onChange={(event) => setOwner(event.target.value)} disabled={pending}>
-          <option value="">Choose a recipient</option>{owners.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
-        </select></label>
+        <SimpleSelect
+          value={owner}
+          onValueChange={setOwner}
+          disabled={pending}
+          placeholder="Choose a recipient"
+          options={[
+            { value: "", label: "Choose a recipient" },
+            ...owners.map((entry) => ({ value: entry.value, label: entry.label })),
+          ]}
+        />
+      </label>
       <label className="min-w-0 space-y-1 text-sm">Approved template
-        <select className={selectClass} value={versionId} onChange={(event) => setVersionId(event.target.value)} disabled={pending}>
-          <option value="">Choose a template</option>{templates.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-        </select></label>
+        <SimpleSelect
+          value={versionId}
+          onValueChange={setVersionId}
+          disabled={pending}
+          placeholder="Choose a template"
+          options={[
+            { value: "", label: "Choose a template" },
+            ...templates.map((entry) => ({ value: entry.id, label: entry.label })),
+          ]}
+        />
+      </label>
     </div>
     <label className="flex items-center gap-2 text-sm"><Checkbox checked={required} onCheckedChange={(value) => setRequired(value === true)} disabled={pending} /> Required item</label>
     <div className="flex flex-wrap items-center gap-3"><Button disabled={pending || !owner || !versionId} onClick={() => startTransition(async () => {
@@ -90,10 +105,17 @@ export function ChecklistItemPanel({ item, admin = false, readOnly = false, span
     {item.acknowledgment && <p className="text-sm text-muted-foreground">{copy("Handbook receipt recorded", "Acuse de recibo registrado")}: {new Date(item.acknowledgment.acceptedAt).toLocaleDateString(spanish ? "es-US" : "en-US")} · {item.acknowledgment.method === "PAPER" ? copy("signed paper receipt", "recibo firmado en papel") : copy("employee acknowledgment", "acuse de recibo del empleado")}</p>}
     {!admin && !done && item.itemType === "FORM" && <div className="space-y-3">
       <label className="block space-y-1 text-sm">{copy("Your completed document", "Su documento completado")}
-        <select className={selectClass} value={documentId} onChange={(event) => setDocumentId(event.target.value)} disabled={pending || readOnly || !item.templateAvailable}>
-          <option value="">{copy("Choose from your uploaded documents", "Seleccione un documento cargado")}</option>
-          {item.documents.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}
-        </select></label>
+        <SimpleSelect
+          value={documentId}
+          onValueChange={setDocumentId}
+          disabled={pending || readOnly || !item.templateAvailable}
+          placeholder={copy("Choose from your uploaded documents", "Seleccione un documento cargado")}
+          options={[
+            { value: "", label: copy("Choose from your uploaded documents", "Seleccione un documento cargado") },
+            ...item.documents.map((entry) => ({ value: entry.id, label: entry.title })),
+          ]}
+        />
+      </label>
       <p className="text-xs text-muted-foreground">{copy("Upload the completed form in Documents first, then select it here. HR will review it.", "Primero cargue el formulario completado en Documentos y luego selecciónelo aquí. RR. HH. lo revisará.")}</p>
       <Button disabled={pending || readOnly || !documentId || !item.templateAvailable} onClick={() => save(() => submitChecklistDocument({ id: item.id, documentId }), copy("Document submitted for HR review", "Documento enviado a RR. HH."))}>{copy("Submit for review", "Enviar para revisión")}</Button>
     </div>}
@@ -104,13 +126,29 @@ export function ChecklistItemPanel({ item, admin = false, readOnly = false, span
     </div>}
     {admin && <div className="space-y-3 border-t pt-4">
       <div className="grid gap-3 sm:grid-cols-2"><label className="min-w-0 space-y-1 text-sm">HR decision
-        <select className={selectClass} value={decision} onChange={(event) => setDecision(event.target.value as typeof decision)} disabled={pending || !item.employeeId}>
-          <option value="ACCEPTED">Accept</option><option value="NEEDS_CORRECTION" disabled={!!item.acknowledgment}>Needs correction</option><option value="NOT_APPLICABLE">Not applicable</option>
-        </select></label>
+        <SimpleSelect
+          value={decision}
+          onValueChange={(v) => setDecision(v as typeof decision)}
+          disabled={pending || !item.employeeId}
+          options={[
+            { value: "ACCEPTED", label: "Accept" },
+            { value: "NEEDS_CORRECTION", label: "Needs correction", disabled: !!item.acknowledgment },
+            { value: "NOT_APPLICABLE", label: "Not applicable" },
+          ]}
+        />
+      </label>
         {item.itemType === "HANDBOOK" && !item.acknowledgment && <label className="min-w-0 space-y-1 text-sm">Signed paper receipt, if applicable
-          <select className={selectClass} value={paperEvidence} onChange={(event) => setPaperEvidence(event.target.value)} disabled={pending || !item.employeeId}>
-            <option value="">Choose the employee&apos;s signed receipt</option>{item.documents.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}
-          </select></label>}
+          <SimpleSelect
+            value={paperEvidence}
+            onValueChange={setPaperEvidence}
+            disabled={pending || !item.employeeId}
+            placeholder="Choose the employee's signed receipt"
+            options={[
+              { value: "", label: "Choose the employee's signed receipt" },
+              ...item.documents.map((entry) => ({ value: entry.id, label: entry.title })),
+            ]}
+          />
+        </label>}
       </div>
       <label className="block space-y-1 text-sm">Review reason<Textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={2} maxLength={1000} disabled={pending || !item.employeeId} /></label>
       <Button disabled={pending || !item.employeeId || reason.trim().length < 3} onClick={() => save(() => reviewOnboardingItem({ id: item.id, expectedUpdatedAt: item.updatedAt, decision, reason, ...(paperEvidence ? { paperEvidenceDocumentId: paperEvidence } : {}) }), "HR review recorded")}>{pending ? "Saving…" : "Save review"}</Button>

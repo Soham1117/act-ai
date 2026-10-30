@@ -7,6 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SimpleSelect } from "@/components/simple-select";
+import { DateField } from "@/components/date-field";
+import { LoadingButton } from "@/components/interior/loading-button";
 import { EXPORT_COLUMN_KEYS } from "@/lib/hours-export";
 import {
   createHoursExportSchedule,
@@ -108,27 +111,24 @@ export function PeriodExportClient({
             <div className="flex flex-wrap gap-3">
               <div className="space-y-1">
                 <Label htmlFor="pe-from">Start date</Label>
-                <Input id="pe-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+                <DateField id="pe-from" value={from} onValueChange={setFrom} aria-label="Start date" />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="pe-to">Stop date</Label>
-                <Input id="pe-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                <DateField id="pe-to" value={to} onValueChange={setTo} aria-label="Stop date" />
               </div>
-              <div className="space-y-1">
+              <div className="min-w-[12rem] space-y-1">
                 <Label htmlFor="pe-dept">Department</Label>
-                <select
+                <SimpleSelect
                   id="pe-dept"
                   value={dept}
-                  onChange={(e) => setDept(e.target.value)}
-                  className="flex h-10 rounded-md border border-input bg-background px-2 text-sm"
-                >
-                  <option value="">All</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setDept}
+                  placeholder="All"
+                  options={[
+                    { value: "", label: "All" },
+                    ...departments.map((d) => ({ value: d.id, label: d.name })),
+                  ]}
+                />
               </div>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -149,22 +149,21 @@ export function PeriodExportClient({
               ))}
             </div>
 
-            <div className="space-y-1">
+            <div className="max-w-md space-y-1">
               <Label htmlFor="pe-tpl">Template</Label>
-              <select
+              <SimpleSelect
                 id="pe-tpl"
                 value={templateId}
-                onChange={(e) => applyTemplate(e.target.value)}
-                className="flex h-10 w-full max-w-md rounded-md border border-input bg-background px-2 text-sm"
-              >
-                <option value="">Custom (unsaved)</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                    {t.isDefault ? " (default)" : ""}
-                  </option>
-                ))}
-              </select>
+                onValueChange={applyTemplate}
+                placeholder="Custom (unsaved)"
+                options={[
+                  { value: "", label: "Custom (unsaved)" },
+                  ...templates.map((t) => ({
+                    value: t.id,
+                    label: t.isDefault ? `${t.name} (default)` : t.name,
+                  })),
+                ]}
+              />
             </div>
 
             <fieldset className="space-y-2">
@@ -198,27 +197,27 @@ export function PeriodExportClient({
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label>Split by</Label>
-                  <select
+                  <SimpleSelect
                     value={splitBy}
-                    onChange={(e) => setSplitBy(e.target.value as typeof splitBy)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-                  >
-                    <option value="NONE">None (one row per punch)</option>
-                    <option value="JOB_CODE">Job code</option>
-                    <option value="RATE">Rate</option>
-                  </select>
+                    onValueChange={(v) => setSplitBy(v as typeof splitBy)}
+                    options={[
+                      { value: "NONE", label: "None (one row per punch)" },
+                      { value: "JOB_CODE", label: "Job code" },
+                      { value: "RATE", label: "Rate" },
+                    ]}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label>Sort</Label>
-                  <select
+                  <SimpleSelect
                     value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value as typeof sortOrder)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-                  >
-                    <option value="NAME">Name</option>
-                    <option value="EMPLOYEE_ID">Employee ID</option>
-                    <option value="EXPORT_CODE">Export code</option>
-                  </select>
+                    onValueChange={(v) => setSortOrder(v as typeof sortOrder)}
+                    options={[
+                      { value: "NAME", label: "Name" },
+                      { value: "EMPLOYEE_ID", label: "Employee ID" },
+                      { value: "EXPORT_CODE", label: "Export code" },
+                    ]}
+                  />
                 </div>
               </div>
             </fieldset>
@@ -246,41 +245,43 @@ export function PeriodExportClient({
               </div>
             </fieldset>
 
-            <Button
-              type="button"
-              disabled={pending || columns.length === 0}
-              onClick={() => {
-                start(async () => {
-                  const res = await runAction(() =>
-                    generateHoursPeriodExport({
-                      from,
-                      to,
-                      columns,
-                      splitBy,
-                      includeHeader,
-                      includeSalaried,
-                      approvedOnly,
-                      sortOrder,
-                      templateId: templateId || undefined,
-                      departmentId: dept || undefined,
-                    }),
-                  );
-                  if (!toastAction(res) || !res.ok) return;
-                  const blob = new Blob([res.csv], {
-                    type: "text/csv;charset=utf-8",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = res.filename;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  toast.success(`Downloaded (${res.rowHint})`);
+            <LoadingButton
+              disabled={columns.length === 0}
+              pendingLabel="Generating…"
+              successLabel="Downloaded"
+              errorLabel="Failed"
+              onAction={async () => {
+                const res = await runAction(() =>
+                  generateHoursPeriodExport({
+                    from,
+                    to,
+                    columns,
+                    splitBy,
+                    includeHeader,
+                    includeSalaried,
+                    approvedOnly,
+                    sortOrder,
+                    templateId: templateId || undefined,
+                    departmentId: dept || undefined,
+                  }),
+                );
+                if (!toastAction(res) || !res.ok) {
+                  throw new Error(res.ok ? "Export failed" : res.error);
+                }
+                const blob = new Blob([res.csv], {
+                  type: "text/csv;charset=utf-8",
                 });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = res.filename;
+                a.click();
+                URL.revokeObjectURL(url);
+                toast.success(`Downloaded (${res.rowHint})`);
               }}
             >
               Generate
-            </Button>
+            </LoadingButton>
           </CardContent>
         </Card>
 
@@ -346,17 +347,11 @@ export function PeriodExportClient({
             </div>
             <div className="space-y-1">
               <Label>Weekday (Central)</Label>
-              <select
-                value={weekday}
-                onChange={(e) => setWeekday(Number(e.target.value))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-              >
-                {WEEKDAYS.map((d, i) => (
-                  <option key={d} value={i}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+              <SimpleSelect
+                value={String(weekday)}
+                onValueChange={(v) => setWeekday(Number(v))}
+                options={WEEKDAYS.map((d, i) => ({ value: String(i), label: d }))}
+              />
             </div>
             <Button
               type="button"

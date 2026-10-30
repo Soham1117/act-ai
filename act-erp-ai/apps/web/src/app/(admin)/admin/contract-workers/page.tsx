@@ -28,7 +28,8 @@ import { DownloadHoursCsvButton, HoursTable } from "./hours-table";
 import { WorkerForm, ClockOutButton } from "./worker-dialogs";
 import { WorkersTable } from "./workers-table";
 import { PunchPhotos } from "@/components/punch-photos";
-import { selectClass, type AgencyRow, type HoursRow, type WorkerRow } from "./shared";
+import { FormSimpleSelect } from "@/components/simple-select";
+import { type AgencyRow, type HoursRow, type WorkerRow } from "./shared";
 
 export const metadata = { title: "Contract workers" };
 
@@ -226,19 +227,17 @@ export default async function ContractWorkersPage({
                     >
                       Agency
                     </label>
-                    <select
+                    <FormSimpleSelect
                       id="cw-f-agency"
                       name="agency"
                       defaultValue={agencyFilter}
-                      className={`${selectClass} h-9 w-full sm:w-52`}
-                    >
-                      <option value="">All agencies</option>
-                      {agencyOptions.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
+                      className="h-9 w-full sm:w-52"
+                      placeholder="All agencies"
+                      options={[
+                        { value: "", label: "All agencies" },
+                        ...agencyOptions.map((a) => ({ value: a.id, label: a.name })),
+                      ]}
+                    />
                   </div>
                   <div className="w-full space-y-1 sm:w-auto">
                     <label
@@ -247,17 +246,19 @@ export default async function ContractWorkersPage({
                     >
                       Status
                     </label>
-                    <select
+                    <FormSimpleSelect
                       id="cw-f-status"
                       name="status"
                       defaultValue={status ?? ""}
-                      className={`${selectClass} h-9 w-full sm:w-36`}
-                    >
-                      <option value="">All</option>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                      <option value="ENDED">Ended</option>
-                    </select>
+                      className="h-9 w-full sm:w-36"
+                      placeholder="All"
+                      options={[
+                        { value: "", label: "All" },
+                        { value: "ACTIVE", label: "Active" },
+                        { value: "INACTIVE", label: "Inactive" },
+                        { value: "ENDED", label: "Ended" },
+                      ]}
+                    />
                   </div>
                   <div className="w-full flex-1 space-y-1">
                     <label className="text-xs text-muted-foreground" htmlFor="cw-f-q">
@@ -400,19 +401,17 @@ export default async function ContractWorkersPage({
                     >
                       Agency
                     </label>
-                    <select
+                    <FormSimpleSelect
                       id="cw-h-agency"
                       name="hagency"
                       defaultValue={hAgency}
-                      className={`${selectClass} h-9 w-full sm:w-52`}
-                    >
-                      <option value="">All agencies</option>
-                      {agencyOptions.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
-                        </option>
-                      ))}
-                    </select>
+                      className="h-9 w-full sm:w-52"
+                      placeholder="All agencies"
+                      options={[
+                        { value: "", label: "All agencies" },
+                        ...agencyOptions.map((a) => ({ value: a.id, label: a.name })),
+                      ]}
+                    />
                   </div>
                   <div className="w-full space-y-1 sm:w-auto">
                     <label
@@ -421,17 +420,19 @@ export default async function ContractWorkersPage({
                     >
                       Approval
                     </label>
-                    <select
+                    <FormSimpleSelect
                       id="cw-h-approval"
                       name="approval"
                       defaultValue={approval ?? ""}
-                      className={`${selectClass} h-9 w-full sm:w-36`}
-                    >
-                      <option value="">All</option>
-                      <option value="PENDING">Pending</option>
-                      <option value="APPROVED">Approved</option>
-                      <option value="REJECTED">Rejected</option>
-                    </select>
+                      className="h-9 w-full sm:w-36"
+                      placeholder="All"
+                      options={[
+                        { value: "", label: "All" },
+                        { value: "PENDING", label: "Pending" },
+                        { value: "APPROVED", label: "Approved" },
+                        { value: "REJECTED", label: "Rejected" },
+                      ]}
+                    />
                   </div>
                   <Button type="submit" size="sm" className="w-full sm:w-auto">
                     Apply

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordStrength } from "@/components/interior/password-strength";
 import { runAction } from "@/lib/toast-action";
 import { changeMyPassword } from "@/server/actions/auth";
 import { usePortalLanguage } from "@/components/portal-language";
@@ -55,6 +56,7 @@ export function ChangePasswordForm() {
           required
           minLength={8}
         />
+        <PasswordStrength value={pw} className="pt-1" />
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">{t("account.password.confirm")}</Label>
