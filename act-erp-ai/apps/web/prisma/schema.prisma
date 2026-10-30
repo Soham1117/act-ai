@@ -1817,3 +1817,61 @@ model EmployeeNoteRevision {
   reason    String?
   createdAt DateTime @default(now())
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Hours period export (TCP Period Export replacement)
+// ──────────────────────────────────────────────────────────────────────
+
+enum ExportSplitBy {
+  NONE
+  JOB_CODE
+  RATE
+}
+
+enum ExportSortOrder {
+  EMPLOYEE_ID
+  NAME
+  EXPORT_CODE
+}
+
+model HoursExportTemplate {
+  id              String         @id @default(cuid())
+  name            String
+  /// Column keys in display order (see lib/hours-export.ts).
+  columns         String[]
+  splitBy         ExportSplitBy  @default(NONE)
+  includeHeader   Boolean        @default(true)
+  includeSalaried Boolean        @default(true)
+  /// Only include APPROVED entries when true.
+  approvedOnly    Boolean        @default(true)
+  sortOrder       ExportSortOrder @default(NAME)
+  isDefault       Boolean        @default(false)
+  createdById     String         @db.Uuid
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  schedules       HoursExportSchedule[]
+
+  @@index([isDefault])
+}
+
+/// Weekly/biweekly automation. Runner: scripts/run-scheduled-hours-exports.ts
+model HoursExportSchedule {
+  id           String   @id @default(cuid())
+  templateId   String
+  template     HoursExportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  description  String
+  /// 0=Sun … 6=Sat (America/Chicago local weekday to run).
+  weekday      Int
+  /// Minutes from midnight Central (e.g. 360 = 06:00).
+  minuteOfDay  Int      @default(360)
+  /// Look-back window in days ending yesterday (default 7 = prior week).
+  rangeDays    Int      @default(7)
+  enabled      Boolean  @default(true)
+  lastRunAt    DateTime?
+  lastError    String?  @db.Text
+  createdById  String   @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([enabled, weekday])
+}

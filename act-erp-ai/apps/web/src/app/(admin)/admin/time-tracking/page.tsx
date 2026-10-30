@@ -33,10 +33,11 @@ import {
 } from "@/lib/time-rules";
 import { PunchPhotos } from "@/components/punch-photos";
 import { FilterStack, MobileTabsList } from "@/components/mobile";
+import { HoursSubnav } from "@/components/hours-subnav";
 import { EntryActions, ManualEntryButton, PendingQueue } from "./time-tools";
 import type { EntryRowData } from "./time-types";
 
-export const metadata = { title: "Time tracking" };
+export const metadata = { title: "Hours approvals" };
 
 const PAGE_SIZE = 100;
 const PENDING_PAGE_SIZE = 50;
@@ -53,6 +54,7 @@ const entryInclude = {
       employeeId: true,
       profilePic: true,
       email: true,
+      defaultHourlyRate: true,
       department: { select: { name: true } },
     },
   },
@@ -71,6 +73,10 @@ function toRow(e: EntryWithRels): EntryRowData {
     clockIn: e.clockIn.toISOString(),
     clockOut: e.clockOut?.toISOString() ?? null,
     jobCode: e.jobCode,
+    rate:
+      e.rate != null
+        ? Number(e.rate.toString())
+        : Number(e.employee.defaultHourlyRate?.toString() ?? 25),
     notes: e.timesheetNotes,
     status: e.status,
     approvalStatus: e.approvalStatus,
@@ -269,7 +275,7 @@ export default async function AdminTimeTrackingPage({
   return (
     <>
       <PageHeader
-        title="Time tracking"
+        title="Hours approvals"
         description="Live activity, approvals, history, and corrections. All times are Central."
         actions={
           <ManualEntryButton
@@ -278,6 +284,7 @@ export default async function AdminTimeTrackingPage({
           />
         }
       />
+      <HoursSubnav />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Clocked in now"
@@ -529,7 +536,10 @@ function EntryList({
                 </span>
               </p>
               <p className="break-words font-mono text-[11px] text-muted-foreground">
-                {e.jobCode} · {formatBusinessTime(e.clockIn)}
+                {e.jobCode}
+                {e.rate != null && ` · $${e.rate.toFixed(2)}/hr`}
+                {" · "}
+                {formatBusinessTime(e.clockIn)}
                 {e.clockOut && ` → ${formatBusinessTime(e.clockOut)}`}
                 {e.totalBreakMin > 0 && ` · breaks ${formatHours(e.totalBreakMin)}`}
               </p>

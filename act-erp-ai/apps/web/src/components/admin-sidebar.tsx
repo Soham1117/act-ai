@@ -27,6 +27,7 @@ import {
   CalendarDays,
   ClipboardList,
   Clock,
+  FileBarChart,
   FileText,
   HardHat,
   HeartPulse,
@@ -40,6 +41,7 @@ import {
   Sparkles,
   Tags,
   Users,
+  UsersRound,
 } from "lucide-react";
 
 const NAV: Array<{
@@ -63,9 +65,18 @@ const NAV: Array<{
     ],
   },
   {
+    group: "Hours",
+    items: [
+      { href: "/admin/hours", label: "Individual", icon: Clock },
+      { href: "/admin/hours/group", label: "Group", icon: UsersRound },
+      { href: "/admin/hours/mass", label: "Mass", icon: ClipboardList },
+      { href: "/admin/hours/period-export", label: "Period export", icon: FileBarChart },
+      { href: "/admin/hours/timesheets", label: "Time sheets", icon: FileText },
+    ],
+  },
+  {
     group: "Operations",
     items: [
-      { href: "/admin/time-tracking", label: "Time tracking", icon: Clock },
       { href: "/admin/contract-workers", label: "Contract workers", icon: HardHat },
       { href: "/admin/schedules", label: "Schedules", icon: CalendarDays },
       { href: "/admin/leave", label: "Leave", icon: Plane },
@@ -73,6 +84,13 @@ const NAV: Array<{
       { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
       { href: "/admin/payroll", label: "Payroll", icon: Banknote },
       { href: "/admin/benefits", label: "Benefits", icon: HeartPulse },
+    ],
+  },
+  {
+    group: "Reports",
+    items: [
+      { href: "/admin/reports/period", label: "Period reports", icon: FileBarChart },
+      { href: "/admin/reports/scheduler", label: "Scheduler reports", icon: CalendarDays },
     ],
   },
   {
@@ -125,7 +143,7 @@ export function AdminSidebar({ aiEnabled = false }: { aiEnabled?: boolean }) {
                     return <AssistantNav key={item.href} basePath={item.href} />;
                   const active =
                     pathname === item.href ||
-                    (item.href !== "/admin" && pathname.startsWith(item.href));
+                    (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
@@ -173,7 +191,7 @@ export function AdminSidebarMobileNav({ aiEnabled = false }: { aiEnabled?: boole
               {section.items.map((item) => {
                 const active =
                   pathname === item.href ||
-                  (item.href !== "/admin" && pathname.startsWith(item.href));
+                  (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
                 return (
                   <li key={item.href} className="w-full">
                     <Link

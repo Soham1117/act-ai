@@ -19,6 +19,7 @@ import {
   computeEntryTotals,
   isStaleShift,
 } from "@/lib/time-rules";
+import { resolveHourlyRate } from "@/lib/time-rate";
 
 export type Tx = Prisma.TransactionClient;
 type EntryWithBreaks = TimeEntry & { breaks: TimeBreak[] };
@@ -45,6 +46,13 @@ export async function withEmployeeLock<T>(
 export function revalidateTimePages() {
   revalidatePath("/dashboard/time-tracking");
   revalidatePath("/admin/time-tracking");
+  revalidatePath("/admin/hours");
+  revalidatePath("/admin/hours/group");
+  revalidatePath("/admin/hours/mass");
+  revalidatePath("/admin/hours/period-export");
+  revalidatePath("/admin/hours/timesheets");
+  revalidatePath("/admin/reports/period");
+  revalidatePath("/admin/reports/scheduler");
   revalidatePath("/admin");
 }
 
@@ -185,6 +193,7 @@ export async function _clockIn(
       // Resolve the code first: if there is none, change nothing (not even stale shifts).
       const code = jobCode ?? (await resolveJobCode(tx, employeeId));
       if (!code) return { kind: "nocode" as const };
+      const rate = await resolveHourlyRate(tx, employeeId, code);
       const closedIds: string[] = [];
       for (const stale of open) {
         await closeOpenEntry(tx, stale, now);
@@ -196,6 +205,7 @@ export async function _clockIn(
           date: businessDateOnly(now),
           clockIn: now,
           jobCode: code,
+          rate,
           status: "ACTIVE" as TimeEntryStatus,
           source,
           kioskSlug: kiosk?.kioskSlug ?? null,

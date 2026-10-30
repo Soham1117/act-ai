@@ -64,12 +64,19 @@ export default async function PayrollPeriodPage({
           </div>
         }
       />
-      <div className="mb-4 print:hidden">
+      <div className="mb-4 flex flex-wrap gap-2 print:hidden">
             <DownloadCsvButton
               periodId={period.id}
               title={period.title}
               blockingExceptions={readiness.blocking}
             />
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href={`/admin/hours/period-export?period=${period.id}`}
+              >
+                Open in Period export
+              </Link>
+            </Button>
       </div>
 
       <div className="mb-6 flex items-center gap-2 print:hidden">

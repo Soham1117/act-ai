@@ -18,6 +18,7 @@ import {
   validateEntryTimes,
 } from "@/lib/time-rules";
 import { closeOpenEntry, revalidateTimePages, withEmployeeLock, type Tx } from "@/server/time-core";
+import { resolveHourlyRate } from "@/lib/time-rate";
 
 type EntryWithBreaks = TimeEntry & { breaks: TimeBreak[] };
 
@@ -267,6 +268,7 @@ export async function adminUpdateTimeEntry(
       const totals = clockOut
         ? computeEntryTotals({ clockIn: ci.date, clockOut, breaks: nextBreaks })
         : null;
+      const rate = await resolveHourlyRate(tx, entry.employeeId, data.jobCode);
       const reapprovalRequired =
         entry.approvalStatus === "APPROVED" &&
         payableTimeChanged(entry, {
@@ -283,6 +285,7 @@ export async function adminUpdateTimeEntry(
           clockOut,
           date: businessDateOnly(ci.date),
           jobCode: data.jobCode,
+          rate,
           timesheetNotes: data.notes?.trim() ? data.notes.trim() : null,
           ...(totals
             ? { totalBreakMin: totals.totalBreakMin, totalWorkMin: totals.totalWorkMin }
@@ -396,6 +399,7 @@ export async function adminCreateManualTimeEntry(
     const result = await withEmployeeLock(employee.id, async (tx) => {
       const overlap = await findOverlap(tx, employee.id, null, ci.date, co.date);
       if (overlap) return { error: overlapMessage(overlap) };
+      const rate = await resolveHourlyRate(tx, employee.id, data.jobCode);
       const created = await tx.timeEntry.create({
         data: {
           employeeId: employee.id,
@@ -403,6 +407,7 @@ export async function adminCreateManualTimeEntry(
           clockIn: ci.date,
           clockOut: co.date,
           jobCode: data.jobCode,
+          rate,
           source: "MANUAL",
           status: data.approve ? "APPROVED" : "COMPLETED",
           approvalStatus: data.approve ? "APPROVED" : "PENDING",

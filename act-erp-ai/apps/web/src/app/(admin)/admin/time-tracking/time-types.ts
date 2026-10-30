@@ -10,6 +10,8 @@ export type EntryRowData = {
   clockIn: string;
   clockOut: string | null;
   jobCode: string;
+  /** Hourly rate stamped on the entry (or effective fallback). */
+  rate: number | null;
   notes: string | null;
   status: string;
   approvalStatus: string;

@@ -8,6 +8,8 @@ import {
   STALE_SHIFT_HOURS,
   safe,
 } from "@/server/queries/dashboard";
+import { loadHoursWidgetPack } from "@/server/queries/hours-widgets";
+import { formatHours } from "@/lib/format";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -54,6 +56,7 @@ export default async function AdminHomePage() {
     departments,
     charts,
     extras,
+    widgets,
   ] = await Promise.all([
     safe(db.employee.count({ where: { employmentStatus: "ACTIVE" } }), 0, "active employees"),
     openShiftSnapshot(),
@@ -61,6 +64,21 @@ export default async function AdminHomePage() {
     safe(db.department.count(), 0, "departments"),
     dashboardData(),
     dashboardExtras(),
+    safe(
+      loadHoursWidgetPack(),
+      {
+        pendingTimeApprovals: 0,
+        pendingLeave: 0,
+        pendingRequests: 0,
+        staleOpen: 0,
+        birthdays: [],
+        pendingTimeOff: [],
+        approachingOt: [],
+        conflictingSegments: 0,
+        recentOt: [],
+      },
+      "hours widgets",
+    ),
   ]);
   const clockedIn = openShifts.live.size;
   const staleOpen = openShifts.stale.size;
@@ -134,6 +152,139 @@ export default async function AdminHomePage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* TCP-parity manager widgets */}
+      <div className="mb-6 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="min-w-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Required approvals ({widgets.pendingTimeApprovals + widgets.pendingLeave + widgets.pendingRequests})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-xs text-muted-foreground">
+            <Link href="/admin/time-tracking?tab=pending" className="block hover:underline">
+              Time · {widgets.pendingTimeApprovals}
+            </Link>
+            <Link href="/admin/leave" className="block hover:underline">
+              Leave · {widgets.pendingLeave}
+            </Link>
+            <Link href="/admin/requests" className="block hover:underline">
+              Requests · {widgets.pendingRequests}
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="min-w-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Missed punches ({widgets.staleOpen})</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs text-muted-foreground">
+            <Link href="/admin/time-tracking?tab=attention" className="hover:underline">
+              Open shifts over {STALE_SHIFT_HOURS}h — review
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="min-w-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Birthdays ({widgets.birthdays.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            {widgets.birthdays.length === 0 ? (
+              <p className="text-muted-foreground">None in the next 14 days.</p>
+            ) : (
+              widgets.birthdays.map((b) => (
+                <div key={b.id} className="flex justify-between gap-2">
+                  <span className="truncate">{b.name}</span>
+                  <span className="shrink-0 text-muted-foreground">{b.dateLabel}</span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+        <Card className="min-w-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Pending time off ({widgets.pendingTimeOff.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            {widgets.pendingTimeOff.length === 0 ? (
+              <p className="text-muted-foreground">None pending.</p>
+            ) : (
+              widgets.pendingTimeOff.slice(0, 4).map((l) => (
+                <Link key={l.id} href="/admin/leave" className="block hover:underline">
+                  <span className="font-medium">{l.name}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {l.type} · {l.start}
+                  </span>
+                </Link>
+              ))
+            )}
+            <Link href="/admin/leave" className="text-muted-foreground hover:underline">
+              Jump to leave
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="min-w-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Approaching OT ({widgets.approachingOt.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            {widgets.approachingOt.length === 0 ? (
+              <p className="text-muted-foreground">Nobody near 40h this week.</p>
+            ) : (
+              widgets.approachingOt.slice(0, 5).map((a) => (
+                <Link
+                  key={a.id}
+                  href={`/admin/hours?employee=${a.id}`}
+                  className="flex justify-between gap-2 hover:underline"
+                >
+                  <span className="truncate">
+                    {a.name}
+                    {a.open ? " · in" : ""}
+                  </span>
+                  <span className="shrink-0 font-mono tabular-nums">{formatHours(a.weekMin)}</span>
+                </Link>
+              ))
+            )}
+          </CardContent>
+        </Card>
+        <Card className="min-w-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Conflicting segments ({widgets.conflictingSegments})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs text-muted-foreground">
+            <Link href="/admin/hours" className="hover:underline">
+              Overlapping punches in the last 14 days
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="min-w-0 sm:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Overtime this week ({widgets.recentOt.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            {widgets.recentOt.length === 0 ? (
+              <p className="text-muted-foreground">No OT past 40h yet this week.</p>
+            ) : (
+              widgets.recentOt.map((o) => (
+                <div key={`${o.name}-${o.date}`} className="flex justify-between gap-2">
+                  <span className="truncate">{o.name}</span>
+                  <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
+                    +{formatHours(o.minutes)}
+                  </span>
+                </div>
+              ))
+            )}
+            <Link href="/admin/reports/period" className="text-muted-foreground hover:underline">
+              Period reports
+            </Link>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Top charts row */}
