@@ -18,8 +18,10 @@ import { validateUpload } from "@/lib/upload-validation";
 import { audit } from "@/lib/audit";
 import {
   derivePeriodStatus,
+  periodState,
   validatePeriodDates,
 } from "@/lib/payroll-period";
+import { loadPeriodCounts } from "@/server/payroll-close";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date");
@@ -178,17 +180,18 @@ const calendarSchema = z.object({
   payPeriodStart: z.string(),
   payPeriodEnd: z.string(),
   payDate: z.string(),
-  /** AUTO follows the dates; COMPLETED closes the period early (admin override). */
+  /** Ignored. The status follows the dates; use closePayrollPeriod to close. */
   status: z.enum(["AUTO", "UPCOMING", "CURRENT", "COMPLETED"]).default("AUTO"),
   notes: z.string().max(2000).optional(),
 });
 
+/** The stored status always follows the dates now; closing is a separate action. */
 function resolveStatus(
-  requested: z.infer<typeof calendarSchema>["status"],
+  _requested: z.infer<typeof calendarSchema>["status"],
   start: Date,
   end: Date,
 ) {
-  return requested === "COMPLETED" ? ("COMPLETED" as const) : derivePeriodStatus(start, end);
+  return derivePeriodStatus(start, end);
 }
 
 export async function createPayrollPeriod(
@@ -251,8 +254,9 @@ export async function updatePayrollPeriod(
     const end = new Date(`${data.payPeriodEnd}T00:00:00.000Z`);
     const result = await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('payroll-calendar-period-writes'))`;
-      const existing = await tx.payrollCalendar.findUnique({ where: { id }, select: { id: true } });
+      const existing = await tx.payrollCalendar.findUnique({ where: { id }, select: { id: true, closedAt: true } });
       if (!existing) return { error: "That pay period no longer exists. Refresh the page and try again." } as const;
+      if (existing.closedAt) return { error: "This pay period is closed. Reopen it before editing it." } as const;
       const overlap = await tx.payrollCalendar.findFirst({
         where: {
           id: { not: id },
@@ -299,6 +303,7 @@ export async function deletePayrollPeriod(id: string): Promise<ActionResult> {
   try {
     const existing = await db.payrollCalendar.findUnique({ where: { id } });
     if (!existing) return fail("That pay period was already deleted. Refresh the page.", "errors.payroll.thatPayPeriodWasAlreadyDeleted_910de");
+    if (existing.closedAt) return fail("This pay period is closed. Reopen it before deleting it.");
     await db.payrollCalendar.delete({ where: { id } });
     await audit({
       action: "payroll.period.delete",
@@ -307,6 +312,76 @@ export async function deletePayrollPeriod(id: string): Promise<ActionResult> {
     });
     revalidatePath("/admin/payroll");
     revalidatePath("/dashboard/payroll");
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+/**
+ * Close a period after its hours were exported. Only a period that is over,
+ * with nothing pending and nobody still clocked in, can be closed. Closing
+ * locks admin edits and approvals for that range until it is reopened.
+ */
+export async function closePayrollPeriod(id: string): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  try {
+    const period = await db.payrollCalendar.findUnique({ where: { id } });
+    if (!period) return fail("That pay period no longer exists. Refresh the page.");
+    if (period.closedAt) return fail("This pay period is already closed.");
+    const counts = (await loadPeriodCounts([period])).get(id)!;
+    const state = periodState({
+      start: period.payPeriodStart,
+      end: period.payPeriodEnd,
+      closedAt: null,
+      pending: counts.pending,
+      open: counts.open,
+    });
+    if (state === "UPCOMING" || state === "CURRENT") {
+      return fail("This pay period is not over yet. Close it after its last day.");
+    }
+    if (state === "REVIEW") {
+      const parts = [
+        counts.pending ? `${counts.pending} ${counts.pending === 1 ? "entry is" : "entries are"} waiting for approval` : "",
+        counts.open ? `${counts.open} ${counts.open === 1 ? "person is" : "people are"} still clocked in` : "",
+      ].filter(Boolean);
+      return fail(`Not ready to close: ${parts.join(" and ")}. Approve or fix them first.`);
+    }
+    const result = await db.payrollCalendar.updateMany({
+      where: { id, closedAt: null },
+      data: { closedAt: new Date(), closedById: admin.id },
+    });
+    if (result.count === 0) return fail("This pay period was just closed by someone else.");
+    await audit({
+      action: "payroll.period.close",
+      resource: `PayrollCalendar:${id}`,
+      diff: { title: period.title },
+    });
+    revalidatePath("/admin/payroll");
+    revalidatePath(`/admin/payroll/${id}`);
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+/** Reopen a closed period so hours in it can be changed again. A reason is required and audited. */
+export async function reopenPayrollPeriod(id: string, reason: string): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  try {
+    const why = reason.trim();
+    if (why.length < 3) return fail("Enter a reason for reopening this period.");
+    const period = await db.payrollCalendar.findUnique({ where: { id } });
+    if (!period) return fail("That pay period no longer exists. Refresh the page.");
+    if (!period.closedAt) return fail("This pay period is not closed.");
+    await db.payrollCalendar.update({ where: { id }, data: { closedAt: null, closedById: null } });
+    await audit({
+      action: "payroll.period.reopen",
+      resource: `PayrollCalendar:${id}`,
+      diff: { title: period.title, reason: why, closedAt: period.closedAt.toISOString(), actorId: admin.id },
+    });
+    revalidatePath("/admin/payroll");
+    revalidatePath(`/admin/payroll/${id}`);
     return ok();
   } catch (err) {
     return failFromUnknown(err);

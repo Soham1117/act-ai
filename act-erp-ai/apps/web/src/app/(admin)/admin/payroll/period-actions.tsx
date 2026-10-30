@@ -43,9 +43,6 @@ export function PeriodActions({ period }: { period: EditablePeriod }) {
   const [start, setStart] = useState(period.payPeriodStart);
   const [end, setEnd] = useState(period.payPeriodEnd);
   const [payDate, setPayDate] = useState(period.payDate);
-  const [status, setStatus] = useState<"AUTO" | "COMPLETED">(
-    period.completedOverride ? "COMPLETED" : "AUTO",
-  );
   const [notes, setNotes] = useState(period.notes ?? "");
 
   const datesInvalid = !!start && !!end && !!payDate && (end < start || payDate < end);
@@ -59,7 +56,6 @@ export function PeriodActions({ period }: { period: EditablePeriod }) {
           payPeriodStart: start,
           payPeriodEnd: end,
           payDate,
-          status,
           notes: notes || undefined,
         }),
       );
@@ -159,20 +155,6 @@ export function PeriodActions({ period }: { period: EditablePeriod }) {
                 before the end.
               </p>
             )}
-            <div className="space-y-1.5">
-              <Label htmlFor={`${formId}-field-4`} className="text-xs">
-                Status
-              </Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
-                <SelectTrigger id={`${formId}-field-4`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="AUTO">Automatic (from dates)</SelectItem>
-                  <SelectItem value="COMPLETED">Mark completed (closed early)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div className="space-y-1.5">
               <Label htmlFor={`${formId}-field-5`} className="text-xs">
                 Notes

@@ -1,5 +1,6 @@
 "use server";
 
+import { closedPeriodMessage } from "@/server/payroll-close";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
@@ -51,9 +52,11 @@ export async function reviewTimeEntry(
 
     const existing = await db.timeEntry.findUnique({
       where: { id: data.timeEntryId },
-      select: { employeeId: true },
+      select: { employeeId: true, date: true },
     });
     if (!existing) return fail("That time entry no longer exists. Refresh the page.", "errors.time-clock.thatTimeEntryNoLongerExists_fb2dd");
+    const closedMsg = await closedPeriodMessage(existing.date);
+    if (closedMsg) return fail(closedMsg);
 
     const result = await withEmployeeLock(existing.employeeId, async (tx) => {
       const entry = await tx.timeEntry.findUnique({ where: { id: data.timeEntryId } });
@@ -130,6 +133,10 @@ export async function bulkReviewTimeEntries(
       return fail("Enter a reason for rejecting these entries. Employees will see it.", "errors.time-clock.enterAReasonForRejectingThese_86970");
     }
     const ids = [...new Set(data.ids)];
+    const dated = await db.timeEntry.findMany({ where: { id: { in: ids } }, select: { date: true } });
+    const distinctDays = Array.from(new Set(dated.map((d) => d.date.getTime()))).map((t) => new Date(t));
+    const closedMsg = await closedPeriodMessage(...distinctDays);
+    if (closedMsg) return fail(`Some selected entries are in a closed pay period. ${closedMsg}`);
 
     const now = new Date();
     const changed = await db.$transaction(async (tx) =>

@@ -33,7 +33,6 @@ export function CreatePayrollPeriodForm() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [payDate, setPayDate] = useState("");
-  const [status, setStatus] = useState<"AUTO" | "COMPLETED">("AUTO");
   const [notes, setNotes] = useState("");
 
   function onSubmit(e: React.FormEvent) {
@@ -45,7 +44,6 @@ export function CreatePayrollPeriodForm() {
           payPeriodStart: start,
           payPeriodEnd: end,
           payDate,
-          status,
           notes: notes || undefined,
         }),
       );
@@ -123,20 +121,6 @@ export function CreatePayrollPeriodForm() {
                 required
               />
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${formId}-field-4`} className="text-xs">
-              Status
-            </Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
-              <SelectTrigger id={`${formId}-field-4`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="AUTO">Automatic (from dates)</SelectItem>
-                <SelectItem value="COMPLETED">Mark completed (closed early)</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`${formId}-field-5`} className="text-xs">

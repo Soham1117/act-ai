@@ -19,6 +19,7 @@ import {
 } from "@/lib/time-rules";
 import { closeOpenEntry, revalidateTimePages, withEmployeeLock, type Tx } from "@/server/time-core";
 import { resolveHourlyRate } from "@/lib/time-rate";
+import { closedPeriodMessage } from "@/server/payroll-close";
 
 type EntryWithBreaks = TimeEntry & { breaks: TimeBreak[] };
 
@@ -199,9 +200,11 @@ export async function adminUpdateTimeEntry(
 
     const existing = await db.timeEntry.findUnique({
       where: { id: data.id },
-      select: { employeeId: true, jobCode: true },
+      select: { employeeId: true, jobCode: true, date: true },
     });
     if (!existing) return fail("That time entry no longer exists. Refresh the page.");
+    const closedMsg = await closedPeriodMessage(existing.date, businessDateOnly(ci.date));
+    if (closedMsg) return fail(closedMsg);
     const jcErr = await assertJobCode(data.jobCode, existing.jobCode);
     if (jcErr) return fail(jcErr);
 
@@ -385,6 +388,8 @@ export async function adminCreateManualTimeEntry(
       select: { id: true, name: true },
     });
     if (!employee) return fail("That employee no longer exists.");
+    const closedMsg = await closedPeriodMessage(businessDateOnly(ci.date));
+    if (closedMsg) return fail(closedMsg);
     const jcErr = await assertJobCode(data.jobCode);
     if (jcErr) return fail(jcErr);
 
@@ -558,9 +563,11 @@ export async function adminDeleteTimeEntry(
     const data = deleteSchema.parse(input);
     const found = await db.timeEntry.findUnique({
       where: { id: data.id },
-      select: { employeeId: true },
+      select: { employeeId: true, date: true },
     });
     if (!found) return fail("That time entry was already deleted. Refresh the page.");
+    const closedMsg = await closedPeriodMessage(found.date);
+    if (closedMsg) return fail(closedMsg);
 
     const result = await withEmployeeLock(found.employeeId, async (tx) => {
       const entry = await tx.timeEntry.findUnique({
@@ -611,9 +618,11 @@ export async function adminReopenTimeEntry(
     const data = reopenSchema.parse(input);
     const found = await db.timeEntry.findUnique({
       where: { id: data.id },
-      select: { employeeId: true },
+      select: { employeeId: true, date: true },
     });
     if (!found) return fail("That time entry no longer exists. Refresh the page.");
+    const closedMsg = await closedPeriodMessage(found.date);
+    if (closedMsg) return fail(closedMsg);
 
     const result = await withEmployeeLock(found.employeeId, async (tx) => {
       const entry = await tx.timeEntry.findUnique({

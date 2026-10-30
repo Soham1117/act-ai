@@ -46,3 +46,5 @@ Seed: `e2e/seed-parts/40-payroll-time.ts`. Helpers: `e2e/support/payroll-time.ts
 | Page `/dashboard/time-tracking` | own entries only, statuses, rejected/edited/auto-closed notes, week/month hours, no-employee message, signed-out redirect | covered | employee-time.spec.ts |
 | Page `/dashboard/payroll` | own documents only, upcoming pay dates, empty state, admin page blocked | covered | payroll-documents.spec.ts |
 | API `/api/punch-photo` | admin only, bad params 400, unknown id 404 | covered | time-views.spec.ts |
+| `closePayrollPeriod` | `payroll-close.test.ts`: refused while pending/open or not over, closes and audits, refuses double close. No browser scenario yet (planned). |
+| `reopenPayrollPeriod` | `payroll-close.test.ts`: reason required, clears the close and audits. No browser scenario yet (planned). |

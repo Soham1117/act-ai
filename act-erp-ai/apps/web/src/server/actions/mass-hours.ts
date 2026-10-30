@@ -14,6 +14,7 @@ import {
 } from "@/lib/time-rules";
 import { revalidateTimePages, withEmployeeLock } from "@/server/time-core";
 import { effectivePeriodStatus } from "@/lib/payroll-period";
+import { closedPeriodMessage } from "@/server/payroll-close";
 import { resolveHourlyRate } from "@/lib/time-rate";
 
 const schema = z.object({
@@ -134,6 +135,9 @@ export async function commitMassHours(
     const { clockIn, clockOut, brk, timeErr, totals } = plan(req);
     if (timeErr || !totals) return fail(timeErr ?? "Invalid shift.");
     const now = new Date();
+
+    const closedMsg = await closedPeriodMessage(businessDateOnly(clockIn));
+    if (closedMsg) return fail(closedMsg);
 
     const jc = await db.jobCode.findFirst({
       where: { code: req.jobCode, isActive: true },

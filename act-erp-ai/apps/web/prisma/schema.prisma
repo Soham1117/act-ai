@@ -800,6 +800,10 @@ model PayrollCalendar {
   payDate        DateTime            @db.Date
   status         PayrollPeriodStatus @default(UPCOMING)
   notes          String?             @db.Text
+  /// Set when an admin closes the period after exporting it; hours in a closed
+  /// period cannot be edited or approved until it is reopened.
+  closedAt       DateTime?
+  closedById     String?             @db.Uuid
   createdById    String              @db.Uuid
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt

@@ -56,3 +56,38 @@ export function validatePeriodDates(start: string, end: string, payDate: string)
 
 /** Error-message prefix the upload dialog keys off to offer "Replace". */
 export const PAYROLL_DUPLICATE_PREFIX = "Duplicate pay document:";
+
+/**
+ * What an admin needs to know about a period.
+ * - Closed: exported and closed by an admin (hours are locked).
+ * - Ready: the last day has passed and nothing is pending or still open.
+ * - Review: the last day has passed but entries still need approving or closing.
+ */
+export type PeriodState = "UPCOMING" | "CURRENT" | "REVIEW" | "READY" | "CLOSED";
+
+export function periodState(
+  args: {
+    start: Date;
+    end: Date;
+    closedAt: Date | null;
+    /** Finished entries still waiting for approval. */
+    pending: number;
+    /** Entries that are still clocked in. */
+    open: number;
+  },
+  today: Date = businessDateOnly(),
+): PeriodState {
+  if (args.closedAt) return "CLOSED";
+  const dated = derivePeriodStatus(args.start, args.end, today);
+  if (dated === "UPCOMING") return "UPCOMING";
+  if (dated === "CURRENT") return "CURRENT";
+  return args.pending > 0 || args.open > 0 ? "REVIEW" : "READY";
+}
+
+export const PERIOD_STATE_LABEL: Record<PeriodState, string> = {
+  UPCOMING: "Not started",
+  CURRENT: "In progress",
+  REVIEW: "Needs review",
+  READY: "Ready to export",
+  CLOSED: "Closed",
+};

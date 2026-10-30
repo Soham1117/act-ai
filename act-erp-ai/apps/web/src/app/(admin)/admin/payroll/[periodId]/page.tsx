@@ -19,7 +19,8 @@ import {
   getPayrollSlipsForPeriod,
   type PayrollReadinessException,
 } from "@/server/queries/payroll-slip";
-import { effectivePeriodStatus } from "@/lib/payroll-period";
+import { PERIOD_STATE_LABEL, periodState } from "@/lib/payroll-period";
+import { loadPeriodCounts } from "@/server/payroll-close";
 import { formatDateOnly } from "@/lib/format";
 import { DownloadCsvButton } from "./download-csv-button";
 import { PrintClient } from "./print-button";
@@ -42,7 +43,14 @@ export default async function PayrollPeriodPage({
     getPayrollSlipsForPeriod(period.payPeriodStart, period.payPeriodEnd),
     getPayrollReadinessForPeriod(period.payPeriodStart, period.payPeriodEnd),
   ]);
-  const displayStatus = effectivePeriodStatus(period.status, period.payPeriodStart, period.payPeriodEnd);
+  const counts = (await loadPeriodCounts([period]).catch(() => null))?.get(period.id) ?? { pending: 0, open: 0 };
+  const state = periodState({
+    start: period.payPeriodStart,
+    end: period.payPeriodEnd,
+    closedAt: period.closedAt,
+    pending: counts.pending,
+    open: counts.open,
+  });
   const totalEmployees = slips.length;
   const totalHours = slips.reduce((s, r) => s + r.totalHours, 0);
   const totalOT = slips.reduce((s, r) => s + r.overtimeHours, 0);
@@ -80,8 +88,8 @@ export default async function PayrollPeriodPage({
       </div>
 
       <div className="mb-6 flex items-center gap-2 print:hidden">
-        <Badge variant={displayStatus === "COMPLETED" ? "success" : displayStatus === "CURRENT" ? "warning" : "outline"}>
-          {displayStatus}
+        <Badge variant={state === "READY" ? "success" : state === "CURRENT" || state === "REVIEW" ? "warning" : state === "CLOSED" ? "secondary" : "outline"}>
+          {PERIOD_STATE_LABEL[state]}
         </Badge>
         {period.notes && (
           <span className="text-xs text-muted-foreground">{period.notes}</span>
