@@ -78,6 +78,8 @@ export const PAYROLL_JOBS: RuleJob[] = [
           totalWorkMin: true,
           totalBreakMin: true,
           source: true,
+          actualClockIn: true,
+          actualClockOut: true,
           employee: { select: { name: true } },
         },
       });
@@ -92,6 +94,8 @@ export const PAYROLL_JOBS: RuleJob[] = [
           workMin: r.totalWorkMin,
           breakMin: r.totalBreakMin,
           source: r.source,
+          actualIn: r.actualClockIn,
+          actualOut: r.actualClockOut,
         })),
       );
     },

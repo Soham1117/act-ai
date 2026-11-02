@@ -46,6 +46,10 @@ describe("entry sanity", () => {
     expect(evaluateEntrySanity([{ ...base, workMin: 0 }])[0]?.severity).toBe("CRITICAL");
     const tap = { ...base, workMin: 0, clockOut: t("2026-10-28T13:00:40Z") };
     expect(evaluateEntrySanity([tap])[0]?.severity).toBe("INFO");
+    // Rounded to the same minute, but the raw punches were 2 minutes apart: a short tap, not a broken entry.
+    const rounded = { ...base, workMin: 0, clockOut: base.clockIn, actualIn: t("2026-10-28T12:56:00Z"), actualOut: t("2026-10-28T12:58:00Z") };
+    expect(evaluateEntrySanity([rounded])[0]?.severity).toBe("INFO");
+    expect(evaluateEntrySanity([{ ...rounded, actualOut: t("2026-10-28T13:30:00Z") }])[0]?.severity).toBe("CRITICAL");
     expect(evaluateEntrySanity([{ ...base, clockOut: t("2026-10-28T12:00:00Z") }])[0]?.fingerprint).toBe("payroll.entry-zero:e1");
   });
   it("flags totals that do not match, but not for imported TCP rows", () => {
