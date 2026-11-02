@@ -21,7 +21,7 @@ FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Faster server builds. SKIP_TYPECHECK=1 skips the type check inside `next build`
-# (run `tsc --noEmit` before shipping; infra/scripts/deploy-overlay.sh passes
+# (run `tsc --noEmit` before shipping; infra/scripts/deploy.sh passes
 # --full-check to keep it). The Turbopack cache lives in a BuildKit cache mount,
 # so it persists between builds without ending up in an image layer.
 ARG SKIP_TYPECHECK=0

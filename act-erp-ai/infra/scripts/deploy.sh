@@ -6,7 +6,9 @@
 # What it does:
 #   1. Builds the web image on THIS machine from the committed code (git HEAD),
 #      so the small prod server never builds. Type check runs here first.
-#   2. Ships the image over SSH (gzip) and loads it on the server.
+#   2. Pushes the image to a private registry on the server through an SSH tunnel
+#      (only changed layers travel), then pulls it there. The registry container
+#      `act-registry` (127.0.0.1:5000) is started automatically if it is not running.
 #   3. On the server (one deploy at a time): optional DB backup, optional schema
 #      push, optional warm check, switch, health check, and automatic rollback to
 #      the previous image if the new one is not healthy.
@@ -98,6 +100,9 @@ if [ "$SCHEMA" = 1 ]; then
 fi
 
 # 4. Ship.
+# Make sure the registry container exists on the server.
+ssh_ 'docker start act-registry >/dev/null 2>&1 || docker run -d --restart=always --name act-registry -p 127.0.0.1:5000:5000 -v act-registry:/var/lib/registry registry:2 >/dev/null' </dev/null
+
 # A private registry on the server (127.0.0.1 only) reached through an SSH tunnel.
 # `docker push` sends only the layers the server does not already have, so a normal
 # deploy uploads a few MB instead of the whole image. Docker Desktop's daemon cannot
