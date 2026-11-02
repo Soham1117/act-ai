@@ -44,7 +44,22 @@ export function evaluateEntrySanity(rows: SanityRow[]): FindingDraft[] {
   const out: FindingDraft[] = [];
   for (const r of rows) {
     const spanMin = (r.clockOut.getTime() - r.clockIn.getTime()) / MIN;
-    if (spanMin <= 0 || r.workMin <= 0) {
+    if (spanMin > 0 && spanMin < 5 && r.workMin <= 0) {
+      // Tap in, tap out: kiosk testing or a mistaken punch. Pays nothing, so only a note.
+      out.push({
+        fingerprint: `payroll.entry-zero:${r.id}`,
+        severity: "INFO",
+        subjectType: "TimeEntry",
+        subjectId: r.id,
+        employeeId: r.employeeId,
+        title: `${r.name}: very short entry (${Math.round(spanMin * 60)} seconds)`,
+        detail: `${r.date}: clocked in and out almost at once, 0 hours recorded.`,
+        likelyCause: "Kiosk test or an accidental punch.",
+        suggestedFix: "Delete the entry if it was a test.",
+        fixLink: "/admin/time-tracking",
+        evidence: { spanSeconds: Math.round(spanMin * 60) },
+      });
+    } else if (spanMin <= 0 || r.workMin <= 0) {
       out.push({
         fingerprint: `payroll.entry-zero:${r.id}`,
         severity: "CRITICAL",

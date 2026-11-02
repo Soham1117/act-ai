@@ -219,7 +219,7 @@ export const PAYROLL_JOBS: RuleJob[] = [
   {
     id: "payroll.period-gap",
     async run() {
-      const rows = await db.payrollCalendar.findMany({ orderBy: { payPeriodStart: "desc" }, take: 10 });
+      const rows = await db.payrollCalendar.findMany({ orderBy: { payPeriodStart: "desc" }, take: 6 });
       return evaluatePeriodGaps(
         rows.map((r) => ({ id: r.id, title: r.title, start: r.payPeriodStart, end: r.payPeriodEnd })),
       );
