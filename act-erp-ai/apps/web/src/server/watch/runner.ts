@@ -5,6 +5,7 @@ import {
   evaluateDuplicateEmployees,
   evaluateHoursVariance,
   evaluateMissingClockOut,
+  periodHasEnded,
   type PeriodHours,
 } from "@/lib/watch/rules";
 import { mergePolicy, type FindingDraft, type WatchPolicy } from "@/lib/watch/types";
@@ -106,9 +107,10 @@ const JOBS: RuleJob[] = [
   },
   {
     id: "payroll.hours-variance",
-    async run({ policy }) {
+    async run({ now, policy }) {
       const p = await currentPeriod();
-      if (!p) return [];
+      // A period still in progress always looks "down" against a full one, so wait until it ends.
+      if (!p || !periodHasEnded(p.payPeriodEnd, now)) return [];
       const lengthMs = p.payPeriodEnd.getTime() - p.payPeriodStart.getTime() + DAY_MS;
       const prevStart = new Date(p.payPeriodStart.getTime() - lengthMs);
       const prevEnd = new Date(p.payPeriodStart.getTime() - DAY_MS);

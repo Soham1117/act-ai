@@ -83,6 +83,11 @@ export function evaluateCloseBlockers(p: PeriodBlockers, now: Date): FindingDraf
   ];
 }
 
+/** payPeriodEnd is a date-only value (UTC midnight); the period is over once that whole day has passed. */
+export function periodHasEnded(periodEnd: Date, now: Date): boolean {
+  return now.getTime() >= periodEnd.getTime() + HOUR * 24;
+}
+
 export type PeriodHours = {
   employeeId: string;
   employeeName: string;

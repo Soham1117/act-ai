@@ -288,7 +288,7 @@ Legend: [x] done, [~] partly, [ ] not started.
 - [x] Digest builder (template only, not sent yet)
 - [x] Cron every 15 min on prod, shadow mode
 - [ ] Back-test the rules on 8 weeks of data and tune thresholds
-- [ ] Hours variance is noisy (32 flags on first run): raise thresholds
+- [x] Hours variance was noisy (32 flags): it compared a half-finished period with a full one. Now runs only after the period ends
 - [ ] Review the "Jose Gonzalez / Jose Gonzalez" duplicate flag
 
 ### Phase 2: findings page

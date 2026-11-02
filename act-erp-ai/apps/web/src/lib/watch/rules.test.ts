@@ -5,6 +5,7 @@ import {
   evaluateDuplicateEmployees,
   evaluateHoursVariance,
   evaluateMissingClockOut,
+  periodHasEnded,
 } from "./rules";
 import { DEFAULT_POLICY, mergePolicy } from "./types";
 
@@ -102,6 +103,17 @@ describe("evaluateHoursVariance", () => {
     const strict = { ...DEFAULT_POLICY, hoursVariancePct: 10 };
     const out = evaluateHoursVariance([{ ...row, currentMinutes: 72 * 60, previousMinutes: 80 * 60 }], strict);
     expect(out).toHaveLength(1);
+  });
+});
+
+describe("periodHasEnded", () => {
+  const end = new Date("2026-11-08T00:00:00Z");
+  it("is false until the whole last day has passed", () => {
+    expect(periodHasEnded(end, new Date("2026-11-02T20:00:00Z"))).toBe(false);
+    expect(periodHasEnded(end, new Date("2026-11-08T23:59:00Z"))).toBe(false);
+  });
+  it("is true the day after", () => {
+    expect(periodHasEnded(end, new Date("2026-11-09T00:00:00Z"))).toBe(true);
   });
 });
 
