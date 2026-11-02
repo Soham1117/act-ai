@@ -98,7 +98,19 @@ if [ "$SCHEMA" = 1 ]; then
 fi
 
 # 4. Ship.
-docker save "${SHIP[@]}" | gzip -1 | ssh_ 'gunzip | docker load' | tail -2
+# A private registry on the server (127.0.0.1 only) reached through an SSH tunnel.
+# `docker push` sends only the layers the server does not already have, so a normal
+# deploy uploads a few MB instead of the whole image.
+LOCAL_PORT=15000
+ssh -i "$KEY" -o ConnectTimeout=20 -o ExitOnForwardFailure=yes -f -N -L "$LOCAL_PORT:127.0.0.1:5000" "$HOST"
+TUNNEL_PID=$(pgrep -f "L $LOCAL_PORT:127.0.0.1:5000" | head -1 || true)
+trap 'rm -rf "$WORK"; [ -n "${TUNNEL_PID:-}" ] && kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
+for img in "${SHIP[@]}"; do
+  name=${img%%:*}; tag=${img##*:}; short=${name#act-erp-lite-}
+  docker tag "$img" "localhost:$LOCAL_PORT/act-$short:$tag"
+  docker push -q "localhost:$LOCAL_PORT/act-$short:$tag"
+done
+ssh_ "for i in ${SHIP[*]}; do n=\${i%%:*}; t=\${i##*:}; s=\${n#act-erp-lite-}; docker pull -q localhost:5000/act-\$s:\$t >/dev/null && docker tag localhost:5000/act-\$s:\$t \$i; done" </dev/null
 lap "image on server"
 
 # 5. Server side: one deploy at a time.
@@ -116,7 +128,7 @@ cd "$ROOT"
 grep -q '^WATCH_CRON_TOKEN=' apps/web/.env.prod || echo "WATCH_CRON_TOKEN=$(openssl rand -hex 32)" >> apps/web/.env.prod
 
 if [ "$BACKUP" = 1 ]; then
-  "${COMPOSE[@]}" exec -T postgres pg_dump -U act -d act -Fc > "$RELEASE/database-before.dump"
+  "${COMPOSE[@]}" exec -T postgres pg_dump -U act -d act -Fc > "$RELEASE/database-before.dump" </dev/null
   echo "backup done"
 fi
 
@@ -126,7 +138,7 @@ docker tag "$PREV" "act-erp-lite-web:before-$STAMP"
 
 if [ "$SCHEMA" = 1 ]; then
   docker tag "$TOOLS_TAG" act-erp-lite-tools:latest
-  "${COMPOSE[@]}" --profile tools run --rm --no-build tools prisma db push 2>&1 | tee "$RELEASE/db-push.log"
+  "${COMPOSE[@]}" --profile tools run --rm -T --no-build tools prisma db push </dev/null 2>&1 | tee "$RELEASE/db-push.log"
   echo "schema push done"
 fi
 
