@@ -289,7 +289,8 @@ Legend: [x] done, [~] partly, [ ] not started.
 - [x] Cron every 15 min on prod, shadow mode
 - [ ] Back-test the rules on 8 weeks of data and tune thresholds
 - [x] Hours variance was noisy (32 flags): it compared a half-finished period with a full one. Now runs only after the period ends
-- [ ] Review the "Jose Gonzalez / Jose Gonzalez" duplicate flag
+- [x] Duplicate flag: only ACTIVE employees are compared (the second Jose Gonzalez was inactive)
+- [x] Close blockers: quiet until 3 days before period end; today's running shifts are not blockers
 
 ### Phase 2: findings page
 - [x] /admin/watch: tabs, severity filter, search, details, acknowledge, snooze, dismiss, reopen

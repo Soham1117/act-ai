@@ -57,12 +57,16 @@ export type PeriodBlockers = {
   openPunches: number;
 };
 
+const CLOSE_WATCH_DAYS = 3;
+
 /** payroll.close-blockers: things that stop a period from closing cleanly. */
 export function evaluateCloseBlockers(p: PeriodBlockers, now: Date): FindingDraft[] {
   if (p.closedAt) return [];
   const total = p.pendingApprovals + p.openPunches;
   if (total === 0) return [];
   const daysToEnd = (p.periodEnd.getTime() - now.getTime()) / (24 * HOUR);
+  // Nothing to chase until close is near; before that, pending items are normal.
+  if (daysToEnd > CLOSE_WATCH_DAYS) return [];
   return [
     {
       fingerprint: `payroll.close-blockers:${p.periodId}`,

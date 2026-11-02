@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { businessLocalToDate, dateOnlyToString } from "@/lib/time-rules";
+import { businessLocalToDate, dateOnlyToString, dateToBusinessLocal, parseDateOnly } from "@/lib/time-rules";
 import {
   evaluateCloseBlockers,
   evaluateDuplicateEmployees,
@@ -86,11 +86,13 @@ const JOBS: RuleJob[] = [
       const p = await currentPeriod();
       if (!p) return [];
       const range = { gte: p.payPeriodStart, lte: p.payPeriodEnd };
+      // Today's shifts are still running; only earlier open punches block closing.
+      const today = parseDateOnly(dateToBusinessLocal(now).slice(0, 10)) ?? new Date(0);
       const [pendingApprovals, openPunches] = await Promise.all([
         db.timeEntry.count({
           where: { date: range, approvalStatus: "PENDING", clockOut: { not: null } },
         }),
-        db.timeEntry.count({ where: { date: range, clockOut: null } }),
+        db.timeEntry.count({ where: { date: { gte: p.payPeriodStart, lt: today <= p.payPeriodEnd ? today : new Date(p.payPeriodEnd.getTime() + 86_400_000) }, clockOut: null } }),
       ]);
       return evaluateCloseBlockers(
         {
@@ -144,7 +146,7 @@ const JOBS: RuleJob[] = [
     id: "data.duplicate-employee",
     async run() {
       const people = await db.employee.findMany({
-        where: { employmentStatus: { in: ["ACTIVE", "ON_LEAVE", "INACTIVE"] } },
+        where: { employmentStatus: "ACTIVE" },
         select: { id: true, name: true },
       });
       return evaluateDuplicateEmployees(people);

@@ -78,9 +78,12 @@ describe("evaluateCloseBlockers", () => {
     expect(out[0].severity).toBe("CRITICAL");
     expect(out[0].title).toContain("4 items");
   });
-  it("is a warning with time left", () => {
-    const out = evaluateCloseBlockers({ ...p, periodEnd: new Date("2026-11-10T00:00:00Z") }, now);
+  it("is a warning when close is near but not here", () => {
+    const out = evaluateCloseBlockers({ ...p, periodEnd: new Date("2026-11-05T00:00:00Z") }, now);
     expect(out[0].severity).toBe("WARN");
+  });
+  it("stays quiet while the period is far from closing", () => {
+    expect(evaluateCloseBlockers({ ...p, periodEnd: new Date("2026-11-10T00:00:00Z") }, now)).toHaveLength(0);
   });
   it("returns nothing when closed or clean", () => {
     expect(evaluateCloseBlockers({ ...p, closedAt: now }, now)).toHaveLength(0);
