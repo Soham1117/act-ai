@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { adminWatchData } from "@/server/queries/watch";
 import { WatchWorkspace } from "./workspace";
@@ -12,6 +13,11 @@ export default async function WatchPage() {
       <PageHeader
         title="Watch"
         description="Flags raised by automatic checks. Nothing here changes hours, pay or employee records."
+        actions={
+          <Link href="/admin/watch/rules" className="text-sm underline underline-offset-4">
+            Rules and settings
+          </Link>
+        }
       />
       <WatchWorkspace data={data} />
     </>

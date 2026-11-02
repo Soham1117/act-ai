@@ -308,8 +308,8 @@ Legend: [x] done, [~] partly, [ ] not started.
 - [x] HR, onboarding, benefits, data quality, security and system rules (batch C and D)
 - [x] Eight weekly reports on the Reports tab (batch E)
 - [x] 70+ rules and reports live on prod; see the coverage map below for what each one covers
-- [ ] Rules list in the app: switch rules on or off and edit thresholds (today: database row in WatchRuleConfig)
-- [ ] Policy settings screen (recipients, holidays, thresholds)
+- [x] Rules and settings page (/admin/watch/rules): switch each check on or off, edit every threshold and the digest recipients, audited
+- [ ] Editable holiday list (holidays are built in for now)
 - [ ] Turn on `time.missing-clock-in` once everyone punches in Persona; turn on `time.lunch` once kiosks log lunch
 - [ ] Watch what the manager dismisses for 2 weeks, then tune noisy rules (the flag quality report helps)
 

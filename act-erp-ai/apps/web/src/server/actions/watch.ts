@@ -6,7 +6,9 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { failFromUnknown, fail, ok, type ActionResult } from "@/lib/action-result";
 import { applyAction, FINDING_ACTIONS } from "@/lib/watch/status";
-import { runWatch } from "@/server/watch/runner";
+import { parsePolicyForm } from "@/lib/watch/catalog";
+import { ALL_JOBS } from "@/server/watch/jobs";
+import { loadPolicy, runWatch } from "@/server/watch/runner";
 
 const schema = z.object({
   id: z.string().min(1),
@@ -45,6 +47,66 @@ export async function actOnFinding(input: z.input<typeof schema>): Promise<Actio
       }),
     ]);
     revalidatePath("/admin/watch");
+    return ok();
+  } catch (error) {
+    return failFromUnknown(error);
+  }
+}
+
+/** Switch one rule on or off. A rule that is off clears its own flags on the next check. */
+export async function setRuleEnabled(input: { ruleId: string; enabled: boolean }): Promise<ActionResult> {
+  const actor = await requireAdmin();
+  try {
+    const data = z.object({ ruleId: z.string().min(1).max(80), enabled: z.boolean() }).parse(input);
+    if (data.ruleId === "policy" || !ALL_JOBS.some((j) => j.id === data.ruleId)) return fail("Unknown rule.");
+    const before = await db.watchRuleConfig.findUnique({ where: { ruleId: data.ruleId } });
+    await db.$transaction([
+      db.watchRuleConfig.upsert({
+        where: { ruleId: data.ruleId },
+        create: { ruleId: data.ruleId, enabled: data.enabled, updatedById: actor.id },
+        update: { enabled: data.enabled, updatedById: actor.id },
+      }),
+      db.auditLog.create({
+        data: {
+          actorId: actor.id,
+          actorEmail: actor.email,
+          action: "watch.rule.toggle",
+          resource: `WatchRuleConfig:${data.ruleId}`,
+          diff: { from: before?.enabled ?? null, to: data.enabled },
+        },
+      }),
+    ]);
+    revalidatePath("/admin/watch/rules");
+    return ok();
+  } catch (error) {
+    return failFromUnknown(error);
+  }
+}
+
+/** Save the editable company policy (thresholds, digest recipients). Audited with old and new values. */
+export async function saveWatchPolicy(input: { numbers: Record<string, unknown>; recipients: string }): Promise<ActionResult> {
+  const actor = await requireAdmin();
+  try {
+    const parsed = parsePolicyForm(z.object({ numbers: z.record(z.string(), z.unknown()), recipients: z.string().max(2000) }).parse(input));
+    if (!parsed.ok) return fail(parsed.error);
+    const before = await loadPolicy();
+    await db.$transaction([
+      db.watchRuleConfig.upsert({
+        where: { ruleId: "policy" },
+        create: { ruleId: "policy", enabled: true, params: parsed.policy, updatedById: actor.id },
+        update: { params: parsed.policy, updatedById: actor.id },
+      }),
+      db.auditLog.create({
+        data: {
+          actorId: actor.id,
+          actorEmail: actor.email,
+          action: "watch.policy.save",
+          resource: "WatchRuleConfig:policy",
+          diff: { before, after: parsed.policy },
+        },
+      }),
+    ]);
+    revalidatePath("/admin/watch/rules");
     return ok();
   } catch (error) {
     return failFromUnknown(error);
