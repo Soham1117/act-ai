@@ -55,6 +55,8 @@ TAG="act-erp-lite-web:$SHA-$STAMP"
 TOOLS_TAG="act-erp-lite-tools:$SHA-$STAMP"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
+# Docker on Windows needs Windows-style paths.
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 
 # 1. Same code you tested = same code you ship.
 DIRTY_FILES=$(git status --porcelain --untracked-files=no -- act-erp-ai/apps/web | head -20 || true)
@@ -73,23 +75,24 @@ fi
 mkdir -p "$WORK/src"
 git archive HEAD act-erp-ai | tar -x -C "$WORK/src"
 CTX="$WORK/src/act-erp-ai/apps/web"
+DOCKERFILE="$WORK/src/act-erp-ai/infra/Dockerfile.web"
 ssh_ "cat $REMOTE_ROOT/apps/web/.env.prod" > "$WORK/env_prod"
 chmod 600 "$WORK/env_prod"
 lap "exported $SHA"
 
 # 3. Build here (BuildKit cache makes repeat builds fast).
 export DOCKER_BUILDKIT=1
-docker build -f "$WORK/src/act-erp-ai/infra/Dockerfile.web" \
-  --secret "id=env_prod,src=$WORK/env_prod" \
+docker build -f "$(winpath "$WORK/src/act-erp-ai/infra/Dockerfile.web")" \
+  --secret "id=env_prod,src=$(winpath "$WORK/env_prod")" \
   --build-arg "SKIP_TYPECHECK=$SKIP_TYPECHECK" \
-  -t "$TAG" "$CTX"
+  -t "$TAG" "$(winpath "$CTX")"
 lap "web image built"
 SHIP=("$TAG")
 if [ "$SCHEMA" = 1 ]; then
-  docker build -f "$WORK/src/act-erp-ai/infra/Dockerfile.web" --target build \
-    --secret "id=env_prod,src=$WORK/env_prod" \
+  docker build -f "$(winpath "$WORK/src/act-erp-ai/infra/Dockerfile.web")" --target build \
+    --secret "id=env_prod,src=$(winpath "$WORK/env_prod")" \
     --build-arg "SKIP_TYPECHECK=$SKIP_TYPECHECK" \
-    -t "$TOOLS_TAG" "$CTX"
+    -t "$TOOLS_TAG" "$(winpath "$CTX")"
   SHIP+=("$TOOLS_TAG")
   lap "tools image built"
 fi
