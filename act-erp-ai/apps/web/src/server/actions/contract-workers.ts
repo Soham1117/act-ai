@@ -739,24 +739,37 @@ const editSchema = z.object({
   id: z.string().min(1),
   /** America/Chicago local time, `YYYY-MM-DDTHH:mm` (datetime-local value). */
   clockIn: z.string().min(1, "Enter a date and time."),
-  clockOut: z.string().min(1, "Enter a date and time."),
+  /**
+   * Required for closed entries. For open shifts: leave empty to keep the
+   * shift open (clock-in only), or set a time to close it.
+   */
+  clockOut: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : null)),
   reason: reasonSchema,
 });
 
 /**
- * Correct the clock-in / clock-out of a CLOSED entry. Existing breaks are
- * kept (and re-clamped to the new window). Approval is reset to PENDING.
+ * Correct times on an open or closed contract entry. Existing breaks are kept
+ * (and re-clamped when the shift is closed / resized). Closing an open shift,
+ * or changing payable time on a closed one, resets approval to PENDING.
  */
 export async function adminEditContractTimeEntry(
   input: z.infer<typeof editSchema>,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; closed: boolean }>> {
   const admin = await requireAdmin();
   try {
     const data = editSchema.parse(input);
     const ci = parseLocal(data.clockIn, "Clock-in");
     if ("error" in ci) return fail(ci.error);
-    const co = parseLocal(data.clockOut, "Clock-out");
-    if ("error" in co) return fail(co.error);
+    let clockOut: Date | null = null;
+    if (data.clockOut) {
+      const co = parseLocal(data.clockOut, "Clock-out");
+      if ("error" in co) return fail(co.error);
+      clockOut = co.date;
+    }
 
     const found = await db.contractTimeEntry.findUnique({
       where: { id: data.id },
@@ -770,13 +783,18 @@ export async function adminEditContractTimeEntry(
         include: { breaks: true },
       });
       if (!entry) return { error: "That time entry no longer exists. Refresh the page." };
-      if (isOpen(entry) || !entry.clockOut) {
-        return { error: "This shift is still open. Use Clock out to close it first." };
+      const open = isOpen(entry) || !entry.clockOut;
+      if (!open && !clockOut) {
+        return { error: "Enter a clock-out time for this closed entry." };
       }
+
       const breaks = entry.breaks.map((b) => ({ startTime: b.startTime, endTime: b.endTime }));
-      const timeErr = validateEntryTimes({ clockIn: ci.date, clockOut: co.date, breaks });
+      const timeErr = validateEntryTimes({ clockIn: ci.date, clockOut, breaks });
       if (timeErr) return { error: timeErr };
-      const overlap = await findOverlap(tx, entry.contractWorkerId, entry.id, ci.date, co.date);
+
+      // Open shifts with no clock-out still occupy time through "now" for overlap.
+      const overlapEnd = clockOut ?? new Date();
+      const overlap = await findOverlap(tx, entry.contractWorkerId, entry.id, ci.date, overlapEnd);
       if (overlap) {
         return {
           error: `That time overlaps another entry (${formatDateOnly(businessDateOnly(overlap.clockIn))} ${formatBusinessTime(overlap.clockIn)} to ${overlap.clockOut ? formatBusinessTime(overlap.clockOut) : "still open"}). Adjust the times or fix the other entry first.`,
@@ -784,18 +802,47 @@ export async function adminEditContractTimeEntry(
       }
 
       const before = snapshot(entry);
-      for (const b of entry.breaks) {
+
+      if (open && !clockOut) {
+        const updated = await tx.contractTimeEntry.update({
+          where: { id: entry.id },
+          data: {
+            clockIn: ci.date,
+            date: businessDateOnly(ci.date),
+            lastEditedById: admin.id,
+            editReason: data.reason,
+            autoClosed: false,
+          },
+          include: { breaks: true },
+        });
+        return { entry, before, after: snapshot(updated), closed: false };
+      }
+
+      // Closing an open shift, or editing a closed one. Open breaks get an end.
+      const nextBreaks = entry.breaks.map((b) => ({
+        id: b.id,
+        startTime: b.startTime,
+        endTime: b.endTime ?? clockOut!,
+      }));
+      for (const b of nextBreaks) {
         await tx.contractTimeBreak.update({
           where: { id: b.id },
-          data: { durationMin: breakMinutes(b, ci.date, co.date) },
+          data: {
+            endTime: b.endTime,
+            durationMin: breakMinutes(b, ci.date, clockOut!),
+          },
         });
       }
-      const totals = computeEntryTotals({ clockIn: ci.date, clockOut: co.date, breaks });
+      const totals = computeEntryTotals({
+        clockIn: ci.date,
+        clockOut: clockOut!,
+        breaks: nextBreaks,
+      });
       const updated = await tx.contractTimeEntry.update({
         where: { id: entry.id },
         data: {
           clockIn: ci.date,
-          clockOut: co.date,
+          clockOut: clockOut!,
           date: businessDateOnly(ci.date),
           totalBreakMin: totals.totalBreakMin,
           totalWorkMin: totals.totalWorkMin,
@@ -811,7 +858,7 @@ export async function adminEditContractTimeEntry(
         },
         include: { breaks: true },
       });
-      return { entry, before, after: snapshot(updated) };
+      return { entry, before, after: snapshot(updated), closed: open };
     });
     if ("error" in result) return fail(result.error!);
 
@@ -821,12 +868,13 @@ export async function adminEditContractTimeEntry(
       diff: {
         contractWorkerId: result.entry.contractWorkerId,
         reason: data.reason,
+        closedOpenShift: result.closed,
         before: result.before,
         after: result.after,
       },
     });
     revalidateAll();
-    return ok({ id: result.entry.id });
+    return ok({ id: result.entry.id, closed: result.closed });
   } catch (err) {
     return failFromUnknown(err);
   }

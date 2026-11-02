@@ -176,7 +176,10 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
 
   function saveEdit() {
     if (!editRow) return;
-    if (!clockIn || !clockOut) return toast.error("Enter both clock-in and clock-out.");
+    if (!clockIn) return toast.error("Enter a clock-in time.");
+    if (!editRow.isOpen && !clockOut) {
+      return toast.error("Enter a clock-out time for this closed entry.");
+    }
     if (reason.trim().length < 3)
       return toast.error("Enter a reason (at least 3 characters).");
     startTransition(async () => {
@@ -184,12 +187,18 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
         adminEditContractTimeEntry({
           id: editRow.id,
           clockIn,
-          clockOut,
+          clockOut: clockOut || undefined,
           reason: reason.trim(),
         }),
       );
       if (!toastAction(res)) return;
-      toast.success("Times updated. The entry is pending approval again.");
+      if (editRow.isOpen && !clockOut) {
+        toast.success("Clock-in updated. The shift is still open.");
+      } else if (editRow.isOpen && clockOut) {
+        toast.success("Shift closed with the new times. Pending approval.");
+      } else {
+        toast.success("Times updated. The entry is pending approval again.");
+      }
       setEditRow(null);
       router.refresh();
     });
@@ -311,12 +320,10 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                         </Button>
                       </>
                     )}
-                    {!r.isOpen && r.clockOut && (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEdit(r)}>
-                        <PenLine className="mr-1 h-3.5 w-3.5" />
-                        Edit times
-                      </Button>
-                    )}
+                    <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEdit(r)}>
+                      <PenLine className="mr-1 h-3.5 w-3.5" />
+                      Edit times
+                    </Button>
                   </div>
                 </div>
               </DataListCard>
@@ -458,12 +465,10 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                             </Button>
                           </>
                         )}
-                        {!r.isOpen && r.clockOut && (
-                          <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEdit(r)}>
-                            <PenLine className="mr-1 h-3.5 w-3.5" />
-                            Edit times
-                          </Button>
-                        )}
+                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEdit(r)}>
+                          <PenLine className="mr-1 h-3.5 w-3.5" />
+                          Edit times
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -524,8 +529,9 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
           <InlinePanelHeader>
             <InlinePanelTitle>Edit times for {editRow?.workerName}</InlinePanelTitle>
             <InlinePanelDescription>
-              Times are Central. Breaks are kept. After saving, the entry is pending
-              approval again.
+              {editRow?.isOpen
+                ? "Times are Central. Leave clock-out empty to keep the shift open, or set one to close it (pending approval). Breaks are kept."
+                : "Times are Central. Breaks are kept. After saving, the entry is pending approval again."}
             </InlinePanelDescription>
           </InlinePanelHeader>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -539,7 +545,9 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cw-edit-out">Clock out</Label>
+              <Label htmlFor="cw-edit-out">
+                Clock out{editRow?.isOpen ? " (optional)" : ""}
+              </Label>
               <Input
                 id="cw-edit-out"
                 type="datetime-local"
