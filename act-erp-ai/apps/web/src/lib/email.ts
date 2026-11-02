@@ -95,3 +95,11 @@ export async function sendLoginCode(to: string, code: string): Promise<void> {
   }
   return sendWithSes(to, subject, text);
 }
+
+/** Plain-text operational email (digests, alerts). Uses whichever provider the server is set up with. */
+export async function sendPlainEmail(to: string, subject: string, text: string): Promise<void> {
+  if (env.EMAIL_PROVIDER === "microsoft-graph") {
+    return sendWithMicrosoftGraph(to, subject, text);
+  }
+  return sendWithSes(to, subject, text);
+}

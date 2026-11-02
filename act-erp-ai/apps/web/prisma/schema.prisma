@@ -2020,3 +2020,12 @@ model WatchRuleConfig {
   updatedById String?  @db.Uuid
   updatedAt   DateTime @updatedAt
 }
+
+/// One row per business day the daily digest was sent. The unique date stops a second send.
+model WatchDigest {
+  id             String   @id @default(cuid())
+  forDate        DateTime @unique @db.Date
+  sentAt         DateTime @default(now())
+  recipientCount Int      @default(0)
+  summary        Json?
+}

@@ -279,7 +279,7 @@ Legend: [x] done, [~] partly, [ ] not started.
 - [x] Recipients: Soham and Deepak
 - [x] Policy numbers (40 h weekly OT, 30 min lunch, 2 paid unlogged 15 min breaks)
 - [x] Holidays: all major US holidays (not yet seeded)
-- [ ] Verify deepak@americancompletiontools.com in SES (or request production access)
+- [x] Deepak's email: not needed, prod sends through Microsoft Graph
 
 ### Phase 1: runner and starter rules
 - [x] Tables: WatchFinding, WatchRun, WatchRuleConfig (live on prod)
@@ -299,9 +299,10 @@ Legend: [x] done, [~] partly, [ ] not started.
 - [ ] Rules tab: on/off per rule
 
 ### Phase 3: digest
-- [ ] Send the daily digest as in-app notification to Soham and Deepak
-- [ ] Email the digest (needs SES recipient verification)
-- [ ] Weekly digest
+- [x] Daily digest: in-app notification plus email to the configured recipients, once per business day at the set hour (Central), via the same 15-minute cron
+- [x] Email goes through Microsoft Graph (noreply@), so recipients do not need SES verification (earlier note about SES sandbox did not apply to prod)
+- [x] "Email me the digest" button on the Watch page for a private test
+- [x] Weekly summary report on the Reports tab (a separate weekly email is not built)
 
 ### Phase 4 and 5: the rest of the L1 and L2 rules
 - [x] Time, attendance and contract rules (batch A), payroll, leave and reimbursement rules (batch B)

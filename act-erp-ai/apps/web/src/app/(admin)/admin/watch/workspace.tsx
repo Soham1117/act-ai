@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { allowedActions, type FindingAction } from "@/lib/watch/status";
 import { runAction, toastAction } from "@/lib/toast-action";
-import { actOnFinding, runWatchNow } from "@/server/actions/watch";
+import { actOnFinding, runWatchNow, sendTestDigest } from "@/server/actions/watch";
 import type { adminWatchData } from "@/server/queries/watch";
 
 type Data = Awaited<ReturnType<typeof adminWatchData>>;
@@ -85,6 +85,14 @@ export function WatchWorkspace({ data }: { data: Data }) {
     });
   }
 
+  function emailMe() {
+    start(async () => {
+      const res = await runAction(() => sendTestDigest());
+      if (!toastAction(res)) return;
+      toast.success(`Test digest sent to ${res.to}.`);
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -105,6 +113,9 @@ export function WatchWorkspace({ data }: { data: Data }) {
             {data.lastRunAt ? `Last check ${new Date(data.lastRunAt).toLocaleString()}` : "Not run yet"}
             {data.lastRunErrors > 0 ? ` (${data.lastRunErrors} rule errors)` : ""}
           </span>
+          <Button size="sm" variant="outline" onClick={emailMe} disabled={pending}>
+            Email me the digest
+          </Button>
           <Button size="sm" variant="outline" onClick={runNow} disabled={pending}>
             Check now
           </Button>

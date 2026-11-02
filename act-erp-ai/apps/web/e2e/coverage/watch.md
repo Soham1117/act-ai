@@ -7,6 +7,7 @@ Pure logic is unit tested in `src/lib/watch/*.test.ts`. Browser coverage is plan
 | `actOnFinding` | Unit tests for allowed transitions (`status.test.ts`); admin guard; audited. Browser coverage planned |
 | `setRuleEnabled` | Admin guard; only known rule ids; audited. Browser coverage planned |
 | `saveWatchPolicy` | Admin guard; input validated by `parsePolicyForm` (unit tests); audited with old and new values. Browser coverage planned |
+| `sendTestDigest` | Admin guard; emails only the signed-in admin; audited. Browser coverage planned |
 | `runWatchNow` | Admin guard; shadow run only, audited. Browser coverage planned |
 
 | Route | Check |

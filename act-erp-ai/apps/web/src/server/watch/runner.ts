@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { mergePolicy, type FindingDraft, type WatchPolicy } from "@/lib/watch/types";
+import { sendDailyDigestIfDue } from "./digest";
 import { ALL_JOBS } from "./jobs";
 
 const POLICY_ID = "policy";
@@ -60,6 +61,15 @@ export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: 
       autoResolved += counts.autoResolved;
     } catch (err) {
       errors.push({ ruleId: job.id, message: (err instanceof Error ? err.message : String(err)).slice(0, 500) });
+    }
+  }
+
+  if (opts.trigger === "SCHEDULE") {
+    try {
+      const digest = await sendDailyDigestIfDue(now, policy);
+      for (const e of digest.errors) errors.push({ ruleId: "digest", message: e });
+    } catch (err) {
+      errors.push({ ruleId: "digest", message: (err instanceof Error ? err.message : String(err)).slice(0, 500) });
     }
   }
 

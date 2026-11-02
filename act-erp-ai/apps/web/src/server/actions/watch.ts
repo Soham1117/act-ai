@@ -8,6 +8,8 @@ import { failFromUnknown, fail, ok, type ActionResult } from "@/lib/action-resul
 import { applyAction, FINDING_ACTIONS } from "@/lib/watch/status";
 import { parsePolicyForm } from "@/lib/watch/catalog";
 import { ALL_JOBS } from "@/server/watch/jobs";
+import { sendPlainEmail } from "@/lib/email";
+import { composeDigest } from "@/server/watch/digest";
 import { loadPolicy, runWatch } from "@/server/watch/runner";
 
 const schema = z.object({
@@ -130,6 +132,22 @@ export async function runWatchNow(): Promise<ActionResult<{ created: number; upd
     });
     revalidatePath("/admin/watch");
     return ok({ created: result.created, updated: result.updated, autoResolved: result.autoResolved });
+  } catch (error) {
+    return failFromUnknown(error);
+  }
+}
+
+/** Email today's digest to the signed-in admin only, so wording and delivery can be checked without bothering anyone. */
+export async function sendTestDigest(): Promise<ActionResult<{ to: string }>> {
+  const actor = await requireAdmin();
+  try {
+    if (!actor.email) return fail("Your account has no email address.");
+    const digest = await composeDigest(new Date());
+    await sendPlainEmail(actor.email, `Persona Watch (test): ${digest.subject}`, digest.text);
+    await db.auditLog.create({
+      data: { actorId: actor.id, actorEmail: actor.email, action: "watch.digest.test", resource: "WatchDigest:test", diff: { to: actor.email } },
+    });
+    return ok({ to: actor.email });
   } catch (error) {
     return failFromUnknown(error);
   }
