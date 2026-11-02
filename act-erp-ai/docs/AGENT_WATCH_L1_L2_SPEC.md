@@ -269,3 +269,52 @@ Rules read these at run time, never from code constants. Changing a setting take
 1. Verify deepak@americancompletiontools.com in SES (sends him a confirmation link), or request SES production access.
 2. How do we know a temp password is unchanged? Does the app record it? (otherwise skip `hr.temp-password`)
 3. Backup status source for `sys.backup-stale`: the prod cron writes to `/home/ubuntu/act-backups/erp-backup.log`; decide in phase 5.
+
+## Progress (updated Nov 2, 2026)
+
+Legend: [x] done, [~] partly, [ ] not started.
+
+### Phase 0: decisions
+- [x] Scheduler: host cron on Lightsail (every 15 min), token-protected route
+- [x] Recipients: Soham and Deepak
+- [x] Policy numbers (40 h weekly OT, 30 min lunch, 2 paid unlogged 15 min breaks)
+- [x] Holidays: all major US holidays (not yet seeded)
+- [ ] Verify deepak@americancompletiontools.com in SES (or request production access)
+
+### Phase 1: runner and starter rules
+- [x] Tables: WatchFinding, WatchRun, WatchRuleConfig (live on prod)
+- [x] Runner: store, update, auto-resolve, dismissed stays dismissed, overlap guard
+- [x] Rules: missing clock-out, close blockers, hours variance, duplicate employee
+- [x] Digest builder (template only, not sent yet)
+- [x] Cron every 15 min on prod, shadow mode
+- [ ] Back-test the rules on 8 weeks of data and tune thresholds
+- [ ] Hours variance is noisy (32 flags on first run): raise thresholds
+- [ ] Review the "Jose Gonzalez / Jose Gonzalez" duplicate flag
+
+### Phase 2: findings page
+- [x] /admin/watch: tabs, severity filter, search, details, acknowledge, snooze, dismiss, reopen
+- [x] "Check now" button, audit log on every action
+- [ ] Browser test (upload e2e spec)
+- [ ] Rules tab: on/off per rule
+
+### Phase 3: digest
+- [ ] Send the daily digest as in-app notification to Soham and Deepak
+- [ ] Email the digest (needs SES recipient verification)
+- [ ] Weekly digest
+
+### Phase 4: remaining time, contract and payroll rules
+- [ ] time.break-missing (lunch only), time.impossible-shift, time.duplicate-punch
+- [ ] time.overtime-pace, time.unapproved-aging, time.schedule-variance, time.holiday-work
+- [ ] contract.* rules
+- [ ] payroll.missing-rate, payroll.terminated-with-hours, payroll.total-spike, payroll.period-gap
+
+### Phase 5: HR, data, security, system rules
+- [ ] hr.* rules (onboarding stuck, I-9 late, handbook, eligibility upcoming, stale logins)
+- [ ] data.* rules (missing fields, placeholders, import failures, unknown job code)
+- [ ] sec.* and sys.* rules
+- [ ] Policy settings screen (editable thresholds, recipients, holidays)
+
+### Platform
+- [x] One deploy script (infra/scripts/deploy.sh): local build, registry layer diff, rollback
+- [x] 4 GB swap on the server
+- [ ] Hours-export schedules are never triggered (no caller): wire into the same cron or retire

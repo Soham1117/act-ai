@@ -31,6 +31,7 @@ import {
   FileText,
   HardHat,
   HeartPulse,
+  Eye,
   Home,
   LayoutGrid,
   Library,
@@ -74,6 +75,7 @@ const NAV: Array<{
       { href: "/admin/reimbursements", label: "Reimbursements", icon: Receipt },
       { href: "/admin/payroll", label: "Payroll", icon: Banknote },
       { href: "/admin/benefits", label: "Benefits", icon: HeartPulse },
+      { href: "/admin/watch", label: "Watch", icon: Eye },
     ],
   },
   {
