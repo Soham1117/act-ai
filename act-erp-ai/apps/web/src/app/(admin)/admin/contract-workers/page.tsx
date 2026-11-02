@@ -366,7 +366,7 @@ export default async function ContractWorkersPage({
         </TabsContent>
 
         <TabsContent value="hours" className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-start gap-2">
             <AddContractEntryButton
               workers={allWorkers.map((w) => ({
                 id: w.id,
@@ -379,7 +379,7 @@ export default async function ContractWorkersPage({
               }))}
               jobCodes={jobCodes}
             />
-            <Button asChild size="sm" variant="secondary">
+            <Button asChild size="sm" variant="secondary" className="min-h-11 md:min-h-9">
               <Link href="/admin/contract-workers/mass">Mass hours</Link>
             </Button>
           </div>

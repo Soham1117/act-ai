@@ -64,11 +64,6 @@ export default async function ContractWorkerDetailPage({
         }
         actions={
           <>
-            <AddContractEntryButton
-              workers={[entryWorker]}
-              jobCodes={jobCodes}
-              fixedWorkerId={worker.id}
-            />
             {live?.liveStatus === "ACTIVE" && <Badge variant="success">On site</Badge>}
             {live?.liveStatus === "ON_BREAK" && <Badge variant="warning">On break</Badge>}
             <Badge variant={worker.status === "ACTIVE" ? "success" : "secondary"}>
@@ -82,6 +77,13 @@ export default async function ContractWorkerDetailPage({
           </>
         }
       />
+      <div className="mb-4">
+        <AddContractEntryButton
+          workers={[entryWorker]}
+          jobCodes={jobCodes}
+          fixedWorkerId={worker.id}
+        />
+      </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>

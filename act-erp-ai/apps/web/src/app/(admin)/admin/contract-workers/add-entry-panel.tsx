@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -9,21 +9,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { SimpleSelect } from "@/components/simple-select";
 import {
-  InlinePanel,
-  InlinePanelContent,
-  InlinePanelDescription,
-  InlinePanelFooter,
-  InlinePanelHeader,
-  InlinePanelTitle,
-} from "@/components/inline-panel";
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { SimpleSelect } from "@/components/simple-select";
 import {
   proposeContractAssignmentOffers,
   type ContractAssignmentOffers,
 } from "@/lib/contract-workers";
 import { parseDateOnly } from "@/lib/time-rules";
 import { runAction, toastAction } from "@/lib/toast-action";
+import { cn } from "@/lib/utils";
 import { adminCreateManualContractTimeEntry } from "@/server/actions/contract-workers";
 
 export type ContractEntryWorkerOption = {
@@ -54,24 +52,30 @@ function buildOffers(
   return out;
 }
 
+/** In-page collapsible — same pattern as employee “Add manual entry”. Never a side drawer. */
 export function AddContractEntryButton({
   workers,
   jobCodes,
   fixedWorkerId,
   label = "Add entry",
+  className,
 }: {
   workers: ContractEntryWorkerOption[];
   jobCodes: JobCodeOption[];
   fixedWorkerId?: string;
   label?: string;
+  className?: string;
 }) {
   const router = useRouter();
+  const formId = useId();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [workerId, setWorkerId] = useState(fixedWorkerId ?? workers[0]?.id ?? "");
   const [clockIn, setClockIn] = useState("");
   const [clockOut, setClockOut] = useState("");
-  const [jobCode, setJobCode] = useState("");
+  const [jobCode, setJobCode] = useState(
+    () => workers.find((w) => w.id === (fixedWorkerId ?? workers[0]?.id))?.jobCode ?? "",
+  );
   const [breakMin, setBreakMin] = useState(0);
   const [notes, setNotes] = useState("");
   const [reason, setReason] = useState("");
@@ -109,6 +113,10 @@ export function AddContractEntryButton({
     setReactivate(proposal.defaults.reactivate);
   }, [offerKey, proposal.defaults.extendEnd, proposal.defaults.reactivate, proposal.defaults.shiftStart]);
 
+  function closeForm() {
+    setOpen(false);
+  }
+
   function reset() {
     setClockIn("");
     setClockOut("");
@@ -119,7 +127,8 @@ export function AddContractEntryButton({
     setApprove(false);
   }
 
-  function submit() {
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
     if (!worker) {
       toast.error("Choose a contract worker.");
       return;
@@ -151,51 +160,58 @@ export function AddContractEntryButton({
       toast.success(
         approve ? "Entry added and approved." : "Entry added. It is pending approval.",
       );
-      setOpen(false);
       reset();
+      closeForm();
       router.refresh();
     });
   }
 
+  const hasHelper =
+    !!proposal.offers.shiftStartTo ||
+    !!proposal.offers.extendEndTo ||
+    !!proposal.offers.reactivate;
+
   return (
-    <>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() => {
+    <Collapsible
+      className={cn("min-w-0 space-y-3", open && "w-full basis-full", className)}
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
           const id = fixedWorkerId ?? workers[0]?.id ?? "";
           setWorkerId(id);
           setJobCode(workers.find((w) => w.id === id)?.jobCode ?? "");
-          setOpen(true);
-        }}
-      >
-        <Plus className="mr-1.5 h-3.5 w-3.5" />
-        {label}
-      </Button>
-      <InlinePanel
-        disabled={pending}
-        open={open}
-        onOpenChange={(v) => {
-          if (!pending) setOpen(v);
-        }}
-      >
-        <InlinePanelContent
-          className="my-2"
-          panelSlot={fixedWorkerId ? `cw-add-${fixedWorkerId}` : "cw-add-hours"}
+        }
+      }}
+    >
+      <CollapsibleTrigger asChild disabled={pending}>
+        <Button type="button" size="sm" variant="outline" className="min-h-11 w-full sm:w-auto md:min-h-9">
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          {label}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent asChild>
+        <section
+          aria-labelledby={`${formId}-heading`}
+          className="max-w-3xl space-y-4 rounded-lg border bg-card p-4 sm:p-6"
         >
-          <InlinePanelHeader>
-            <InlinePanelTitle>Add contract hours</InlinePanelTitle>
-            <InlinePanelDescription>
+          <div className="space-y-1">
+            <h2 id={`${formId}-heading`} className="text-lg font-semibold tracking-tight">
+              Add contract hours
+            </h2>
+            <p className="text-sm text-muted-foreground">
               Closed shift for history or a missed punch. Times are America/Chicago.
-            </InlinePanelDescription>
-          </InlinePanelHeader>
-          <div className="space-y-3 px-1 py-2">
+            </p>
+          </div>
+
+          <form onSubmit={submit} className="space-y-4">
             {!fixedWorkerId && (
               <div className="space-y-1.5">
-                <Label className="text-xs">Worker</Label>
+                <Label htmlFor={`${formId}-worker`} className="text-xs">
+                  Worker
+                </Label>
                 <SimpleSelect
+                  id={`${formId}-worker`}
                   value={workerId}
                   onValueChange={(v) => {
                     setWorkerId(v);
@@ -209,128 +225,162 @@ export function AddContractEntryButton({
                 />
               </div>
             )}
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs">Clock in</Label>
+                <Label htmlFor={`${formId}-in`} className="text-xs">
+                  Clock in
+                </Label>
                 <Input
+                  id={`${formId}-in`}
                   type="datetime-local"
                   className="min-h-11 md:min-h-9"
                   value={clockIn}
                   onChange={(e) => setClockIn(e.target.value)}
+                  required
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Clock out</Label>
+                <Label htmlFor={`${formId}-out`} className="text-xs">
+                  Clock out
+                </Label>
                 <Input
+                  id={`${formId}-out`}
                   type="datetime-local"
                   className="min-h-11 md:min-h-9"
                   value={clockOut}
                   onChange={(e) => setClockOut(e.target.value)}
+                  required
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Job code</Label>
-              <SimpleSelect
-                value={jobCode}
-                onValueChange={setJobCode}
-                options={[
-                  { value: "", label: "Worker / company default" },
-                  ...jobCodes.map((j) => ({
-                    value: j.code,
-                    label: `${j.code} — ${j.title}`,
-                  })),
-                ]}
-                placeholder="Job code"
-              />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+              <div className="space-y-1.5">
+                <Label htmlFor={`${formId}-job`} className="text-xs">
+                  Job code
+                </Label>
+                <SimpleSelect
+                  id={`${formId}-job`}
+                  value={jobCode}
+                  onValueChange={setJobCode}
+                  options={[
+                    { value: "", label: "Worker / company default" },
+                    ...jobCodes.map((j) => ({
+                      value: j.code,
+                      label: `${j.code} — ${j.title}`,
+                    })),
+                  ]}
+                  placeholder="Job code"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`${formId}-break`} className="text-xs">
+                  Break (min)
+                </Label>
+                <Input
+                  id={`${formId}-break`}
+                  type="number"
+                  min={0}
+                  max={240}
+                  className="min-h-11 md:min-h-9"
+                  value={breakMin}
+                  onChange={(e) => setBreakMin(Number(e.target.value) || 0)}
+                />
+              </div>
             </div>
+
             <div className="space-y-1.5">
-              <Label className="text-xs">Unpaid break (minutes)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={240}
-                className="min-h-11 md:min-h-9 w-28"
-                value={breakMin}
-                onChange={(e) => setBreakMin(Number(e.target.value) || 0)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Notes</Label>
+              <Label htmlFor={`${formId}-notes`} className="text-xs">
+                Notes
+              </Label>
               <Textarea
+                id={`${formId}-notes`}
                 rows={2}
                 value={notes}
                 maxLength={1000}
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
+
             <div className="space-y-1.5">
-              <Label className="text-xs">Reason (required)</Label>
+              <Label htmlFor={`${formId}-reason`} className="text-xs">
+                Reason (required)
+              </Label>
               <Input
+                id={`${formId}-reason`}
                 className="min-h-11 md:min-h-9"
                 value={reason}
                 maxLength={500}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g. Backfill from agency timesheet"
+                required
               />
             </div>
-            {(proposal.offers.shiftStartTo ||
-              proposal.offers.extendEndTo ||
-              proposal.offers.reactivate) && (
-              <div className="space-y-2 rounded-md border bg-muted/30 p-3">
-                <p className="text-xs font-medium">Assignment helper</p>
-                {proposal.offers.shiftStartTo && (
-                  <label className="flex items-start gap-2 text-sm">
-                    <Checkbox
-                      checked={shiftStart}
-                      onCheckedChange={(v) => setShiftStart(v === true)}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      Shift start date to {proposal.offers.shiftStartTo} so this day is covered.
-                    </span>
-                  </label>
-                )}
-                {proposal.offers.extendEndTo && (
-                  <label className="flex items-start gap-2 text-sm">
-                    <Checkbox
-                      checked={extendEnd}
-                      onCheckedChange={(v) => setExtendEnd(v === true)}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      Extend end date to {proposal.offers.extendEndTo} so this day is covered.
-                    </span>
-                  </label>
-                )}
-                {proposal.offers.reactivate && (
-                  <label className="flex items-start gap-2 text-sm">
-                    <Checkbox
-                      checked={reactivate}
-                      onCheckedChange={(v) => setReactivate(v === true)}
-                      className="mt-0.5"
-                    />
-                    <span>Reactivate this worker (puts them eligible to clock in again).</span>
-                  </label>
-                )}
+
+            {hasHelper && (
+              <div className="space-y-2.5 rounded-md border border-border/80 bg-muted/40 px-3 py-3">
+                <p className="text-xs font-medium text-foreground">Assignment helper</p>
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  This day is outside the current assignment. Choose what to update — nothing
+                  changes unless you leave it checked.
+                </p>
+                <div className="space-y-2">
+                  {proposal.offers.shiftStartTo && (
+                    <label className="flex items-start gap-2.5 text-sm">
+                      <Checkbox
+                        checked={shiftStart}
+                        onCheckedChange={(v) => setShiftStart(v === true)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Move start date to <span className="font-medium">{proposal.offers.shiftStartTo}</span>
+                      </span>
+                    </label>
+                  )}
+                  {proposal.offers.extendEndTo && (
+                    <label className="flex items-start gap-2.5 text-sm">
+                      <Checkbox
+                        checked={extendEnd}
+                        onCheckedChange={(v) => setExtendEnd(v === true)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Extend end date to <span className="font-medium">{proposal.offers.extendEndTo}</span>
+                      </span>
+                    </label>
+                  )}
+                  {proposal.offers.reactivate && (
+                    <label className="flex items-start gap-2.5 text-sm">
+                      <Checkbox
+                        checked={reactivate}
+                        onCheckedChange={(v) => setReactivate(v === true)}
+                        className="mt-0.5"
+                      />
+                      <span>Reactivate worker (can clock in again)</span>
+                    </label>
+                  )}
+                </div>
               </div>
             )}
+
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={approve} onCheckedChange={(v) => setApprove(v === true)} />
               Approve immediately
             </label>
-          </div>
-          <InlinePanelFooter>
-            <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" disabled={pending} onClick={submit}>
-              {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Add entry
-            </Button>
-          </InlinePanelFooter>
-        </InlinePanelContent>
-      </InlinePanel>
-    </>
+
+            <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end [&_button]:min-h-11 md:[&_button]:min-h-9">
+              <Button type="button" variant="outline" disabled={pending} onClick={closeForm}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={pending}>
+                {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Add entry
+              </Button>
+            </div>
+          </form>
+        </section>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
