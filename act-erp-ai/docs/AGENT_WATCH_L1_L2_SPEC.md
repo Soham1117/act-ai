@@ -303,54 +303,45 @@ Legend: [x] done, [~] partly, [ ] not started.
 - [ ] Email the digest (needs SES recipient verification)
 - [ ] Weekly digest
 
-### Phase 4: remaining time, contract and payroll rules
-- [ ] time.break-missing (lunch only), time.impossible-shift, time.duplicate-punch
-- [ ] time.overtime-pace, time.unapproved-aging, time.schedule-variance, time.holiday-work
-- [ ] contract.* rules
-- [ ] payroll.missing-rate, payroll.terminated-with-hours, payroll.total-spike, payroll.period-gap
-
-### Phase 5: HR, data, security, system rules
-- [ ] hr.* rules (onboarding stuck, I-9 late, handbook, eligibility upcoming, stale logins)
-- [ ] data.* rules (missing fields, placeholders, import failures, unknown job code)
-- [ ] sec.* and sys.* rules
-- [ ] Policy settings screen (editable thresholds, recipients, holidays)
+### Phase 4 and 5: the rest of the L1 and L2 rules
+- [x] Time, attendance and contract rules (batch A), payroll, leave and reimbursement rules (batch B)
+- [x] HR, onboarding, benefits, data quality, security and system rules (batch C and D)
+- [x] Eight weekly reports on the Reports tab (batch E)
+- [x] 70+ rules and reports live on prod; see the coverage map below for what each one covers
+- [ ] Rules list in the app: switch rules on or off and edit thresholds (today: database row in WatchRuleConfig)
+- [ ] Policy settings screen (recipients, holidays, thresholds)
+- [ ] Turn on `time.missing-clock-in` once everyone punches in Persona; turn on `time.lunch` once kiosks log lunch
+- [ ] Watch what the manager dismisses for 2 weeks, then tune noisy rules (the flag quality report helps)
 
 ### Platform
 - [x] One deploy script (infra/scripts/deploy.sh): local build, registry layer diff, rollback
 - [x] 4 GB swap on the server
 - [ ] Hours-export schedules are never triggered (no caller): wire into the same cron or retire
 
-## Coverage map: all 81 L1 and L2 ideas (Nov 2, 2026)
+## Coverage map: all 81 L1 and L2 ideas (status Nov 2, 2026)
 
-Correction: the first version of this spec covered about 43 of the 81 ideas. This map covers all 81. Numbers refer to `AI_AGENT_USE_CASES.md`. Note: employees DO have a `supervisorId` (earlier note saying no manager field was wrong), plus `terminationDate`, `compensationValue` and a work location.
+Numbers refer to `AI_AGENT_USE_CASES.md`. Employees do have a `supervisorId`, but 89 of 90 are blank, so the supervisor check is skipped.
+Rules switched off by default (noisy on today's data): `time.missing-clock-in` (55 scheduled, 11 punched on day one, because most people still clock at the old TCP clock) and `time.lunch` (kiosks do not log lunch).
 
-**Batch A: time, attendance, contract (flag rules)**
-- [x] 1 · [ ] 2, 3, 4 (lunch only), 5 (lunch only), 6, 7, 8, 9 (missing photo only), 11, 12, 13, 14
-- [ ] 21, 23, 24, 28
+**Live (rule or report running on prod)**
+- Time and attendance: 1, 2*, 3, 4*, 5*, 6, 7, 8, 9 (missing photo only), 11, 12, 13, 14   (* switched off for now)
+- Contract: 21, 23, 24, 28, 25, 29 (hours only)
+- Payroll: 31, 34 (hours based), 35 (hours total), 36, 37, 38, 39, 40, 43, 44, 48, 50
+- Leave and reimbursements: 55, 56, 58
+- HR: 74, 76, 77, 79, 80, 81, 83, 84, 85, 87, 89, 91, 92
+- Data and security: 93, 95, 99, 100, 102, 104, 105, 106, 107 (idle kiosks only), 108 (database size only)
+- Reports: 48, 52, 110, 113, 115, 116, 117
 
-**Batch B: payroll, approvals, leave, reimbursements**
-- [x] 31, 34 (hours-based), 
-- [ ] 32, 33 (per-entry rate change), 35 (hours total instead of pay), 36 (recomputed totals vs stored), 37 (zero/negative entries), 38 (duplicate paystub or overlapping entries), 39, 40, 43, 44, 50
-- [ ] 55 (concurrent leave by department), 56 (if a balance function exists), 58
-
-**Batch C: HR, onboarding, benefits, documents**
-- [ ] 76, 77, 78 (only if expiry is stored), 79, 80, 81, 83, 84, 85, 87 (uses mustChangePassword), 89, 91, 92, 74
-
-**Batch D: data quality, security, system**
-- [x] 93
-- [ ] 95, 99, 100, 102, 104, 105, 106, 107 (stale kiosk only), 108 (database size only)
-
-**Batch E: L2 reports and digest sections**
-- [ ] 25, 29 (hours only), 48, 50, 51 (builder done, sending open), 52, 110, 113, 115, 116, 117
-
-**Blocked, with the reason**
-- 10 buddy punching: needs image comparison (AI)
-- 9 blurry or mismatched photo: needs image analysis (AI); the missing-photo part is in Batch A
+**Not built, with the reason**
+- 10 buddy punching, 9 blurry or mismatched photo: need image analysis (AI)
 - 22 agency invoice mismatch: no invoice data in the system
+- 32, 33 missing pay rate and rate changes: payroll runs outside Persona, 80% of entries have no rate (only 28 of 78 hourly staff have a rate stored). Hours-based checks stand in for these
 - 41 SSN last four: stored encrypted; checking would mean decrypting, skipped for privacy
 - 42 deduction vs election: payroll deductions are not stored (paystubs are files)
+- 78 expiring work authorization: no expiry date is stored anywhere
 - 86, 103 admin and failed logins: login events are not recorded
-- 94, 96, 97 import and paystub mismatches: unmatched rows are not persisted anywhere yet (needs an import log table)
+- 94, 96, 97 import and paystub mismatches: unmatched rows are not saved anywhere (needs an import log table)
 - 62 delegation: needs an "away" status for admins
-- 109, 119 undo feedback and trust score: need L3/L4 actions to exist first
-- 111, 112 "ask the system" and plain-language explanations: language model (later, optional)
+- 109, 119 undo feedback and trust score: need L3/L4 actions first
+- 111, 112 "ask the system" and plain-language explanations: need a language model (later, optional)
+- 51 daily digest: the text builder exists; sending it (notification and email) is not built

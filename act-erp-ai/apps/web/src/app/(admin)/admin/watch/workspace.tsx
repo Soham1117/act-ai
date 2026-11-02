@@ -31,7 +31,10 @@ const STATUS_TABS = [
   { key: "ACTIVE", label: "Needs attention" },
   { key: "SNOOZED", label: "Snoozed" },
   { key: "DISMISSED", label: "Dismissed" },
+  { key: "REPORTS", label: "Reports" },
 ] as const;
+
+const isReport = (r: { ruleId: string }) => r.ruleId.startsWith("report.");
 
 function ago(iso: string): string {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -49,7 +52,9 @@ export function WatchWorkspace({ data }: { data: Data }) {
   const [note, setNote] = useState("");
 
   const inTab = (r: Row) =>
-    tab === "ACTIVE" ? r.status === "OPEN" || r.status === "ACKNOWLEDGED" : r.status === tab;
+    tab === "REPORTS"
+      ? isReport(r) && r.status !== "DISMISSED"
+      : !isReport(r) && (tab === "ACTIVE" ? r.status === "OPEN" || r.status === "ACKNOWLEDGED" : r.status === tab);
   const q = search.trim().toLowerCase();
   const visible = data.rows
     .filter(inTab)
@@ -57,7 +62,7 @@ export function WatchWorkspace({ data }: { data: Data }) {
     .filter((r) => !q || `${r.title} ${r.employeeName ?? ""} ${r.ruleId}`.toLowerCase().includes(q))
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.firstSeenAt.localeCompare(b.firstSeenAt));
 
-  const active = data.rows.filter((r) => r.status === "OPEN" || r.status === "ACKNOWLEDGED");
+  const active = data.rows.filter((r) => !isReport(r) && (r.status === "OPEN" || r.status === "ACKNOWLEDGED"));
   const count = (s: Row["severity"]) => active.filter((r) => r.severity === s).length;
 
   function act(row: Row, action: FindingAction) {
@@ -114,7 +119,7 @@ export function WatchWorkspace({ data }: { data: Data }) {
             variant={tab === t.key ? "default" : "outline"}
             onClick={() => setTab(t.key)}
           >
-            {t.label} ({data.rows.filter((r) => (t.key === "ACTIVE" ? r.status === "OPEN" || r.status === "ACKNOWLEDGED" : r.status === t.key)).length})
+            {t.label} ({data.rows.filter((r) => (t.key === "REPORTS" ? isReport(r) && r.status !== "DISMISSED" : !isReport(r) && (t.key === "ACTIVE" ? r.status === "OPEN" || r.status === "ACKNOWLEDGED" : r.status === t.key))).length})
           </Button>
         ))}
         <Input
@@ -162,7 +167,7 @@ export function WatchWorkspace({ data }: { data: Data }) {
                   {openId === r.id && (
                     <tr className="border-t bg-muted/20">
                       <td colSpan={5} className="space-y-3 px-4 py-3">
-                        <p>{r.detail}</p>
+                        <p className="whitespace-pre-line">{r.detail}</p>
                         {r.likelyCause && <p><span className="font-medium">Likely cause:</span> {r.likelyCause}</p>}
                         {r.suggestedFix && <p><span className="font-medium">Suggested fix:</span> {r.suggestedFix}</p>}
                         {r.handledNote && <p className="text-muted-foreground">Note: {r.handledNote}</p>}
@@ -172,7 +177,7 @@ export function WatchWorkspace({ data }: { data: Data }) {
                               <Link href={r.fixLink}>Open the fix page</Link>
                             </Button>
                           )}
-                          {allowedActions(r.status).map((a) => (
+                          {(isReport(r) ? [] : allowedActions(r.status)).map((a) => (
                             <Button key={a} size="sm" variant="outline" disabled={pending} onClick={() => act(r, a)}>
                               {ACTION_LABEL[a]}
                             </Button>

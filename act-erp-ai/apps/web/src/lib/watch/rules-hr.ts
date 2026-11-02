@@ -299,7 +299,8 @@ export function evaluateMissingFields(rows: FieldRow[]): FindingDraft[] {
   ];
   for (const [key, label, missing] of checks) {
     const names = rows.filter(missing).map((r) => r.name);
-    if (names.length === 0) continue;
+    // When almost everyone lacks a field it is simply not in use; listing everyone helps nobody.
+    if (names.length === 0 || names.length >= rows.length * 0.9) continue;
     out.push(
       summary({
         rule: "data.missing-fields",

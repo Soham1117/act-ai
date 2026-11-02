@@ -107,8 +107,12 @@ describe("data quality", () => {
       { name: "Ann", departmentId: null, workLocation: "HOUSTON", supervisorId: null },
       { name: "Bo", departmentId: "d", workLocation: null, supervisorId: null },
     ];
-    expect(evaluateMissingFields(rows).map((f) => f.fingerprint)).toEqual(["data.missing-fields:department", "data.missing-fields:location", "data.missing-fields:supervisor"]);
+    expect(evaluateMissingFields(rows).map((f) => f.fingerprint)).toEqual(["data.missing-fields:department", "data.missing-fields:location"]);
     expect(evaluateMissingFields([{ name: "A", departmentId: "d", workLocation: "x", supervisorId: "s" }])).toHaveLength(0);
+  });
+  it("skips a field that almost nobody has filled in", () => {
+    const rows = Array.from({ length: 20 }, (_, i) => ({ name: `P${i}`, departmentId: "d", workLocation: "x", supervisorId: i === 0 ? "s" : null }));
+    expect(evaluateMissingFields(rows)).toHaveLength(0);
   });
   it("flags unknown job codes, placeholders and schedule gaps", () => {
     expect(evaluateUnknownJobCodes([{ code: "OLD", entries: 4 }])[0]?.detail).toContain("OLD (4 entries)");
