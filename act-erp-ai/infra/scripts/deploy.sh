@@ -102,13 +102,14 @@ fi
 # `docker push` sends only the layers the server does not already have, so a normal
 # deploy uploads a few MB instead of the whole image.
 LOCAL_PORT=15000
-ssh -i "$KEY" -o ConnectTimeout=20 -o ExitOnForwardFailure=yes -f -N -L "$LOCAL_PORT:127.0.0.1:5000" "$HOST"
-TUNNEL_PID=$(pgrep -f "L $LOCAL_PORT:127.0.0.1:5000" | head -1 || true)
+ssh -i "$KEY" -o ConnectTimeout=20 -o ExitOnForwardFailure=yes -N -L "127.0.0.1:$LOCAL_PORT:127.0.0.1:5000" "$HOST" &
+TUNNEL_PID=$!
+sleep 3
 trap 'rm -rf "$WORK"; [ -n "${TUNNEL_PID:-}" ] && kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 for img in "${SHIP[@]}"; do
   name=${img%%:*}; tag=${img##*:}; short=${name#act-erp-lite-}
-  docker tag "$img" "localhost:$LOCAL_PORT/act-$short:$tag"
-  docker push -q "localhost:$LOCAL_PORT/act-$short:$tag"
+  docker tag "$img" "127.0.0.1:$LOCAL_PORT/act-$short:$tag"
+  docker push -q "127.0.0.1:$LOCAL_PORT/act-$short:$tag"
 done
 ssh_ "for i in ${SHIP[*]}; do n=\${i%%:*}; t=\${i##*:}; s=\${n#act-erp-lite-}; docker pull -q localhost:5000/act-\$s:\$t >/dev/null && docker tag localhost:5000/act-\$s:\$t \$i; done" </dev/null
 lap "image on server"
