@@ -150,6 +150,11 @@ export async function onSiteNow() {
  * Clock in, Clock out, Break min, Work hours (2 dp), Job code, Approval.
  * Several punches on one day are merged (first in, last out, summed minutes);
  * REJECTED entries add no hours. Times are America/Chicago.
+ *
+ * Same shape as the employee payroll slip CSV: a period title row, then the
+ * header, detail rows, and a TOTALS footer with summed break minutes and work
+ * hours for the export range. Empty ranges return only the header line so the
+ * client can treat them as "nothing to export".
  */
 export async function contractHoursCsv(args: {
   from: Date;
@@ -217,6 +222,8 @@ export async function contractHoursCsv(args: {
     "Job code",
     "Approval",
   ]);
+  if (sorted.length === 0) return header;
+
   const lines = sorted.map((g) =>
     csvRow([
       g.agency,
@@ -231,5 +238,22 @@ export async function contractHoursCsv(args: {
       g.approvals.size === 1 ? [...g.approvals][0]! : "MIXED",
     ]),
   );
-  return [header, ...lines].join("\r\n");
+  const totalBreak = sorted.reduce((sum, g) => sum + g.breakMin, 0);
+  const totalWorkMin = sorted.reduce((sum, g) => sum + g.workMin, 0);
+  const title = csvRow([
+    `Contract hours ${dateOnlyToString(args.from)} to ${dateOnlyToString(args.to)}`,
+  ]);
+  const totals = csvRow([
+    "TOTALS",
+    "",
+    "",
+    "",
+    "",
+    "",
+    totalBreak,
+    (totalWorkMin / 60).toFixed(2),
+    "",
+    "",
+  ]);
+  return [title, header, ...lines, totals].join("\r\n");
 }

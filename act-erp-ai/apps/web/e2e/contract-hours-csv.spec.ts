@@ -28,6 +28,17 @@ const HEADER = [
   "Approval",
 ];
 
+/** Drop the period title and TOTALS footer; return detail rows only. */
+function detailRows(text: string): string[][] {
+  const rows = parseCsv(text);
+  const start = rows.findIndex((r) => r[0] === "Agency" && r[1] === "Worker ID");
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(rows[start]).toEqual(HEADER);
+  const body = rows.slice(start + 1);
+  if (body.length && body[body.length - 1]![0] === "TOTALS") return body.slice(0, -1);
+  return body;
+}
+
 async function openHours(page: Page, agencyId: string, extra = "", from = businessYmd(6), to = businessYmd(0)) {
   await page.goto(hoursUrl(`&hagency=${agencyId}${extra}`, from, to));
   await expect(page.getByRole("button", { name: /download csv/i })).toBeVisible();
@@ -51,17 +62,19 @@ test.describe("admin hours: CSV export", () => {
     await expect(toast(page, /csv downloaded/i)).toBeVisible();
     expect(filename).toBe(`contract-hours-${businessYmd(6)}-to-${businessYmd(0)}.csv`);
     const rows = parseCsv(text);
-    expect(rows[0]).toEqual(HEADER);
+    expect(rows[0]![0]).toBe(`Contract hours ${businessYmd(6)} to ${businessYmd(0)}`);
+    expect(rows[1]).toEqual(HEADER);
+    expect(rows[rows.length - 1]).toEqual(["TOTALS", "", "", "", "", "", "0", "16.75", "", ""]);
     const key = (r: string[]) => `${r[1]}|${r[3]}`; // order across workers follows the random worker id
     const sorted = (rs: string[][]) => [...rs].sort((a, b) => key(a).localeCompare(key(b)));
-    expect(sorted(rows.slice(1))).toEqual(sorted([
+    expect(sorted(detailRows(text))).toEqual(sorted([
       [agency.name, w1.workerId, "Csv Alpha", businessYmd(3), "9:00 AM", "5:00 PM", "0", "0.00", "E2E100", "REJECTED"],
       [agency.name, w1.workerId, "Csv Alpha", businessYmd(2), "8:00 AM", "5:30 PM", "0", "8.50", "E2E100", "MIXED"],
       [agency.name, w2.workerId, "Csv Beta", businessYmd(2), "6:00 AM", "2:15 PM", "0", "8.25", "E2E100", "APPROVED"],
     ]));
     // RFC 4180 line endings and every field quoted.
     expect(text).toContain("\r\n");
-    expect(text.split("\r\n")[0]).toBe(HEADER.map((h) => `"${h}"`).join(","));
+    expect(text.split("\r\n")[1]).toBe(HEADER.map((h) => `"${h}"`).join(","));
   });
 
   test("respects the date range and the agency filter, but not the approval filter", async ({ page }) => {
@@ -74,14 +87,14 @@ test.describe("admin hours: CSV export", () => {
     await makeEntry(wb.id, { daysAgo: 1 });
 
     await openHours(page, a.id, "&approval=APPROVED");
-    const onlyA = parseCsv((await download(page)).text).slice(1);
+    const onlyA = detailRows((await download(page)).text);
     expect(onlyA).toHaveLength(1);
     expect(onlyA[0]![2]).toBe("Csv InRange");
     expect(onlyA[0]![9]).toBe("PENDING"); // approval filter does not apply to the export
 
     // No agency filter: both agencies appear (sorted by agency name).
     await page.goto(hoursUrl("", businessYmd(2), businessYmd(0)));
-    const all = parseCsv((await download(page)).text).slice(1);
+    const all = detailRows((await download(page)).text);
     const names = all.map((r) => r[2]);
     expect(names).toContain("Csv InRange");
     expect(names).toContain("Csv OtherAgency");
@@ -89,7 +102,7 @@ test.describe("admin hours: CSV export", () => {
 
     // Widening the range brings the old entry in.
     await openHours(page, a.id, "", businessYmd(25), businessYmd(0));
-    expect(parseCsv((await download(page)).text).slice(1)).toHaveLength(2);
+    expect(detailRows((await download(page)).text)).toHaveLength(2);
   });
 
   test("an empty range shows a message and downloads nothing", async ({ page }) => {
@@ -113,7 +126,7 @@ test.describe("admin hours: CSV export", () => {
     await makeEntry(w.id, { daysAgo: 1 });
     await openHours(page, agency.id);
     const { text } = await download(page);
-    const [, row] = parseCsv(text);
+    const [row] = detailRows(text);
     expect(row![2]).toBe(`'=HYPERLINK("http://evil.test","x")`);
     expect(text).toContain(`"'=HYPERLINK(""http://evil.test"",""x"")"`);
   });
