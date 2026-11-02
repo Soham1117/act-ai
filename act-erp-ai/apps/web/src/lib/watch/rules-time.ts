@@ -239,29 +239,48 @@ export function evaluateNewKiosk(
   return out;
 }
 
-/** time.photo-missing: kiosk punches with no photo, one flag per person per week. */
-export function evaluatePhotoMissing(entries: PunchRow[], weekOf: (date: string) => string): FindingDraft[] {
-  const groups = new Map<string, { row: PunchRow; count: number }>();
+/** One summary flag for a group of punches without photos (a flag per person would bury the list). */
+function photoSummary(
+  rule: string,
+  scope: string,
+  groups: Map<string, { name: string; count: number }>,
+  weekKey: string,
+  fixLink: string,
+): FindingDraft[] {
+  if (groups.size === 0) return [];
+  const total = [...groups.values()].reduce((n, g) => n + g.count, 0);
+  const top = [...groups.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+    .map((g) => `${g.name} (${g.count})`)
+    .join(", ");
+  return [
+    {
+      fingerprint: `${rule}:${weekKey}`,
+      severity: "INFO",
+      subjectType: "Kiosk",
+      subjectId: weekKey,
+      title: `${total} ${scope} kiosk punch${total === 1 ? "" : "es"} without a photo (${groups.size} ${groups.size === 1 ? "person" : "people"})`,
+      detail: `Most affected: ${top}.`,
+      likelyCause: "Camera blocked, permission off on the tablet, or the photo upload failed.",
+      suggestedFix: "Check the kiosk camera and permissions.",
+      fixLink,
+      evidence: { total, people: groups.size },
+    },
+  ];
+}
+
+/** time.photo-missing: kiosk punches with no photo, summed over the window. */
+export function evaluatePhotoMissing(entries: PunchRow[], weekKey: string): FindingDraft[] {
+  const groups = new Map<string, { name: string; count: number }>();
   for (const e of entries) {
     if (e.source !== "KIOSK") continue;
     if (e.hasPhotoIn && (e.clockOut === null || e.hasPhotoOut)) continue;
-    const key = `${e.employeeId}:${weekOf(e.date)}`;
-    const g = groups.get(key);
-    groups.set(key, { row: e, count: (g?.count ?? 0) + 1 });
+    const g = groups.get(e.employeeId) ?? { name: e.name, count: 0 };
+    g.count++;
+    groups.set(e.employeeId, g);
   }
-  return [...groups.entries()].map(([key, g]) => ({
-    fingerprint: `time.photo-missing:${key}`,
-    severity: "INFO" as const,
-    subjectType: "Employee",
-    subjectId: g.row.employeeId,
-    employeeId: g.row.employeeId,
-    title: `${g.row.name}: ${g.count} kiosk punch${g.count === 1 ? "" : "es"} without a photo`,
-    detail: "Kiosk punches that have no photo attached.",
-    likelyCause: "Camera blocked or permission off on the kiosk tablet.",
-    suggestedFix: "Check the kiosk camera.",
-    fixLink: "/admin/kiosks",
-    evidence: { count: g.count },
-  }));
+  return photoSummary("time.photo-missing", "employee", groups, weekKey, "/admin/kiosks");
 }
 
 /** time.early-arrival-pattern: punching in well before the schedule, again and again. */
@@ -382,13 +401,12 @@ export type ContractPunch = {
   /** Photos only exist for kiosk punches; hand-entered hours never have one. */
   viaKiosk: boolean;
 };
-export function evaluateContractEntries(entries: ContractPunch[], weekOf: (date: string) => string): FindingDraft[] {
+export function evaluateContractEntries(entries: ContractPunch[], weekKey: string): FindingDraft[] {
   const out: FindingDraft[] = [];
-  const noPhoto = new Map<string, { e: ContractPunch; count: number }>();
+  const noPhoto = new Map<string, { name: string; count: number }>();
   for (const e of entries) {
     if (e.viaKiosk && !e.hasPhotoIn) {
-      const key = `${e.workerId}:${weekOf(e.date)}`;
-      noPhoto.set(key, { e, count: (noPhoto.get(key)?.count ?? 0) + 1 });
+      noPhoto.set(e.workerId, { name: e.name, count: (noPhoto.get(e.workerId)?.count ?? 0) + 1 });
     }
     if (!e.jobCode.trim()) {
       out.push({
@@ -418,20 +436,7 @@ export function evaluateContractEntries(entries: ContractPunch[], weekOf: (date:
       });
     }
   }
-  for (const [key, g] of noPhoto) {
-    out.push({
-      fingerprint: `contract.photo-missing:${key}`,
-      severity: "INFO",
-      subjectType: "ContractTimeEntry",
-      subjectId: g.e.id,
-      title: `${g.e.name}: ${g.count} punch${g.count === 1 ? "" : "es"} without a photo`,
-      detail: "Contract punches with no clock-in photo.",
-      likelyCause: "Camera blocked, or entered by hand.",
-      suggestedFix: "Check the kiosk camera or confirm the manual entry.",
-      fixLink: "/admin/contract-workers",
-      evidence: { count: g.count },
-    });
-  }
+  out.push(...photoSummary("contract.photo-missing", "contract", noPhoto, weekKey, "/admin/contract-workers"));
   return out;
 }
 

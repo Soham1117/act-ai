@@ -29,6 +29,7 @@ export type WatchPolicy = {
   scheduleVarianceHours: number;
   contractTenureDays: number;
   newKioskMinPriorEntries: number;
+  leaveMaxShare: number;
   digestHourLocal: number;
   digestRecipientEmails: string[];
 };
@@ -46,6 +47,7 @@ export const DEFAULT_POLICY: WatchPolicy = {
   scheduleVarianceHours: 4,
   contractTenureDays: 90,
   newKioskMinPriorEntries: 5,
+  leaveMaxShare: 0.25,
   digestHourLocal: 7,
   digestRecipientEmails: [
     "soham@americancompletiontools.com",

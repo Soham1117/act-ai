@@ -200,7 +200,7 @@ export const TIME_JOBS: RuleJob[] = [
     id: "time.photo-missing",
     async run({ now }) {
       const since = new Date(businessToday(now).getTime() - 7 * DAY_MS);
-      return evaluatePhotoMissing(await recentPunches(since, { source: "KIOSK" }), weekOf);
+      return evaluatePhotoMissing(await recentPunches(since, { source: "KIOSK" }), weekOf(dateOnlyToString(businessToday(now))));
     },
   },
   {
@@ -307,7 +307,7 @@ export const CONTRACT_JOBS: RuleJob[] = [
           hasPhotoIn: !!r.clockInPhotoKey,
           viaKiosk: !!r.kioskSlug,
         })),
-        weekOf,
+        weekOf(dateOnlyToString(businessToday(now))),
       );
     },
   },

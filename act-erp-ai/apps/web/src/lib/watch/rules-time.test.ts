@@ -37,7 +37,6 @@ const punch = (o: Partial<PunchRow> = {}): PunchRow => ({
   notes: null,
   ...o,
 });
-const weekOf = (d: string) => d.slice(0, 7);
 
 describe("holidays", () => {
   it("knows 2026 dates", () => {
@@ -116,10 +115,10 @@ describe("new kiosk", () => {
 });
 
 describe("photos", () => {
-  it("groups missing photos per person per week and skips non-kiosk", () => {
-    const out = evaluatePhotoMissing([punch({ id: "a", hasPhotoIn: false }), punch({ id: "b", hasPhotoOut: false }), punch({ id: "c", source: "TCP", hasPhotoIn: false })], weekOf);
+  it("sums missing photos into one flag and skips non-kiosk", () => {
+    const out = evaluatePhotoMissing([punch({ id: "a", hasPhotoIn: false }), punch({ id: "b", hasPhotoOut: false }), punch({ id: "c", source: "TCP", hasPhotoIn: false })], "2026-10-26");
     expect(out).toHaveLength(1);
-    expect(out[0].title).toContain("2 kiosk punches");
+    expect(out[0].title).toContain("2 employee kiosk punches");
   });
 });
 
@@ -162,11 +161,11 @@ describe("schedule variance", () => {
 describe("contract rules", () => {
   const base = { id: "c1", workerId: "w1", name: "Bo (contract)", date: "2026-10-28", jobCode: "PACK", workerJobCode: "PACK", hasPhotoIn: true, viaKiosk: true };
   it("flags missing job code, mismatch, and missing photos", () => {
-    expect(evaluateContractEntries([{ ...base, jobCode: " " }], weekOf)[0]?.fingerprint).toBe("contract.jobcode-missing:c1");
-    expect(evaluateContractEntries([{ ...base, jobCode: "LOAD" }], weekOf)[0]?.fingerprint).toBe("contract.jobcode-mismatch:c1");
-    expect(evaluateContractEntries([{ ...base, hasPhotoIn: false }], weekOf)[0]?.fingerprint).toContain("contract.photo-missing");
-    expect(evaluateContractEntries([{ ...base, hasPhotoIn: false, viaKiosk: false }], weekOf)).toHaveLength(0);
-    expect(evaluateContractEntries([base], weekOf)).toHaveLength(0);
+    expect(evaluateContractEntries([{ ...base, jobCode: " " }], "w")[0]?.fingerprint).toBe("contract.jobcode-missing:c1");
+    expect(evaluateContractEntries([{ ...base, jobCode: "LOAD" }], "w")[0]?.fingerprint).toBe("contract.jobcode-mismatch:c1");
+    expect(evaluateContractEntries([{ ...base, hasPhotoIn: false }], "w")[0]?.fingerprint).toContain("contract.photo-missing");
+    expect(evaluateContractEntries([{ ...base, hasPhotoIn: false, viaKiosk: false }], "w")).toHaveLength(0);
+    expect(evaluateContractEntries([base], "w")).toHaveLength(0);
   });
   it("flags long tenure at the limit", () => {
     const now = t("2026-11-02T00:00:00Z");
