@@ -142,7 +142,7 @@ docker tag "$PREV" "act-erp-lite-web:before-$STAMP"
 
 if [ "$SCHEMA" = 1 ]; then
   docker tag "$TOOLS_TAG" act-erp-lite-tools:latest
-  "${COMPOSE[@]}" --profile tools run --rm -T --no-build tools prisma db push </dev/null 2>&1 | tee "$RELEASE/db-push.log"
+  "${COMPOSE[@]}" --profile tools run --rm -T tools prisma db push </dev/null 2>&1 | tee "$RELEASE/db-push.log"
   echo "schema push done"
 fi
 
