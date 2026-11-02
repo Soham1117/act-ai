@@ -8,7 +8,12 @@ import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 import { businessDateOnly, formatBusinessTime, formatDateOnly } from "@/lib/format";
-import { nextContractWorkerIdFrom } from "@/lib/contract-workers";
+import {
+  applyContractAssignmentOffers,
+  middleShiftBreak,
+  nextContractWorkerIdFrom,
+  type ContractAssignmentOffers,
+} from "@/lib/contract-workers";
 import {
   BUSINESS_TZ,
   breakMinutes,
@@ -19,6 +24,7 @@ import {
 } from "@/lib/time-rules";
 import {
   closeOpenContractEntry,
+  resolveContractJobCode,
   revalidateContractPages,
   withContractWorkerLock,
   type ContractEntryWithBreaks,
@@ -654,20 +660,67 @@ function parseLocal(value: string, label: string): { date: Date } | { error: str
 async function findOverlap(
   tx: Tx,
   contractWorkerId: string,
-  excludeId: string,
+  excludeId: string | null,
   start: Date,
   end: Date,
 ) {
   return tx.contractTimeEntry.findFirst({
     where: {
       contractWorkerId,
-      id: { not: excludeId },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
       status: { not: "REJECTED" },
       clockIn: { lt: end },
       OR: [{ clockOut: null }, { clockOut: { gt: start } }],
     },
     select: { clockIn: true, clockOut: true },
   });
+}
+
+const localTime = z.string().min(1, "Enter a date and time.");
+const breakSchema = z.object({
+  id: z.string().optional(),
+  start: localTime,
+  end: localTime.nullable().optional(),
+});
+const notesSchema = z
+  .string()
+  .trim()
+  .max(1000, "Keep notes under 1000 characters.")
+  .nullable()
+  .optional();
+const offersSchema = z
+  .object({
+    shiftStartTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    extendEndTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    reactivate: z.boolean().optional(),
+  })
+  .optional();
+
+function parseBreaks(
+  raw: Array<{ start: string; end?: string | null }>,
+): { breaks: { startTime: Date; endTime: Date | null }[] } | { error: string } {
+  const breaks: { startTime: Date; endTime: Date | null }[] = [];
+  for (const b of raw) {
+    const start = parseLocal(b.start, "Break start");
+    if ("error" in start) return start;
+    let endTime: Date | null = null;
+    if (b.end) {
+      const end = parseLocal(b.end, "Break end");
+      if ("error" in end) return end;
+      endTime = end.date;
+    }
+    breaks.push({ startTime: start.date, endTime });
+  }
+  return { breaks };
+}
+
+function acceptedOffers(raw: ContractAssignmentOffers | undefined): ContractAssignmentOffers {
+  if (!raw) return {};
+  const out: ContractAssignmentOffers = {};
+  if (raw.shiftStartTo) out.shiftStartTo = raw.shiftStartTo;
+  if (raw.extendEndTo) out.extendEndTo = raw.extendEndTo;
+  if (raw.reactivate) out.reactivate = true;
+  return out;
 }
 
 function snapshot(e: ContractEntryWithBreaks) {
@@ -774,6 +827,201 @@ export async function adminEditContractTimeEntry(
     });
     revalidateAll();
     return ok({ id: result.entry.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Manual entry (history / missed punches)
+// ──────────────────────────────────────────────────────────────────────
+
+const manualSchema = z.object({
+  contractWorkerId: z.string().min(1, "Choose a contract worker."),
+  clockIn: localTime,
+  clockOut: localTime,
+  jobCode: z.string().trim().max(40).optional(),
+  notes: notesSchema,
+  breaks: z.array(breakSchema).max(20).optional(),
+  /** Alternate to `breaks`: one unpaid mid-shift break in minutes. */
+  breakMin: z.number().int().min(0).max(240).optional(),
+  reason: reasonSchema,
+  approve: z.boolean().optional(),
+  offers: offersSchema,
+});
+
+/**
+ * Create a closed contract time entry. Active, Inactive, and Ended workers
+ * are allowed. Assignment date/status changes apply only when the admin
+ * accepts the smart-helper offers.
+ */
+export async function adminCreateManualContractTimeEntry(
+  input: z.infer<typeof manualSchema>,
+): Promise<ActionResult<{ id: string }>> {
+  const admin = await requireAdmin();
+  try {
+    const data = manualSchema.parse(input);
+    const ci = parseLocal(data.clockIn, "Clock-in");
+    if ("error" in ci) return fail(ci.error);
+    const co = parseLocal(data.clockOut, "Clock-out");
+    if ("error" in co) return fail(co.error);
+    let breaks: { startTime: Date; endTime: Date | null }[];
+    if (data.breaks && data.breaks.length > 0) {
+      const pb = parseBreaks(data.breaks);
+      if ("error" in pb) return fail(pb.error);
+      breaks = pb.breaks;
+    } else {
+      const mid = middleShiftBreak(ci.date, co.date, data.breakMin ?? 0);
+      breaks = mid ? [{ startTime: mid.startTime, endTime: mid.endTime }] : [];
+    }
+
+    const timeErr = validateEntryTimes({
+      clockIn: ci.date,
+      clockOut: co.date,
+      breaks,
+    });
+    if (timeErr) return fail(timeErr);
+
+    const totals = computeEntryTotals({
+      clockIn: ci.date,
+      clockOut: co.date,
+      breaks,
+    });
+    const entryDate = businessDateOnly(ci.date);
+    const offers = acceptedOffers(data.offers);
+    const now = new Date();
+
+    const result = await withContractWorkerLock(data.contractWorkerId, async (tx) => {
+      const worker = await tx.contractWorker.findUnique({
+        where: { id: data.contractWorkerId },
+        select: {
+          id: true,
+          name: true,
+          workerId: true,
+          jobCode: true,
+          startDate: true,
+          endDate: true,
+          status: true,
+        },
+      });
+      if (!worker) return { error: "That contract worker no longer exists." };
+
+      const next = applyContractAssignmentOffers(
+        {
+          startDate: worker.startDate,
+          endDate: worker.endDate,
+          status: worker.status,
+        },
+        entryDate,
+        offers,
+      );
+      if ("error" in next) return { error: next.error };
+
+      const assignmentChanged =
+        next.startDate.getTime() !== worker.startDate.getTime() ||
+        (next.endDate?.getTime() ?? null) !== (worker.endDate?.getTime() ?? null) ||
+        next.status !== worker.status;
+
+      if (assignmentChanged) {
+        await tx.contractWorker.update({
+          where: { id: worker.id },
+          data: {
+            startDate: next.startDate,
+            endDate: next.endDate,
+            status: next.status,
+          },
+        });
+      }
+
+      const requestedCode = data.jobCode?.trim() || null;
+      if (requestedCode) {
+        const jc = await tx.jobCode.findUnique({ where: { code: requestedCode } });
+        if (!jc) return { error: `Job code ${requestedCode} doesn't exist.` };
+        if (!jc.isActive) {
+          return { error: `Job code ${requestedCode} is inactive. Choose an active job code.` };
+        }
+      }
+      const jobCode =
+        requestedCode ?? (await resolveContractJobCode(tx, worker.jobCode));
+      if (!jobCode) {
+        return {
+          error:
+            "No active job code is available for this worker. Set one on the worker or choose a job code.",
+        };
+      }
+
+      const overlap = await findOverlap(tx, worker.id, null, ci.date, co.date);
+      if (overlap) {
+        return {
+          error: `That time overlaps another entry (${formatDateOnly(businessDateOnly(overlap.clockIn))} ${formatBusinessTime(overlap.clockIn)} to ${overlap.clockOut ? formatBusinessTime(overlap.clockOut) : "still open"}). Adjust the times or fix the other entry first.`,
+        };
+      }
+
+      const created = await tx.contractTimeEntry.create({
+        data: {
+          contractWorkerId: worker.id,
+          date: entryDate,
+          clockIn: ci.date,
+          clockOut: co.date,
+          jobCode,
+          status: "COMPLETED",
+          approvalStatus: data.approve ? "APPROVED" : "PENDING",
+          approvedById: data.approve ? admin.id : null,
+          approvedByName: data.approve ? admin.name : null,
+          approvalDate: data.approve ? now : null,
+          approvalNotes: data.approve ? "Approved when entered by admin." : null,
+          totalBreakMin: totals.totalBreakMin,
+          totalWorkMin: totals.totalWorkMin,
+          timesheetNotes: data.notes?.trim() ? data.notes.trim() : null,
+          lastEditedById: admin.id,
+          editReason: `Manual entry: ${data.reason}`,
+          breaks: {
+            create: breaks.map((b) => ({
+              startTime: b.startTime,
+              endTime: b.endTime,
+              durationMin: breakMinutes(b, ci.date, co.date),
+              type: "BREAK" as const,
+            })),
+          },
+        },
+        include: { breaks: true },
+      });
+
+      return {
+        created,
+        worker,
+        assignmentBefore: {
+          startDate: worker.startDate.toISOString(),
+          endDate: worker.endDate?.toISOString() ?? null,
+          status: worker.status,
+        },
+        assignmentAfter: assignmentChanged
+          ? {
+              startDate: next.startDate.toISOString(),
+              endDate: next.endDate?.toISOString() ?? null,
+              status: next.status,
+            }
+          : null,
+      };
+    });
+    if ("error" in result) return fail(result.error!);
+
+    await audit({
+      action: "contract.time.manual_create",
+      resource: `ContractTimeEntry:${result.created.id}`,
+      diff: {
+        contractWorkerId: result.worker.id,
+        workerId: result.worker.workerId,
+        workerName: result.worker.name,
+        reason: data.reason,
+        approved: !!data.approve,
+        assignmentBefore: result.assignmentBefore,
+        assignmentAfter: result.assignmentAfter,
+        after: snapshot(result.created),
+      },
+    });
+    revalidateAll();
+    return ok({ id: result.created.id });
   } catch (err) {
     return failFromUnknown(err);
   }

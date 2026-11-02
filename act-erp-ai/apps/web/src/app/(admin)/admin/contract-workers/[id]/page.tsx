@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -11,11 +12,13 @@ import {
   formatHours,
   formatPhone,
 } from "@/lib/format";
+import { dateOnlyToString } from "@/lib/time-rules";
 import {
   getContractWorker,
   listContractWorkers,
 } from "@/server/queries/contract-workers";
 import { DataListCard, ResponsiveDataList } from "@/components/mobile";
+import { AddContractEntryButton } from "../add-entry-panel";
 import { ApprovalBadge } from "../shared";
 
 export const metadata = { title: "Contract worker" };
@@ -27,11 +30,27 @@ export default async function ContractWorkerDetailPage({
 }) {
   await requireAdmin();
   const { id } = await params;
-  const worker = await getContractWorker(id, 50);
+  const [worker, jobCodes] = await Promise.all([
+    getContractWorker(id, 50),
+    db.jobCode.findMany({
+      where: { isActive: true },
+      orderBy: { code: "asc" },
+      select: { code: true, title: true },
+    }),
+  ]);
   if (!worker) notFound();
   const live = (await listContractWorkers({ agencyId: worker.agencyId })).find(
     (w) => w.id === id,
   );
+  const entryWorker = {
+    id: worker.id,
+    name: worker.name,
+    workerId: worker.workerId,
+    jobCode: worker.jobCode,
+    startDate: dateOnlyToString(worker.startDate),
+    endDate: worker.endDate ? dateOnlyToString(worker.endDate) : null,
+    status: worker.status,
+  };
 
   return (
     <>
@@ -45,6 +64,11 @@ export default async function ContractWorkerDetailPage({
         }
         actions={
           <>
+            <AddContractEntryButton
+              workers={[entryWorker]}
+              jobCodes={jobCodes}
+              fixedWorkerId={worker.id}
+            />
             {live?.liveStatus === "ACTIVE" && <Badge variant="success">On site</Badge>}
             {live?.liveStatus === "ON_BREAK" && <Badge variant="warning">On break</Badge>}
             <Badge variant={worker.status === "ACTIVE" ? "success" : "secondary"}>

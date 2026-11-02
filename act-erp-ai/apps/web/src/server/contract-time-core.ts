@@ -40,7 +40,7 @@ export const CONTRACT_AUTO_CLOSE_REASON = `Auto-closed: shift ran longer than ${
  * default (active). Null when neither exists: the punch is refused rather than
  * stamped with a code that does not exist.
  */
-async function resolveContractJobCode(tx: Tx, workerCode: string | null): Promise<string | null> {
+export async function resolveContractJobCode(tx: Tx, workerCode: string | null): Promise<string | null> {
   if (workerCode) {
     const own = await tx.jobCode.findFirst({ where: { code: workerCode, isActive: true } });
     if (own) return own.code;

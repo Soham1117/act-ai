@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyContractAssignmentOffers,
   businessDaysBetween,
   contractWorkerIneligibleReason,
   formatContractWorkerId,
@@ -7,6 +8,7 @@ import {
   isEndingSoon,
   nextContractWorkerIdFrom,
   parseContractWorkerNumber,
+  proposeContractAssignmentOffers,
 } from "./contract-workers";
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -81,5 +83,67 @@ describe("ending soon", () => {
     expect(isEndingSoon(d("2026-10-27"), today)).toBe(false); // 8 weekdays
     expect(isEndingSoon(null, today)).toBe(false);
     expect(isEndingSoon(d("2026-10-14"), today)).toBe(false); // already past
+  });
+});
+
+describe("assignment offers for manual / mass hours", () => {
+  const base = {
+    status: "ACTIVE" as const,
+    startDate: d("2026-10-05"),
+    endDate: d("2026-10-20"),
+  };
+
+  it("proposes shifting start earlier with default on", () => {
+    const { offers, defaults } = proposeContractAssignmentOffers(base, d("2026-10-01"));
+    expect(offers.shiftStartTo).toBe("2026-10-01");
+    expect(defaults.shiftStart).toBe(true);
+    expect(offers.extendEndTo).toBeUndefined();
+  });
+
+  it("proposes extending end later with default on", () => {
+    const { offers, defaults } = proposeContractAssignmentOffers(base, d("2026-10-25"));
+    expect(offers.extendEndTo).toBe("2026-10-25");
+    expect(defaults.extendEnd).toBe(true);
+  });
+
+  it("offers reactivate off by default for Ended workers", () => {
+    const { offers, defaults } = proposeContractAssignmentOffers(
+      { ...base, status: "ENDED" },
+      d("2026-10-12"),
+    );
+    expect(offers.reactivate).toBe(true);
+    expect(defaults.reactivate).toBe(false);
+    expect(offers.shiftStartTo).toBeUndefined();
+  });
+
+  it("refuses when start-shift offer is declined", () => {
+    const result = applyContractAssignmentOffers(base, d("2026-10-01"), {});
+    expect(result).toEqual(
+      expect.objectContaining({ error: expect.stringMatching(/before the assignment start/i) }),
+    );
+  });
+
+  it("applies start shift and optional end extend without reactivating", () => {
+    const ended = { ...base, status: "ENDED" as const, endDate: d("2026-10-10") };
+    const result = applyContractAssignmentOffers(ended, d("2026-10-15"), {
+      extendEndTo: "2026-10-15",
+    });
+    expect(result).toEqual({
+      startDate: d("2026-10-05"),
+      endDate: d("2026-10-15"),
+      status: "ENDED",
+    });
+  });
+
+  it("reactivates only when accepted", () => {
+    const inactive = { ...base, status: "INACTIVE" as const };
+    const result = applyContractAssignmentOffers(inactive, d("2026-10-12"), {
+      reactivate: true,
+    });
+    expect(result).toEqual({
+      startDate: d("2026-10-05"),
+      endDate: d("2026-10-20"),
+      status: "ACTIVE",
+    });
   });
 });

@@ -29,6 +29,7 @@ import { WorkerForm, ClockOutButton } from "./worker-dialogs";
 import { WorkersTable } from "./workers-table";
 import { PunchPhotos } from "@/components/punch-photos";
 import { FormSimpleSelect } from "@/components/simple-select";
+import { AddContractEntryButton } from "./add-entry-panel";
 import { type AgencyRow, type HoursRow, type WorkerRow } from "./shared";
 
 export const metadata = { title: "Contract workers" };
@@ -365,6 +366,23 @@ export default async function ContractWorkersPage({
         </TabsContent>
 
         <TabsContent value="hours" className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <AddContractEntryButton
+              workers={allWorkers.map((w) => ({
+                id: w.id,
+                name: w.name,
+                workerId: w.workerId,
+                jobCode: w.jobCode,
+                startDate: dateOnlyToString(w.startDate),
+                endDate: w.endDate ? dateOnlyToString(w.endDate) : null,
+                status: w.status,
+              }))}
+              jobCodes={jobCodes}
+            />
+            <Button asChild size="sm" variant="secondary">
+              <Link href="/admin/contract-workers/mass">Mass hours</Link>
+            </Button>
+          </div>
           <Card>
             <CardContent className="p-4">
               <form method="get" action="/admin/contract-workers">
