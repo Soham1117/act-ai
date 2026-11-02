@@ -282,14 +282,18 @@ export default async function AdminTimeTrackingPage({
       <PageHeader
         title="Hours approvals"
         description="Live activity, approvals, history, and corrections. All times are Central."
-        actions={
-          <ManualEntryButton
-            employees={employees.map((e) => ({ id: e.id, name: e.name, employeeId: e.employeeId }))}
-            jobCodes={jobCodes}
-          />
-        }
       />
       <HoursSubnav />
+      <div className="mb-4">
+        <ManualEntryButton
+          employees={employees.map((e) => ({
+            id: e.id,
+            name: e.name,
+            employeeId: e.employeeId,
+          }))}
+          jobCodes={jobCodes}
+        />
+      </div>
       <HoursStatRow>
         <HoursStat label="Clocked in now" value={live.length} />
         <HoursStat label="Needs attention" value={attentionCount} />

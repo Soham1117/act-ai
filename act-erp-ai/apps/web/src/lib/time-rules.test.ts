@@ -84,10 +84,31 @@ describe("validateEntryTimes", () => {
       validateEntryTimes({ clockIn: ci, clockOut: d("2026-03-09T13:00:00Z"), breaks: [], now }),
     ).toMatch(/after clock-in/);
   });
-  it("rejects shifts longer than 16h", () => {
+  it("rejects shifts longer than 16h by default", () => {
     expect(
       validateEntryTimes({ clockIn: ci, clockOut: d("2026-03-10T08:00:01Z"), breaks: [], now }),
     ).toMatch(/16 hours/);
+  });
+  it("allows up to 24h when maxShiftMs is the admin ceiling", () => {
+    const later = d("2026-03-11T12:00:00Z");
+    expect(
+      validateEntryTimes({
+        clockIn: ci,
+        clockOut: d("2026-03-10T08:00:00Z"),
+        breaks: [],
+        now: later,
+        maxShiftMs: 24 * 60 * 60_000,
+      }),
+    ).toBeNull();
+    expect(
+      validateEntryTimes({
+        clockIn: ci,
+        clockOut: d("2026-03-10T14:00:01Z"),
+        breaks: [],
+        now: later,
+        maxShiftMs: 24 * 60 * 60_000,
+      }),
+    ).toMatch(/24 hours/);
   });
   it("rejects overlapping and out-of-range breaks", () => {
     const out = d("2026-03-09T22:00:00Z");

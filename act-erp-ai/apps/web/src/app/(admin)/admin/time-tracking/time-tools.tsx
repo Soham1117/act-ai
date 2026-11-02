@@ -30,7 +30,7 @@ import { InlineConfirmAction } from "@/components/inline-confirm-action";
 import { cn } from "@/lib/utils";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
-import { dateToBusinessLocal, MAX_SHIFT_MS } from "@/lib/time-rules";
+import { ADMIN_MAX_SHIFT_MS, dateToBusinessLocal } from "@/lib/time-rules";
 import {
   adminCreateManualTimeEntry,
   adminDeleteTimeEntry,
@@ -330,7 +330,7 @@ function ForceClockOutPanel({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const capMs = new Date(entry.clockIn).getTime() + MAX_SHIFT_MS;
+  const capMs = new Date(entry.clockIn).getTime() + ADMIN_MAX_SHIFT_MS;
   const [clockOut, setClockOut] = useState(() =>
     dateToBusinessLocal(new Date(Math.min(Date.now(), capMs))),
   );
@@ -354,8 +354,8 @@ function ForceClockOutPanel({
           <InlinePanelTitle>Force clock-out</InlinePanelTitle>
           <InlinePanelDescription>
             {entry.employeeName} clocked in {formatDateOnly(entry.date)} at{" "}
-            {formatBusinessTime(entry.clockIn)}. Choose when their shift really ended (no more
-            than 16 hours after clock-in, Central time). Any open break is closed at that time.
+            {formatBusinessTime(entry.clockIn)}. Choose when their shift really ended (up to 24
+            hours after clock-in, Central time). Any open break is closed at that time.
           </InlinePanelDescription>
         </InlinePanelHeader>
         <form onSubmit={submit} className="space-y-4">
@@ -465,9 +465,12 @@ export function EntryActions({
 export function ManualEntryButton({
   employees,
   jobCodes,
+  fixedEmployeeId,
 }: {
   employees: EmployeeOption[];
   jobCodes: JobCodeOption[];
+  /** When set (Individual hours for one person), skip the employee picker. */
+  fixedEmployeeId?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -475,7 +478,7 @@ export function ManualEntryButton({
   const formId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
-  const [employeeId, setEmployeeId] = useState("");
+  const [employeeId, setEmployeeId] = useState(fixedEmployeeId ?? "");
   const [search, setSearch] = useState("");
   const [clockIn, setClockIn] = useState("");
   const [clockOut, setClockOut] = useState("");
@@ -484,6 +487,10 @@ export function ManualEntryButton({
   const [breaks, setBreaks] = useState<BreakDraft[]>([]);
   const [reason, setReason] = useState("");
   const [approve, setApprove] = useState(false);
+
+  useEffect(() => {
+    if (fixedEmployeeId) setEmployeeId(fixedEmployeeId);
+  }, [fixedEmployeeId]);
 
   useEffect(() => {
     if (!open && !pending && restoreFocus.current) {
@@ -505,15 +512,24 @@ export function ManualEntryButton({
     );
   }, [employees, search]);
 
+  const lockedEmployee = fixedEmployeeId
+    ? employees.find((e) => e.id === fixedEmployeeId) ?? null
+    : null;
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!employeeId) {
+    const id = fixedEmployeeId || employeeId;
+    if (!id) {
       toast.error("Choose an employee.");
+      return;
+    }
+    if (!clockIn || !clockOut) {
+      toast.error("Enter clock-in and clock-out times.");
       return;
     }
     startTransition(async () => {
       const res = await runAction(() => adminCreateManualTimeEntry({
-        employeeId,
+        employeeId: id,
         clockIn,
         clockOut,
         jobCode,
@@ -536,13 +552,13 @@ export function ManualEntryButton({
 
   return (
     <Collapsible
-      className={cn("min-w-0 space-y-3", open && "w-full basis-full")}
+      className="w-full min-w-0 space-y-3"
       open={open}
       onOpenChange={setOpen}
     >
       <CollapsibleTrigger asChild disabled={pending}>
         <Button ref={triggerRef} size="sm" className="min-h-11 w-full sm:w-auto md:min-h-9">
-          <Plus className="mr-1 h-3.5 w-3.5" /> Add manual entry
+          <Plus className="mr-1 h-3.5 w-3.5" /> Add entry
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent asChild>
@@ -559,32 +575,46 @@ export function ManualEntryButton({
             </p>
           </div>
           <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Employee</Label>
-              <Input
-                className="min-h-11 md:min-h-9"
-                placeholder="Search by name or ID"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <select
-                className={selectClass}
-                value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
-                size={Math.min(6, Math.max(2, filtered.length))}
-                style={{ height: "auto" }}
-              >
-                {filtered.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name} · {e.employeeId}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {fixedEmployeeId ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Employee</Label>
+                <p className="text-sm font-medium">
+                  {lockedEmployee
+                    ? `${lockedEmployee.name} · ${lockedEmployee.employeeId}`
+                    : "Selected employee"}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Employee</Label>
+                <Input
+                  className="min-h-11 md:min-h-9"
+                  placeholder="Search by name or ID"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <select
+                  className={selectClass}
+                  value={employeeId}
+                  onChange={(e) => setEmployeeId(e.target.value)}
+                  size={Math.min(6, Math.max(2, filtered.length))}
+                  style={{ height: "auto" }}
+                >
+                  {filtered.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} · {e.employeeId}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs">Clock in</Label>
+                <Label className="text-xs" htmlFor={`${formId}-in`}>
+                  Clock in
+                </Label>
                 <Input
+                  id={`${formId}-in`}
                   type="datetime-local"
                   className="min-h-11 md:min-h-9"
                   value={clockIn}
@@ -593,8 +623,11 @@ export function ManualEntryButton({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Clock out</Label>
+                <Label className="text-xs" htmlFor={`${formId}-out`}>
+                  Clock out
+                </Label>
                 <Input
+                  id={`${formId}-out`}
                   type="datetime-local"
                   className="min-h-11 md:min-h-9"
                   value={clockOut}

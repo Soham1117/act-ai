@@ -167,18 +167,25 @@ export default async function IndividualHoursPage({
       <PageHeader
         title="Individual hours"
         description="Punch-level hours with rates and weekly OT. All times are Central."
-        actions={
-          <ManualEntryButton
-            employees={employees.filter((e) => e.employmentStatus === "ACTIVE").map((e) => ({
+      />
+      <HoursSubnav />
+      <div className="mb-4">
+        <ManualEntryButton
+          employees={employees
+            .filter(
+              (e) =>
+                e.employmentStatus === "ACTIVE" ||
+                (employeeId !== "" && e.id === employeeId),
+            )
+            .map((e) => ({
               id: e.id,
               name: e.name,
               employeeId: e.employeeId,
             }))}
-            jobCodes={jobCodes}
-          />
-        }
-      />
-      <HoursSubnav />
+          jobCodes={jobCodes}
+          fixedEmployeeId={employeeId || undefined}
+        />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <Card className="h-fit overflow-hidden lg:sticky lg:top-16">

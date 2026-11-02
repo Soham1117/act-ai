@@ -10,6 +10,14 @@ export const BUSINESS_TZ = "America/Chicago";
 export const MAX_SHIFT_MINUTES = 16 * 60;
 export const MAX_SHIFT_MS = MAX_SHIFT_MINUTES * 60_000;
 
+/**
+ * Ceiling for admin create / edit / force clock-out. Higher than
+ * {@link MAX_SHIFT_MINUTES} so real long shifts can be recorded; kiosk
+ * auto-close still uses the 16h forgotten-punch rule.
+ */
+export const ADMIN_MAX_SHIFT_MINUTES = 24 * 60;
+export const ADMIN_MAX_SHIFT_MS = ADMIN_MAX_SHIFT_MINUTES * 60_000;
+
 const MIN_MS = 60_000;
 
 export type BreakInput = {
@@ -31,8 +39,9 @@ export function shiftCapEnd(clockIn: Date): Date {
 export function capShiftEnd(
   clockIn: Date,
   proposedEnd: Date,
+  maxShiftMs: number = MAX_SHIFT_MS,
 ): { end: Date; capped: boolean } {
-  const cap = shiftCapEnd(clockIn);
+  const cap = new Date(clockIn.getTime() + maxShiftMs);
   if (proposedEnd.getTime() > cap.getTime()) return { end: cap, capped: true };
   return { end: proposedEnd, capped: false };
 }
@@ -52,15 +61,18 @@ export function breakMinutes(b: BreakInput, clockIn: Date, shiftEnd: Date): numb
 }
 
 /**
- * Totals for a closed entry. The shift end is capped at 16h after clock-in;
- * `capped` tells the caller the entry needs an admin's attention.
+ * Totals for a closed entry. The shift end is capped at `maxShiftMs` after
+ * clock-in (default 16h); `capped` tells the caller the entry needs attention.
+ * Pass {@link ADMIN_MAX_SHIFT_MS} for admin corrections of real long shifts.
  */
 export function computeEntryTotals(args: {
   clockIn: Date;
   clockOut: Date;
   breaks: BreakInput[];
+  maxShiftMs?: number;
 }): { totalBreakMin: number; totalWorkMin: number; capped: boolean; effectiveClockOut: Date } {
-  const { end, capped } = capShiftEnd(args.clockIn, args.clockOut);
+  const maxShiftMs = args.maxShiftMs ?? MAX_SHIFT_MS;
+  const { end, capped } = capShiftEnd(args.clockIn, args.clockOut, maxShiftMs);
   const totalBreakMin = args.breaks.reduce(
     (sum, b) => sum + breakMinutes(b, args.clockIn, end),
     0,
@@ -77,15 +89,19 @@ export function computeEntryTotals(args: {
 /**
  * Validate admin-supplied times for an entry. Returns a user-facing message or
  * null when valid. `clockOut` may be null only for an entry that stays open.
+ * Default max length is 16h; pass {@link ADMIN_MAX_SHIFT_MS} for admin forms.
  */
 export function validateEntryTimes(args: {
   clockIn: Date;
   clockOut: Date | null;
   breaks: { startTime: Date; endTime: Date | null }[];
   now?: Date;
+  maxShiftMs?: number;
 }): string | null {
   const now = args.now ?? new Date();
   const { clockIn, clockOut, breaks } = args;
+  const maxShiftMs = args.maxShiftMs ?? MAX_SHIFT_MS;
+  const maxHours = maxShiftMs / MIN_MS / 60;
   const FUTURE_SLACK_MS = 5 * MIN_MS;
 
   if (Number.isNaN(clockIn.getTime())) return "Clock-in time is not valid.";
@@ -100,8 +116,8 @@ export function validateEntryTimes(args: {
     if (clockOut.getTime() > now.getTime() + FUTURE_SLACK_MS) {
       return "Clock-out can't be in the future.";
     }
-    if (clockOut.getTime() - clockIn.getTime() > MAX_SHIFT_MS) {
-      return `A shift can't be longer than ${MAX_SHIFT_MINUTES / 60} hours. Split it into two entries.`;
+    if (clockOut.getTime() - clockIn.getTime() > maxShiftMs) {
+      return `A shift can't be longer than ${maxHours} hours. Split it into two entries.`;
     }
   }
 

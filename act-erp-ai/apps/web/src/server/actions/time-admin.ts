@@ -9,6 +9,7 @@ import { notifyEmployees } from "@/lib/notify";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 import { businessDateOnly, formatBusinessTime, formatDateOnly } from "@/lib/format";
 import {
+  ADMIN_MAX_SHIFT_MS,
   BUSINESS_TZ,
   MAX_SHIFT_MINUTES,
   businessLocalToDate,
@@ -235,6 +236,7 @@ export async function adminUpdateTimeEntry(
         clockIn: ci.date,
         clockOut,
         breaks: nextBreaks,
+        maxShiftMs: ADMIN_MAX_SHIFT_MS,
       });
       if (timeErr) return { error: timeErr };
 
@@ -269,7 +271,12 @@ export async function adminUpdateTimeEntry(
       }
 
       const totals = clockOut
-        ? computeEntryTotals({ clockIn: ci.date, clockOut, breaks: nextBreaks })
+        ? computeEntryTotals({
+            clockIn: ci.date,
+            clockOut,
+            breaks: nextBreaks,
+            maxShiftMs: ADMIN_MAX_SHIFT_MS,
+          })
         : null;
       // Keep the rate stamped when the entry was worked; only re-resolve when the
       // job code changes or no rate was ever stamped. A note or time fix must not
@@ -397,6 +404,7 @@ export async function adminCreateManualTimeEntry(
       clockIn: ci.date,
       clockOut: co.date,
       breaks: pb.breaks,
+      maxShiftMs: ADMIN_MAX_SHIFT_MS,
     });
     if (timeErr) return fail(timeErr);
 
@@ -404,6 +412,7 @@ export async function adminCreateManualTimeEntry(
       clockIn: ci.date,
       clockOut: co.date,
       breaks: pb.breaks,
+      maxShiftMs: ADMIN_MAX_SHIFT_MS,
     });
     const now = new Date();
 
@@ -507,17 +516,24 @@ export async function adminForceClockOut(
         clockIn: entry.clockIn,
         clockOut: co.date,
         breaks: entry.breaks.map((b) => ({ startTime: b.startTime, endTime: b.endTime })),
+        maxShiftMs: ADMIN_MAX_SHIFT_MS,
       });
       if (timeErr) return { error: timeErr };
       const overlap = await findOverlap(tx, entry.employeeId, entry.id, entry.clockIn, co.date);
       if (overlap) return { error: overlapMessage(overlap) };
 
       const before = snapshot(entry);
-      const closed = await closeOpenEntry(tx, entry, co.date, {
-        autoClosed: false,
-        lastEditedById: admin.id,
-        editReason: `Forced clock-out: ${data.reason}`,
-      });
+      const closed = await closeOpenEntry(
+        tx,
+        entry,
+        co.date,
+        {
+          autoClosed: false,
+          lastEditedById: admin.id,
+          editReason: `Forced clock-out: ${data.reason}`,
+        },
+        ADMIN_MAX_SHIFT_MS,
+      );
       const after = await tx.timeEntry.findUniqueOrThrow({
         where: { id: entry.id },
         include: { breaks: true },

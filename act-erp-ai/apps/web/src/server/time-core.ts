@@ -93,17 +93,20 @@ export const NO_JOB_CODE_MESSAGE =
  * Close an open entry at `requestedEnd` (capped at the max shift length).
  * Open breaks are closed at the effective end. Flags the entry `autoClosed`
  * when the cap kicked in. Must run inside {@link withEmployeeLock}.
+ * Pass `maxShiftMs` (e.g. ADMIN_MAX_SHIFT_MS) for admin force clock-out.
  */
 export async function closeOpenEntry(
   tx: Tx,
   entry: EntryWithBreaks,
   requestedEnd: Date,
   extra: Prisma.TimeEntryUncheckedUpdateInput = {},
+  maxShiftMs?: number,
 ): Promise<{ entry: TimeEntry; capped: boolean }> {
   const totals = computeEntryTotals({
     clockIn: entry.clockIn,
     clockOut: requestedEnd,
     breaks: entry.breaks,
+    maxShiftMs,
   });
   const end = totals.effectiveClockOut;
 

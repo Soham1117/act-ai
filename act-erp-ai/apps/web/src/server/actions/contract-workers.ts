@@ -15,6 +15,7 @@ import {
   type ContractAssignmentOffers,
 } from "@/lib/contract-workers";
 import {
+  ADMIN_MAX_SHIFT_MS,
   BUSINESS_TZ,
   breakMinutes,
   businessLocalToDate,
@@ -789,7 +790,12 @@ export async function adminEditContractTimeEntry(
       }
 
       const breaks = entry.breaks.map((b) => ({ startTime: b.startTime, endTime: b.endTime }));
-      const timeErr = validateEntryTimes({ clockIn: ci.date, clockOut, breaks });
+      const timeErr = validateEntryTimes({
+        clockIn: ci.date,
+        clockOut,
+        breaks,
+        maxShiftMs: ADMIN_MAX_SHIFT_MS,
+      });
       if (timeErr) return { error: timeErr };
 
       // Open shifts with no clock-out still occupy time through "now" for overlap.
@@ -837,6 +843,7 @@ export async function adminEditContractTimeEntry(
         clockIn: ci.date,
         clockOut: clockOut!,
         breaks: nextBreaks,
+        maxShiftMs: ADMIN_MAX_SHIFT_MS,
       });
       const updated = await tx.contractTimeEntry.update({
         where: { id: entry.id },
@@ -927,6 +934,7 @@ export async function adminCreateManualContractTimeEntry(
       clockIn: ci.date,
       clockOut: co.date,
       breaks,
+      maxShiftMs: ADMIN_MAX_SHIFT_MS,
     });
     if (timeErr) return fail(timeErr);
 
@@ -934,6 +942,7 @@ export async function adminCreateManualContractTimeEntry(
       clockIn: ci.date,
       clockOut: co.date,
       breaks,
+      maxShiftMs: ADMIN_MAX_SHIFT_MS,
     });
     const entryDate = businessDateOnly(ci.date);
     const offers = acceptedOffers(data.offers);
