@@ -9,3 +9,13 @@ node_modules
 .env.*
 !.env.*.example
 *.log
+
+# Not needed to build or run (keeps the build context small)
+.foreman
+e2e
+playwright-report
+test-results
+coverage
+*.test.ts
+*.test.tsx
+*.md
