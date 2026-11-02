@@ -379,12 +379,14 @@ export type ContractPunch = {
   jobCode: string;
   workerJobCode: string | null;
   hasPhotoIn: boolean;
+  /** Photos only exist for kiosk punches; hand-entered hours never have one. */
+  viaKiosk: boolean;
 };
 export function evaluateContractEntries(entries: ContractPunch[], weekOf: (date: string) => string): FindingDraft[] {
   const out: FindingDraft[] = [];
   const noPhoto = new Map<string, { e: ContractPunch; count: number }>();
   for (const e of entries) {
-    if (!e.hasPhotoIn) {
+    if (e.viaKiosk && !e.hasPhotoIn) {
       const key = `${e.workerId}:${weekOf(e.date)}`;
       noPhoto.set(key, { e, count: (noPhoto.get(key)?.count ?? 0) + 1 });
     }

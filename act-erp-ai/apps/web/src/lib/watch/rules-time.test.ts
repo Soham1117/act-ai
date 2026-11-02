@@ -160,11 +160,12 @@ describe("schedule variance", () => {
 });
 
 describe("contract rules", () => {
-  const base = { id: "c1", workerId: "w1", name: "Bo (contract)", date: "2026-10-28", jobCode: "PACK", workerJobCode: "PACK", hasPhotoIn: true };
+  const base = { id: "c1", workerId: "w1", name: "Bo (contract)", date: "2026-10-28", jobCode: "PACK", workerJobCode: "PACK", hasPhotoIn: true, viaKiosk: true };
   it("flags missing job code, mismatch, and missing photos", () => {
     expect(evaluateContractEntries([{ ...base, jobCode: " " }], weekOf)[0]?.fingerprint).toBe("contract.jobcode-missing:c1");
     expect(evaluateContractEntries([{ ...base, jobCode: "LOAD" }], weekOf)[0]?.fingerprint).toBe("contract.jobcode-mismatch:c1");
     expect(evaluateContractEntries([{ ...base, hasPhotoIn: false }], weekOf)[0]?.fingerprint).toContain("contract.photo-missing");
+    expect(evaluateContractEntries([{ ...base, hasPhotoIn: false, viaKiosk: false }], weekOf)).toHaveLength(0);
     expect(evaluateContractEntries([base], weekOf)).toHaveLength(0);
   });
   it("flags long tenure at the limit", () => {

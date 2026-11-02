@@ -45,7 +45,12 @@ export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: 
   let autoResolved = 0;
 
   for (const job of ALL_JOBS) {
-    if (!(await isEnabled(job.id, job.defaultEnabled ?? true))) continue;
+    if (!(await isEnabled(job.id, job.defaultEnabled ?? true))) {
+      // Switched off: clear anything it raised earlier so the list does not keep stale flags.
+      const cleared = await storeFindings(job.id, [], now);
+      autoResolved += cleared.autoResolved;
+      continue;
+    }
     try {
       const drafts = await job.run({ now, policy });
       rulesRun.push(job.id);

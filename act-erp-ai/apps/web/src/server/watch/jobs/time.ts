@@ -87,7 +87,10 @@ async function recentPunches(since: Date, extra: object = {}): Promise<PunchRow[
 
 export const TIME_JOBS: RuleJob[] = [
   {
+    // Off for now: schedules only start Nov 2 and most scheduled people still clock at the old TCP clock
+    // (55 scheduled, 11 punched on day one). Turn on once everyone punches in Persona.
     id: "time.missing-clock-in",
+    defaultEnabled: false,
     async run({ now }) {
       const today = businessToday(now);
       const shifts = await db.schedule.findMany({
@@ -291,7 +294,7 @@ export const CONTRACT_JOBS: RuleJob[] = [
       const since = new Date(businessToday(now).getTime() - 7 * DAY_MS);
       const rows = await db.contractTimeEntry.findMany({
         where: { date: { gte: since } },
-        select: { id: true, date: true, jobCode: true, clockInPhotoKey: true, contractWorker: { select: { id: true, name: true, jobCode: true } } },
+        select: { id: true, date: true, jobCode: true, clockInPhotoKey: true, kioskSlug: true, contractWorker: { select: { id: true, name: true, jobCode: true } } },
       });
       return evaluateContractEntries(
         rows.map((r) => ({
@@ -302,6 +305,7 @@ export const CONTRACT_JOBS: RuleJob[] = [
           jobCode: r.jobCode,
           workerJobCode: r.contractWorker.jobCode,
           hasPhotoIn: !!r.clockInPhotoKey,
+          viaKiosk: !!r.kioskSlug,
         })),
         weekOf,
       );
