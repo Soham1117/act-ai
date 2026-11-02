@@ -2,14 +2,25 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { HoursSubnav } from "@/components/hours-subnav";
+import {
+  HoursField,
+  HoursFilterRow,
+  HoursPresetChips,
+  HoursToolbarCard,
+  hoursRowClass,
+  hoursTableClass,
+  hoursTdClass,
+  hoursThClass,
+  hoursTheadClass,
+} from "@/components/hours-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FilterStack } from "@/components/mobile";
 import { FormDateField } from "@/components/date-field";
 import { FormSimpleSelect } from "@/components/simple-select";
 import { formatDateOnly, formatHours } from "@/lib/format";
 import { addDaysDateOnly, dateOnlyToString } from "@/lib/time-rules";
 import { loadHoursPeriodPresets, resolveHoursRange } from "@/lib/hours-period";
+import { cn } from "@/lib/utils";
 import { GroupHoursApproveBar } from "./group-hours-client";
 
 export const metadata = { title: "Group hours" };
@@ -82,86 +93,96 @@ export default async function GroupHoursPage({
       />
       <HoursSubnav />
 
-      <Card className="mb-4">
-        <CardContent className="space-y-3 p-4">
-          <form method="get" action="/admin/hours/group">
-            <FilterStack className="items-end">
-              <div className="w-full space-y-1 sm:w-auto">
-                <label className="text-xs text-muted-foreground" htmlFor="gh-from">
-                  From
-                </label>
-                <FormDateField id="gh-from" name="from" defaultValue={fromStr} aria-label="From date" />
-              </div>
-              <div className="w-full space-y-1 sm:w-auto">
-                <label className="text-xs text-muted-foreground" htmlFor="gh-to">
-                  To
-                </label>
-                <FormDateField id="gh-to" name="to" defaultValue={toStr} aria-label="To date" />
-              </div>
-              <div className="w-full space-y-1 sm:w-48">
-                <label className="text-xs text-muted-foreground" htmlFor="gh-dept">
-                  Department
-                </label>
-                <FormSimpleSelect
-                  id="gh-dept"
-                  name="dept"
-                  defaultValue={deptId}
-                  placeholder="All"
-                  options={[
-                    { value: "", label: "All" },
-                    ...departments.map((d) => ({ value: d.id, label: d.name })),
-                  ]}
-                />
-              </div>
-              <Button type="submit" size="sm">
-                Update
-              </Button>
-            </FilterStack>
-          </form>
-          <div className="flex flex-wrap gap-1.5">
-            {presets.map((p) => (
-              <Button key={p.id} asChild size="sm" variant="outline" className="h-8 text-xs">
-                <Link
-                  href={`/admin/hours/group?from=${p.from}&to=${p.to}${deptId ? `&dept=${deptId}` : ""}`}
-                >
-                  {p.label}
-                </Link>
-              </Button>
-            ))}
-          </div>
-          {allPending.length > 0 ? <GroupHoursApproveBar ids={allPending} /> : null}
-        </CardContent>
-      </Card>
+      <HoursToolbarCard className="mb-4">
+        <form method="get" action="/admin/hours/group">
+          <HoursFilterRow>
+            <HoursField label="From" htmlFor="gh-from">
+              <FormDateField
+                id="gh-from"
+                name="from"
+                defaultValue={fromStr}
+                aria-label="From date"
+              />
+            </HoursField>
+            <HoursField label="To" htmlFor="gh-to">
+              <FormDateField id="gh-to" name="to" defaultValue={toStr} aria-label="To date" />
+            </HoursField>
+            <HoursField label="Department" htmlFor="gh-dept" className="sm:w-48">
+              <FormSimpleSelect
+                id="gh-dept"
+                name="dept"
+                defaultValue={deptId}
+                placeholder="All"
+                triggerClassName="h-9"
+                options={[
+                  { value: "", label: "All" },
+                  ...departments.map((d) => ({ value: d.id, label: d.name })),
+                ]}
+              />
+            </HoursField>
+            <Button type="submit" size="sm" className="h-9 w-full sm:w-auto">
+              Update
+            </Button>
+          </HoursFilterRow>
+        </form>
+        <HoursPresetChips
+          presets={presets}
+          activeFrom={fromStr}
+          activeTo={toStr}
+          hrefFor={(p) =>
+            `/admin/hours/group?from=${p.from}&to=${p.to}${deptId ? `&dept=${deptId}` : ""}`
+          }
+        />
+        {allPending.length > 0 ? <GroupHoursApproveBar ids={allPending} /> : null}
+      </HoursToolbarCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {formatDateOnly(from)} – {formatDateOnly(to)} ({employees.length} employees)
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-border px-4 py-3">
+          <CardTitle className="text-base font-semibold">
+            {formatDateOnly(from)} – {formatDateOnly(to)}
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {employees.length} employees
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-xs">
-              <thead className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <table className={cn(hoursTableClass, "min-w-[640px] text-xs")}>
+              <thead className={hoursTheadClass}>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-muted/40 px-3 py-2 font-medium">Employee</th>
+                  <th
+                    className={cn(
+                      hoursThClass,
+                      "sticky left-0 z-10 bg-muted/50 min-w-[10rem]",
+                    )}
+                  >
+                    Employee
+                  </th>
                   {days.map((d) => (
-                    <th key={d} className="px-2 py-2 text-center font-medium whitespace-nowrap">
+                    <th
+                      key={d}
+                      className={cn(hoursThClass, "px-2 text-center whitespace-nowrap")}
+                    >
                       {d.slice(5)}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-right font-medium">Total</th>
+                  <th className={cn(hoursThClass, "text-right")}>Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody>
                 {employees.map((emp) => {
                   let rowMin = 0;
                   return (
-                    <tr key={emp.id}>
-                      <td className="sticky left-0 z-10 bg-background px-3 py-2">
+                    <tr key={emp.id} className={hoursRowClass}>
+                      <td
+                        className={cn(
+                          hoursTdClass,
+                          "sticky left-0 z-10 bg-card font-medium",
+                        )}
+                      >
                         <Link
                           href={`/admin/hours?employee=${emp.id}&from=${fromStr}&to=${toStr}`}
-                          className="font-medium hover:underline"
+                          className="hover:underline"
                         >
                           {emp.name}
                         </Link>
@@ -173,15 +194,22 @@ export default async function GroupHoursPage({
                         return (
                           <td
                             key={d}
-                            className={`px-2 py-2 text-center font-mono tabular-nums ${
-                              c?.pendingIds.length ? "bg-amber-500/10" : ""
-                            }`}
+                            className={cn(
+                              hoursTdClass,
+                              "px-2 text-center font-mono tabular-nums",
+                              c?.pendingIds.length ? "bg-amber-500/10" : "",
+                            )}
                           >
-                            {m > 0 ? formatHours(m) : "·"}
+                            {m > 0 ? formatHours(m) : "–"}
                           </td>
                         );
                       })}
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      <td
+                        className={cn(
+                          hoursTdClass,
+                          "text-right font-mono font-medium tabular-nums",
+                        )}
+                      >
                         {formatHours(rowMin)}
                       </td>
                     </tr>
@@ -191,7 +219,7 @@ export default async function GroupHoursPage({
             </table>
           </div>
           {dayCount > 31 ? (
-            <p className="border-t p-3 text-[11px] text-muted-foreground">
+            <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
               Showing first 31 days of the range. Narrow the dates for a full matrix.
             </p>
           ) : null}

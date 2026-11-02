@@ -233,7 +233,7 @@ export default async function AdminHomePage() {
           </CardHeader>
           <CardContent className="space-y-1 text-xs">
             {widgets.approachingOt.length === 0 ? (
-              <p className="text-muted-foreground">Nobody near 40h this week.</p>
+              <p className="text-muted-foreground">Nobody between 35h and 40h this week.</p>
             ) : (
               widgets.approachingOt.slice(0, 5).map((a) => (
                 <Link

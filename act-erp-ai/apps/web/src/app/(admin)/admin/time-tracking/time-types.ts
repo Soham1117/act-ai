@@ -31,3 +31,8 @@ export type JobCodeOption = { code: string; title: string };
 export type EmployeeOption = { id: string; name: string; employeeId: string };
 
 export const MAX_SHIFT_HOURS = 16;
+
+/** PanelSlot / PanelSlotRow id for EntryActions edit / force-clock-out forms. */
+export function entryPanelSlotId(entryId: string) {
+  return `entry-${entryId}`;
+}

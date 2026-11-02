@@ -10,12 +10,12 @@ export function GroupHoursApproveBar({ ids }: { ids: string[] }) {
   const router = useRouter();
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm">
       <span className="text-amber-800 dark:text-amber-300">
         {ids.length} pending entr{ids.length === 1 ? "y" : "ies"} in this view
       </span>
       <LoadingButton
-        className="h-8 border-transparent bg-primary text-primary-foreground"
+        className="h-8 shrink-0 border-transparent bg-primary text-primary-foreground"
         disabled={ids.length === 0}
         pendingLabel="Approving…"
         successLabel="Approved"

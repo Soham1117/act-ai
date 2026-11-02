@@ -109,8 +109,13 @@ export async function loadHoursWidgetPack(): Promise<HoursWidgetPack> {
     weekMin.set(e.employeeId, cur);
   }
   const openSet = new Set(openEntries.map((e) => e.employeeId));
+  /** Warn band: 35h–40h inclusive. Over 40h belongs only in recentOt. */
+  const APPROACHING_OT_FLOOR_MIN = OVERTIME_THRESHOLD_MIN - 5 * 60;
   const approachingOt = [...weekMin.entries()]
-    .filter(([, v]) => v.minutes >= OVERTIME_THRESHOLD_MIN - 120)
+    .filter(
+      ([, v]) =>
+        v.minutes >= APPROACHING_OT_FLOOR_MIN && v.minutes <= OVERTIME_THRESHOLD_MIN,
+    )
     .map(([id, v]) => ({
       id,
       name: v.name,
@@ -154,13 +159,14 @@ export async function loadHoursWidgetPack(): Promise<HoursWidgetPack> {
     }
   }
 
-  const recentOt = approachingOt
-    .filter((a) => a.weekMin > OVERTIME_THRESHOLD_MIN)
+  const recentOt = [...weekMin.entries()]
+    .filter(([, v]) => v.minutes > OVERTIME_THRESHOLD_MIN)
+    .sort((a, b) => b[1].minutes - a[1].minutes)
     .slice(0, 12)
-    .map((a) => ({
-      name: a.name,
+    .map(([, v]) => ({
+      name: v.name,
       date: dateOnlyToString(weekStart),
-      minutes: a.weekMin - OVERTIME_THRESHOLD_MIN,
+      minutes: v.minutes - OVERTIME_THRESHOLD_MIN,
     }));
 
   return {

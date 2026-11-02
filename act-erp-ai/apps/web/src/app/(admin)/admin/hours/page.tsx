@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { effectiveRate } from "@/lib/time-rate";
 import Image from "next/image";
 import Link from "next/link";
@@ -5,11 +6,24 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { HoursSubnav } from "@/components/hours-subnav";
+import {
+  HoursField,
+  HoursFilterRow,
+  HoursPresetChips,
+  HoursStat,
+  HoursStatRow,
+  HoursToolbarCard,
+  hoursRowClass,
+  hoursTableClass,
+  hoursTdClass,
+  hoursThClass,
+  hoursTheadClass,
+} from "@/components/hours-ui";
+import { PanelSlotRow } from "@/components/inline-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FilterStack } from "@/components/mobile";
 import { FormDateField } from "@/components/date-field";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatBusinessTime, formatDateOnly, formatHours, getAvatarUrl } from "@/lib/format";
@@ -17,7 +31,7 @@ import { dateOnlyToString } from "@/lib/time-rules";
 import { allocateWeeklyOvertime } from "@/lib/payroll-overtime";
 import { loadHoursPeriodPresets, resolveHoursRange } from "@/lib/hours-period";
 import { EntryActions, ManualEntryButton } from "../time-tracking/time-tools";
-import type { EntryRowData } from "../time-tracking/time-types";
+import { entryPanelSlotId, type EntryRowData } from "../time-tracking/time-types";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Individual hours" };
@@ -166,37 +180,37 @@ export default async function IndividualHoursPage({
       />
       <HoursSubnav />
 
-      <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <Card className="h-fit lg:sticky lg:top-16">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Employees</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 p-3 pt-0">
-            <form method="get" action="/admin/hours">
+      <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <Card className="h-fit overflow-hidden lg:sticky lg:top-16">
+          <CardHeader className="space-y-3 border-b border-border p-3">
+            <CardTitle className="text-sm font-semibold">Employees</CardTitle>
+            <form method="get" action="/admin/hours" className="flex gap-2">
               <input type="hidden" name="from" value={fromStr} />
               <input type="hidden" name="to" value={toStr} />
               <Input
                 name="q"
                 defaultValue={q}
-                placeholder="Search"
-                className="mb-2 h-9"
+                placeholder="Search…"
+                className="h-9 min-w-0 flex-1"
                 aria-label="Search employees"
               />
-              <Button type="submit" size="sm" variant="secondary" className="mb-2 w-full">
-                Search
+              <Button type="submit" size="sm" variant="secondary" className="h-9 shrink-0 px-3">
+                Go
               </Button>
             </form>
+          </CardHeader>
+          <CardContent className="p-0">
             <Link
               href={href({})}
               className={cn(
-                "block rounded-md px-2 py-1.5 text-sm",
-                !employeeId ? "bg-sidebar-accent font-medium" : "hover:bg-muted",
+                "block border-b border-border px-3 py-2 text-sm",
+                !employeeId ? "bg-muted font-medium" : "hover:bg-muted/50",
               )}
             >
               All employees
             </Link>
-            <ScrollArea className="h-[50vh]">
-              <ul className="space-y-0.5 pr-2">
+            <ScrollArea className="h-[min(50vh,28rem)]">
+              <ul className="py-1">
                 {employees
                   .filter(
                     (e) =>
@@ -211,14 +225,14 @@ export default async function IndividualHoursPage({
                       <Link
                         href={href({ employee: e.id })}
                         className={cn(
-                          "block rounded-md px-2 py-1.5 text-sm",
+                          "block px-3 py-2 text-sm",
                           employeeId === e.id
-                            ? "bg-sidebar-accent font-medium"
-                            : "hover:bg-muted",
+                            ? "bg-muted font-medium"
+                            : "hover:bg-muted/50",
                         )}
                       >
-                        <span className="block truncate">{e.name}</span>
-                        <span className="block truncate text-[10px] text-muted-foreground">
+                        <span className="block truncate leading-snug">{e.name}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                           {e.exportCode ?? e.employeeId}
                           {e.tcpNumber ? ` · TCP ${e.tcpNumber}` : ""}
                           {e.employmentStatus === "TERMINATED" ? " · former" : e.employmentStatus === "INACTIVE" ? " · inactive" : ""}
@@ -232,171 +246,178 @@ export default async function IndividualHoursPage({
         </Card>
 
         <div className="min-w-0 space-y-4">
-          <Card>
-            <CardContent className="space-y-3 p-4">
-              <form method="get" action="/admin/hours">
-                {employeeId ? <input type="hidden" name="employee" value={employeeId} /> : null}
-                <FilterStack className="items-end">
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label className="text-xs text-muted-foreground" htmlFor="ih-from">
-                      From
-                    </label>
-                    <FormDateField
-                      id="ih-from"
-                      name="from"
-                      defaultValue={fromStr}
-                      aria-label="From date"
-                    />
-                  </div>
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label className="text-xs text-muted-foreground" htmlFor="ih-to">
-                      To
-                    </label>
-                    <FormDateField
-                      id="ih-to"
-                      name="to"
-                      defaultValue={toStr}
-                      aria-label="To date"
-                    />
-                  </div>
-                  <Button type="submit" size="sm" className="w-full sm:w-auto">
-                    Update
-                  </Button>
-                </FilterStack>
-              </form>
-              <div className="flex flex-wrap gap-1.5">
-                {presets.map((p) => (
-                  <Button key={p.id} asChild size="sm" variant="outline" className="h-8 text-xs">
-                    <Link
-                      href={`/admin/hours?from=${p.from}&to=${p.to}${employeeId ? `&employee=${employeeId}` : ""}`}
-                    >
-                      {p.label}
-                    </Link>
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <HoursToolbarCard>
+            <form method="get" action="/admin/hours">
+              {employeeId ? <input type="hidden" name="employee" value={employeeId} /> : null}
+              <HoursFilterRow>
+                <HoursField label="From" htmlFor="ih-from">
+                  <FormDateField
+                    id="ih-from"
+                    name="from"
+                    defaultValue={fromStr}
+                    aria-label="From date"
+                  />
+                </HoursField>
+                <HoursField label="To" htmlFor="ih-to">
+                  <FormDateField
+                    id="ih-to"
+                    name="to"
+                    defaultValue={toStr}
+                    aria-label="To date"
+                  />
+                </HoursField>
+                <Button type="submit" size="sm" className="h-9 w-full sm:w-auto">
+                  Update
+                </Button>
+              </HoursFilterRow>
+            </form>
+            <HoursPresetChips
+              presets={presets}
+              activeFrom={fromStr}
+              activeTo={toStr}
+              hrefFor={(p) =>
+                `/admin/hours?from=${p.from}&to=${p.to}${employeeId ? `&employee=${employeeId}` : ""}`
+              }
+            />
+          </HoursToolbarCard>
 
-          <div className="grid gap-3 sm:grid-cols-4">
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[11px] text-muted-foreground">Regular</p>
-                <p className="font-mono text-lg tabular-nums">{formatHours(ot.regularMin)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[11px] text-muted-foreground">OT1</p>
-                <p className="font-mono text-lg tabular-nums">{formatHours(ot.overtimeMin)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[11px] text-muted-foreground">Total</p>
-                <p className="font-mono text-lg tabular-nums">
-                  {formatHours(ot.regularMin + ot.overtimeMin)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[11px] text-muted-foreground">Scope</p>
-                <p className="truncate text-sm font-medium">
+          <HoursStatRow>
+            <HoursStat label="Regular" value={formatHours(ot.regularMin)} />
+            <HoursStat label="OT" value={formatHours(ot.overtimeMin)} />
+            <HoursStat
+              label="Total"
+              value={formatHours(ot.regularMin + ot.overtimeMin)}
+            />
+            <HoursStat
+              label="Scope"
+              value={
+                <span className="block truncate font-sans text-sm font-semibold">
                   {selected?.name ?? "All employees"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+                </span>
+              }
+            />
+          </HoursStatRow>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Entries ({formatDateOnly(from)} – {formatDateOnly(to)})
+          <Card className="overflow-hidden">
+            <CardHeader className="border-b border-border px-4 py-3">
+              <CardTitle className="text-base font-semibold">
+                Entries
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  {formatDateOnly(from)} – {formatDateOnly(to)}
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {rows.length === 0 ? (
-                <p className="py-8 text-center text-xs text-muted-foreground">No entries in range.</p>
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  No entries in range.
+                </p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left text-sm">
-                    <thead className="border-b bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <table className={cn(hoursTableClass, "min-w-[720px]")}>
+                    <thead className={hoursTheadClass}>
                       <tr>
-                        <th className="px-3 py-2 font-medium">Date</th>
-                        {!employeeId && <th className="px-3 py-2 font-medium">Employee</th>}
-                        <th className="px-3 py-2 font-medium">In</th>
-                        <th className="px-3 py-2 font-medium">Out</th>
-                        <th className="px-3 py-2 font-medium">Break</th>
-                        <th className="px-3 py-2 font-medium">Hours</th>
-                        <th className="px-3 py-2 font-medium">Job</th>
-                        <th className="px-3 py-2 font-medium">Rate</th>
-                        <th className="px-3 py-2 font-medium">Status</th>
-                        <th className="px-3 py-2 font-medium"> </th>
+                        <th className={hoursThClass}>Date</th>
+                        {!employeeId && <th className={hoursThClass}>Employee</th>}
+                        <th className={hoursThClass}>In</th>
+                        <th className={hoursThClass}>Out</th>
+                        <th className={cn(hoursThClass, "text-right")}>Break</th>
+                        <th className={cn(hoursThClass, "text-right")}>Hours</th>
+                        <th className={hoursThClass}>Job</th>
+                        <th className={cn(hoursThClass, "text-right")}>Rate</th>
+                        <th className={hoursThClass}>Status</th>
+                        <th className={cn(hoursThClass, "w-10 text-right")}>
+                          <span className="sr-only">Actions</span>
+                        </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody>
                       {rows.map((e) => (
-                        <tr key={e.id} className="align-top">
-                          <td className="px-3 py-2 whitespace-nowrap">{formatDateOnly(e.date)}</td>
-                          {!employeeId && (
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full bg-muted">
-                                  <Image
-                                    src={e.avatar}
-                                    alt=""
-                                    fill
-                                    sizes="28px"
-                                    className="object-cover"
-                                    unoptimized
-                                  />
-                                </span>
-                                <span className="min-w-0 truncate">{e.employeeName}</span>
+                        <Fragment key={e.id}>
+                          <tr className={hoursRowClass}>
+                            <td className={cn(hoursTdClass, "whitespace-nowrap")}>
+                              {formatDateOnly(e.date)}
+                            </td>
+                            {!employeeId && (
+                              <td className={hoursTdClass}>
+                                <div className="flex items-center gap-2.5">
+                                  <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full bg-muted">
+                                    <Image
+                                      src={e.avatar}
+                                      alt=""
+                                      fill
+                                      sizes="28px"
+                                      className="object-cover"
+                                      unoptimized
+                                    />
+                                  </span>
+                                  <span className="min-w-0 truncate font-medium">
+                                    {e.employeeName}
+                                  </span>
+                                </div>
+                              </td>
+                            )}
+                            <td className={cn(hoursTdClass, "font-mono text-xs whitespace-nowrap")}>
+                              {formatBusinessTime(e.clockIn)}
+                            </td>
+                            <td className={cn(hoursTdClass, "font-mono text-xs whitespace-nowrap")}>
+                              {e.clockOut ? formatBusinessTime(e.clockOut) : "—"}
+                            </td>
+                            <td
+                              className={cn(
+                                hoursTdClass,
+                                "text-right font-mono text-xs tabular-nums",
+                              )}
+                            >
+                              {formatHours(e.totalBreakMin)}
+                            </td>
+                            <td
+                              className={cn(
+                                hoursTdClass,
+                                "text-right font-mono text-xs tabular-nums",
+                              )}
+                            >
+                              {formatHours(e.totalWorkMin)}
+                            </td>
+                            <td className={cn(hoursTdClass, "font-mono text-xs")}>{e.jobCode}</td>
+                            <td
+                              className={cn(
+                                hoursTdClass,
+                                "text-right font-mono text-xs tabular-nums",
+                              )}
+                            >
+                              {e.rate != null ? `$${e.rate.toFixed(2)}` : "—"}
+                            </td>
+                            <td className={hoursTdClass}>
+                              <div className="flex flex-col items-start gap-0.5">
+                                <Badge
+                                  variant={
+                                    e.approvalStatus === "APPROVED"
+                                      ? "success"
+                                      : e.approvalStatus === "REJECTED"
+                                        ? "destructive"
+                                        : "warning"
+                                  }
+                                  className="text-[10px]"
+                                >
+                                  {e.status === "ACTIVE" || e.status === "ON_BREAK"
+                                    ? "Open"
+                                    : e.approvalStatus}
+                                </Badge>
+                                {e.editReason ? (
+                                  <span className="text-[10px] text-muted-foreground">Edited</span>
+                                ) : null}
                               </div>
                             </td>
-                          )}
-                          <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
-                            {formatBusinessTime(e.clockIn)}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
-                            {e.clockOut ? formatBusinessTime(e.clockOut) : "—"}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs">
-                            {formatHours(e.totalBreakMin)}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs tabular-nums">
-                            {formatHours(e.totalWorkMin)}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs">{e.jobCode}</td>
-                          <td className="px-3 py-2 font-mono text-xs tabular-nums">
-                            {e.rate != null ? `$${e.rate.toFixed(2)}` : "—"}
-                          </td>
-                          <td className="px-3 py-2">
-                            <Badge
-                              variant={
-                                e.approvalStatus === "APPROVED"
-                                  ? "success"
-                                  : e.approvalStatus === "REJECTED"
-                                    ? "destructive"
-                                    : "warning"
-                              }
-                              className="text-[10px]"
-                            >
-                              {e.status === "ACTIVE" || e.status === "ON_BREAK"
-                                ? "Open"
-                                : e.approvalStatus}
-                            </Badge>
-                            {e.editReason ? (
-                              <span className="mt-1 block text-[10px] text-muted-foreground">
-                                Edited
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2">
-                            <EntryActions entry={e} jobCodes={jobCodes} compact />
-                          </td>
-                        </tr>
+                            <td className={cn(hoursTdClass, "text-right")}>
+                              <EntryActions entry={e} jobCodes={jobCodes} compact />
+                            </td>
+                          </tr>
+                          <PanelSlotRow
+                            id={entryPanelSlotId(e.id)}
+                            colSpan={employeeId ? 9 : 10}
+                          />
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>

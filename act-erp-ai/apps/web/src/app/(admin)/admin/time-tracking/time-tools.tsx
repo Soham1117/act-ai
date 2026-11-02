@@ -24,6 +24,7 @@ import {
   InlinePanelFooter,
   InlinePanelHeader,
   InlinePanelTitle,
+  PanelSlot,
 } from "@/components/inline-panel";
 import { InlineConfirmAction } from "@/components/inline-confirm-action";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,12 @@ import {
 } from "@/server/actions/time-admin";
 import { bulkReviewTimeEntries, reviewTimeEntry } from "@/server/actions/time-clock";
 import { PunchPhotos } from "@/components/punch-photos";
-import type { EmployeeOption, EntryRowData, JobCodeOption } from "./time-types";
+import {
+  entryPanelSlotId,
+  type EmployeeOption,
+  type EntryRowData,
+  type JobCodeOption,
+} from "./time-types";
 
 const selectClass =
   "flex h-9 w-full min-h-11 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 md:min-h-9";
@@ -139,10 +145,12 @@ function EditEntryPanel({
   entry,
   jobCodes,
   onClose,
+  panelSlot,
 }: {
   entry: EntryRowData;
   jobCodes: JobCodeOption[];
   onClose: () => void;
+  panelSlot: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -205,7 +213,7 @@ function EditEntryPanel({
 
   return (
     <InlinePanel open onOpenChange={(o) => !o && onClose()}>
-      <InlinePanelContent className="my-2">
+      <InlinePanelContent panelSlot={panelSlot} className="my-2">
         <InlinePanelHeader>
           <InlinePanelTitle>Edit time entry</InlinePanelTitle>
           <InlinePanelDescription>
@@ -314,9 +322,11 @@ function EditEntryPanel({
 function ForceClockOutPanel({
   entry,
   onClose,
+  panelSlot,
 }: {
   entry: EntryRowData;
   onClose: () => void;
+  panelSlot: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -339,7 +349,7 @@ function ForceClockOutPanel({
 
   return (
     <InlinePanel open onOpenChange={(o) => !o && onClose()}>
-      <InlinePanelContent className="my-2">
+      <InlinePanelContent panelSlot={panelSlot} className="my-2">
         <InlinePanelHeader>
           <InlinePanelTitle>Force clock-out</InlinePanelTitle>
           <InlinePanelDescription>
@@ -385,7 +395,9 @@ function ForceClockOutPanel({
   );
 }
 
-/** Edit (+ force clock-out for open shifts) buttons for one entry row. */
+/** Edit (+ force clock-out for open shifts) buttons for one entry row.
+ *  Call sites must render a PanelSlot / PanelSlotRow with id entryPanelSlotId(entry.id)
+ *  or the form collapses into the actions cell. */
 export function EntryActions({
   entry,
   jobCodes,
@@ -397,6 +409,7 @@ export function EntryActions({
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
+  const panelSlot = entryPanelSlotId(entry.id);
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1">
       {isOpen(entry) && (
@@ -404,7 +417,10 @@ export function EntryActions({
           size="sm"
           variant="outline"
           className="h-8 gap-1 text-xs min-h-11 md:min-h-8"
-          onClick={() => setForceOpen(true)}
+          onClick={() => {
+            setEditOpen(false);
+            setForceOpen(true);
+          }}
         >
           <Square className="h-3 w-3" />
           {compact ? "" : "Force clock-out"}
@@ -415,16 +431,28 @@ export function EntryActions({
         variant="outline"
         className="h-8 gap-1 text-xs min-h-11 md:min-h-8"
         aria-label={`Edit time entry for ${entry.employeeName}`}
-        onClick={() => setEditOpen(true)}
+        onClick={() => {
+          setForceOpen(false);
+          setEditOpen(true);
+        }}
       >
         <PenLine className="h-3 w-3" />
         {compact ? "" : "Edit"}
       </Button>
       {editOpen && (
-        <EditEntryPanel entry={entry} jobCodes={jobCodes} onClose={() => setEditOpen(false)} />
+        <EditEntryPanel
+          entry={entry}
+          jobCodes={jobCodes}
+          panelSlot={panelSlot}
+          onClose={() => setEditOpen(false)}
+        />
       )}
       {forceOpen && (
-        <ForceClockOutPanel entry={entry} onClose={() => setForceOpen(false)} />
+        <ForceClockOutPanel
+          entry={entry}
+          panelSlot={panelSlot}
+          onClose={() => setForceOpen(false)}
+        />
       )}
     </div>
   );
@@ -841,6 +869,7 @@ export function PendingQueue({
               <EntryActions entry={e} jobCodes={jobCodes} compact />
               <RowReview entry={e} />
             </div>
+            <PanelSlot id={entryPanelSlotId(e.id)} className="w-full basis-full" />
           </li>
         ))}
       </ul>

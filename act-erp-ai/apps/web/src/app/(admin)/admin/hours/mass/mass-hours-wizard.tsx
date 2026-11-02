@@ -113,36 +113,46 @@ export function MassHoursWizard({
           label: "Select employees",
           content: (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {selected.size} selected
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{selected.size}</span> selected
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => setSelected(new Set(filtered.map((e) => e.id)))}
+                  >
+                    Select filtered
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8"
+                    onClick={() => setSelected(new Set())}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Filter by name, ID, export code, department"
-                className="h-10"
+                className="h-9"
               />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSelected(new Set(filtered.map((e) => e.id)))}
-                >
-                  Select filtered
-                </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-                  Clear
-                </Button>
-              </div>
-              <ul className="max-h-[20rem] divide-y overflow-y-auto rounded-md border">
+              <ul className="max-h-[20rem] divide-y overflow-y-auto rounded-md border border-border">
                 {filtered.map((e) => {
                   const on = selected.has(e.id);
                   return (
-                    <li key={e.id}>
-                      <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm">
+                    <li key={e.id} className={on ? "bg-muted/40" : undefined}>
+                      <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2.5 text-sm hover:bg-muted/50">
                         <input
                           type="checkbox"
+                          className="size-4 shrink-0"
                           checked={on}
                           onChange={() => {
                             setSelected((prev) => {
@@ -154,8 +164,8 @@ export function MassHoursWizard({
                           }}
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="block font-medium">{e.name}</span>
-                          <span className="block text-[11px] text-muted-foreground">
+                          <span className="block font-medium leading-snug">{e.name}</span>
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground">
                             {e.exportCode ?? e.employeeId}
                             {e.department ? ` · ${e.department}` : ""}
                           </span>
@@ -172,9 +182,14 @@ export function MassHoursWizard({
           id: "shift",
           label: "Shift details",
           content: (
-            <div className="grid max-w-lg gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="mh-date">Date</Label>
+            <div className="grid max-w-lg gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label
+                  htmlFor="mh-date"
+                  className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  Date
+                </Label>
                 <DateField
                   id="mh-date"
                   value={date}
@@ -184,33 +199,51 @@ export function MassHoursWizard({
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="mh-in">Clock in</Label>
+                <div className="flex flex-col gap-1.5">
+                  <Label
+                    htmlFor="mh-in"
+                    className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                  >
+                    Clock in
+                  </Label>
                   <Input
                     id="mh-in"
                     type="time"
+                    className="h-9"
                     value={clockInTime}
                     onChange={(e) => setClockInTime(e.target.value)}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="mh-out">Clock out</Label>
+                <div className="flex flex-col gap-1.5">
+                  <Label
+                    htmlFor="mh-out"
+                    className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                  >
+                    Clock out
+                  </Label>
                   <Input
                     id="mh-out"
                     type="time"
+                    className="h-9"
                     value={clockOutTime}
                     onChange={(e) => setClockOutTime(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="mh-break">Unpaid break (minutes)</Label>
+              <div className="flex flex-col gap-1.5">
+                <Label
+                  htmlFor="mh-break"
+                  className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  Unpaid break (minutes)
+                </Label>
                 <Input
                   id="mh-break"
                   type="number"
                   min={0}
                   max={240}
                   step={5}
+                  className="h-9"
                   value={breakMin}
                   onChange={(e) =>
                     setBreakMin(Math.max(0, Math.min(240, Math.round(Number(e.target.value) || 0))))

@@ -2,12 +2,25 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { HoursSubnav } from "@/components/hours-subnav";
+import {
+  HoursField,
+  HoursFilterRow,
+  HoursPresetChips,
+  HoursToolbarCard,
+  hoursRowClass,
+  hoursTableClass,
+  hoursTdClass,
+  hoursThClass,
+  hoursTheadClass,
+} from "@/components/hours-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { FormDateField } from "@/components/date-field";
 import { formatDateOnly, formatHours } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
 import { allocateWeeklyOvertime } from "@/lib/payroll-overtime";
 import { loadHoursPeriodPresets, resolveHoursRange } from "@/lib/hours-period";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Time sheets" };
 
@@ -80,80 +93,129 @@ export default async function TimeSheetsPage({
       />
       <HoursSubnav />
 
-      <Card className="mb-4 print:hidden">
-        <CardContent className="flex flex-wrap gap-2 p-4">
-          {presets.map((p) => (
-            <Button key={p.id} asChild size="sm" variant="outline">
-              <Link href={`/admin/hours/timesheets?from=${p.from}&to=${p.to}`}>{p.label}</Link>
+      <HoursToolbarCard className="mb-4 print:hidden">
+        <form method="get" action="/admin/hours/timesheets">
+          <HoursFilterRow>
+            <HoursField label="From" htmlFor="ts-from">
+              <FormDateField
+                id="ts-from"
+                name="from"
+                defaultValue={fromStr}
+                aria-label="From date"
+              />
+            </HoursField>
+            <HoursField label="To" htmlFor="ts-to">
+              <FormDateField id="ts-to" name="to" defaultValue={toStr} aria-label="To date" />
+            </HoursField>
+            <Button type="submit" size="sm" className="h-9 w-full sm:w-auto">
+              Update
             </Button>
-          ))}
-          <Button asChild size="sm">
-            <Link href={`/admin/hours/period-export?from=${fromStr}&to=${toStr}`}>
-              Export CSV
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
+            <Button asChild size="sm" variant="secondary" className="h-9 w-full sm:w-auto">
+              <Link href={`/admin/hours/period-export?from=${fromStr}&to=${toStr}`}>
+                Export CSV
+              </Link>
+            </Button>
+          </HoursFilterRow>
+        </form>
+        <HoursPresetChips
+          presets={presets}
+          activeFrom={fromStr}
+          activeTo={toStr}
+          hrefFor={(p) => `/admin/hours/timesheets?from=${p.from}&to=${p.to}`}
+        />
+      </HoursToolbarCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Time sheets · {formatDateOnly(from)} – {formatDateOnly(to)}
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-border px-4 py-3">
+          <CardTitle className="text-base font-semibold">
+            Time sheets
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {formatDateOnly(from)} – {formatDateOnly(to)}
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium">Employee</th>
-                <th className="px-3 py-2 text-right font-medium">Days</th>
-                <th className="px-3 py-2 text-right font-medium">Regular</th>
-                <th className="px-3 py-2 text-right font-medium">OT</th>
-                <th className="px-3 py-2 text-right font-medium">Total</th>
-                <th className="px-3 py-2 print:hidden"> </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {sheets.length === 0 ? (
+          <div className="overflow-x-auto">
+            <table className={hoursTableClass}>
+              <thead className={hoursTheadClass}>
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-xs text-muted-foreground">
-                    No hours in this range.
-                  </td>
+                  <th className={hoursThClass}>Employee</th>
+                  <th className={cn(hoursThClass, "text-right")}>Days</th>
+                  <th className={cn(hoursThClass, "text-right")}>Regular</th>
+                  <th className={cn(hoursThClass, "text-right")}>OT</th>
+                  <th className={cn(hoursThClass, "text-right")}>Total</th>
+                  <th className={cn(hoursThClass, "print:hidden")}>
+                    <span className="sr-only">Detail</span>
+                  </th>
                 </tr>
-              ) : (
-                sheets.map((s) =>
-                  s ? (
-                    <tr key={s.emp.id}>
-                      <td className="px-3 py-2">
-                        <div className="font-medium">{s.emp.name}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {s.emp.exportCode ?? s.emp.employeeId}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">{s.days}</td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
-                        {formatHours(s.regularMin)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
-                        {formatHours(s.otMin)}
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
-                        {formatHours(s.totalMin)}
-                      </td>
-                      <td className="px-3 py-2 print:hidden">
-                        <Link
-                          href={`/admin/hours?employee=${s.emp.id}&from=${fromStr}&to=${toStr}`}
-                          className="text-xs underline"
+              </thead>
+              <tbody>
+                {sheets.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-3 py-10 text-center text-sm text-muted-foreground"
+                    >
+                      No hours in this range.
+                    </td>
+                  </tr>
+                ) : (
+                  sheets.map((s) =>
+                    s ? (
+                      <tr key={s.emp.id} className={hoursRowClass}>
+                        <td className={hoursTdClass}>
+                          <div className="font-medium leading-snug">{s.emp.name}</div>
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            {s.emp.exportCode ?? s.emp.employeeId}
+                          </div>
+                        </td>
+                        <td
+                          className={cn(
+                            hoursTdClass,
+                            "text-right font-mono tabular-nums",
+                          )}
                         >
-                          Detail
-                        </Link>
-                      </td>
-                    </tr>
-                  ) : null,
-                )
-              )}
-            </tbody>
-          </table>
+                          {s.days}
+                        </td>
+                        <td
+                          className={cn(
+                            hoursTdClass,
+                            "text-right font-mono tabular-nums",
+                          )}
+                        >
+                          {formatHours(s.regularMin)}
+                        </td>
+                        <td
+                          className={cn(
+                            hoursTdClass,
+                            "text-right font-mono tabular-nums",
+                          )}
+                        >
+                          {formatHours(s.otMin)}
+                        </td>
+                        <td
+                          className={cn(
+                            hoursTdClass,
+                            "text-right font-mono font-medium tabular-nums",
+                          )}
+                        >
+                          {formatHours(s.totalMin)}
+                        </td>
+                        <td className={cn(hoursTdClass, "print:hidden")}>
+                          <Link
+                            href={`/admin/hours?employee=${s.emp.id}&from=${fromStr}&to=${toStr}`}
+                            className="text-xs font-medium text-primary hover:underline"
+                          >
+                            Detail
+                          </Link>
+                        </td>
+                      </tr>
+                    ) : null,
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
     </>

@@ -51,17 +51,17 @@ export function HoursSubnav() {
   return (
     <nav
       aria-label="Hours sections"
-      className="mb-3 flex min-w-0 gap-1 overflow-x-auto border-b border-border pb-px xl:hidden"
+      className="mb-4 flex min-w-0 gap-1 overflow-x-auto border-b border-border pb-px xl:hidden"
     >
       {LINKS.map((link) => (
         <Link
           key={link.href}
           href={link.href}
           className={cn(
-            "shrink-0 rounded-t-md px-3 py-1.5 text-sm whitespace-nowrap",
+            "shrink-0 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
             isActive(link)
-              ? "border-b-2 border-primary font-medium text-foreground"
-              : "text-muted-foreground hover:text-foreground",
+              ? "border-primary font-medium text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
           {link.label}

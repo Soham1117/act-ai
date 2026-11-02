@@ -3,16 +3,13 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Prisma, TimeEntrySource } from "@prisma/client";
 import { db } from "@/lib/db";
-import { PageHeader, StatCard } from "@/components/page-header";
+import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Activity,
-  AlertTriangle,
-  Clock,
   Globe,
   MonitorSmartphone,
   PenLine,
@@ -34,10 +31,19 @@ import {
   startOfBusinessWeek,
 } from "@/lib/time-rules";
 import { PunchPhotos } from "@/components/punch-photos";
-import { FilterStack, MobileTabsList } from "@/components/mobile";
+import { MobileTabsList } from "@/components/mobile";
 import { HoursSubnav } from "@/components/hours-subnav";
+import {
+  HoursField,
+  HoursFilterRow,
+  HoursStat,
+  HoursStatRow,
+  HoursToolbarCard,
+} from "@/components/hours-ui";
+import { FormDateField } from "@/components/date-field";
+import { PanelSlot } from "@/components/inline-panel";
 import { EntryActions, ManualEntryButton, PendingQueue } from "./time-tools";
-import type { EntryRowData } from "./time-types";
+import { entryPanelSlotId, type EntryRowData } from "./time-types";
 
 export const metadata = { title: "Hours approvals" };
 
@@ -284,30 +290,17 @@ export default async function AdminTimeTrackingPage({
         }
       />
       <HoursSubnav />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Clocked in now"
-          value={live.length}
-          icon={<Activity className="h-4 w-4 text-primary" />}
-        />
-        <StatCard
-          label="Needs attention"
-          value={attentionCount}
-          icon={<AlertTriangle className="h-4 w-4 text-destructive" />}
-        />
-        <StatCard
-          label="Pending approval"
-          value={pendingCount}
-          icon={<Clock className="h-4 w-4" />}
-        />
-        <StatCard
+      <HoursStatRow>
+        <HoursStat label="Clocked in now" value={live.length} />
+        <HoursStat label="Needs attention" value={attentionCount} />
+        <HoursStat label="Pending approval" value={pendingCount} />
+        <HoursStat
           label="Hours in range"
           value={formatHours(rangeSum._sum.totalWorkMin ?? 0)}
-          icon={<Clock className="h-4 w-4" />}
         />
-      </div>
+      </HoursStatRow>
 
-      <Tabs defaultValue={defaultTab} className="mt-6 space-y-4">
+      <Tabs defaultValue={defaultTab} className="mt-4 space-y-4">
         <MobileTabsList>
           <TabsTrigger value="attention">Needs attention ({attentionCount})</TabsTrigger>
           <TabsTrigger value="pending">Pending approval ({pendingCount})</TabsTrigger>
@@ -343,6 +336,7 @@ export default async function AdminTimeTrackingPage({
                       <div className="flex shrink-0 flex-wrap gap-2 pl-12 sm:pl-0">
                         <EntryActions entry={e} jobCodes={jobCodes} />
                       </div>
+                      <PanelSlot id={entryPanelSlotId(e.id)} className="w-full basis-full" />
                     </li>
                   ))}
                 </ul>
@@ -383,31 +377,50 @@ export default async function AdminTimeTrackingPage({
         </TabsContent>
 
         <TabsContent value="entries" className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <form method="get" action="/admin/time-tracking">
-                <FilterStack className="items-end">
-                  <input type="hidden" name="tab" value="entries" />
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label className="text-xs text-muted-foreground" htmlFor="tt-from">From</label>
-                    <Input id="tt-from" type="date" name="from" defaultValue={dateOnlyToString(rangeFrom)} className="h-9 w-full sm:w-40" />
-                  </div>
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label className="text-xs text-muted-foreground" htmlFor="tt-to">To</label>
-                    <Input id="tt-to" type="date" name="to" defaultValue={dateOnlyToString(rangeTo)} className="h-9 w-full sm:w-40" />
-                  </div>
-                  <div className="w-full flex-1 space-y-1">
-                    <label className="text-xs text-muted-foreground" htmlFor="tt-q">Employee</label>
-                    <Input id="tt-q" name="q" defaultValue={q} placeholder="Search name, ID, or email" className="h-9" />
-                  </div>
-                  <Button type="submit" size="sm" className="w-full sm:w-auto">Apply</Button>
-                  <Button asChild type="button" variant="ghost" size="sm" className="w-full sm:w-auto">
-                    <Link href="/admin/time-tracking?tab=entries">Current week</Link>
-                  </Button>
-                </FilterStack>
-              </form>
-            </CardContent>
-          </Card>
+          <HoursToolbarCard>
+            <form method="get" action="/admin/time-tracking">
+              <input type="hidden" name="tab" value="entries" />
+              <HoursFilterRow>
+                <HoursField label="From" htmlFor="tt-from">
+                  <FormDateField
+                    id="tt-from"
+                    name="from"
+                    defaultValue={dateOnlyToString(rangeFrom)}
+                    aria-label="From date"
+                  />
+                </HoursField>
+                <HoursField label="To" htmlFor="tt-to">
+                  <FormDateField
+                    id="tt-to"
+                    name="to"
+                    defaultValue={dateOnlyToString(rangeTo)}
+                    aria-label="To date"
+                  />
+                </HoursField>
+                <HoursField label="Employee" htmlFor="tt-q" className="min-w-0 flex-1 sm:min-w-[14rem]">
+                  <Input
+                    id="tt-q"
+                    name="q"
+                    defaultValue={q}
+                    placeholder="Search name, ID, or email"
+                    className="h-9"
+                  />
+                </HoursField>
+                <Button type="submit" size="sm" className="h-9 w-full sm:w-auto">
+                  Apply
+                </Button>
+                <Button
+                  asChild
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 w-full sm:w-auto"
+                >
+                  <Link href="/admin/time-tracking?tab=entries">Current week</Link>
+                </Button>
+              </HoursFilterRow>
+            </form>
+          </HoursToolbarCard>
 
           <Card>
             <CardHeader>
@@ -586,6 +599,7 @@ function EntryList({
             )}
             <EntryActions entry={e} jobCodes={jobCodes} compact />
           </div>
+          <PanelSlot id={entryPanelSlotId(e.id)} className="w-full basis-full" />
         </li>
       ))}
     </ul>
@@ -599,14 +613,14 @@ function SourceBadge({
   source: TimeEntrySource;
   kioskLabel?: string | null;
 }) {
-  const cfg: Record<TimeEntrySource, { label: string; icon: React.ReactNode }> = {
+  const cfg: Record<string, { label: string; icon: React.ReactNode }> = {
     KIOSK: { label: "Kiosk", icon: <MonitorSmartphone className="h-3 w-3" /> },
     WEB: { label: "Web", icon: <Globe className="h-3 w-3" /> },
     AUTO: { label: "Auto", icon: <Sparkles className="h-3 w-3" /> },
     MANUAL: { label: "Manual", icon: <PenLine className="h-3 w-3" /> },
     TCP: { label: "TCP import", icon: <History className="h-3 w-3" /> },
   };
-  const { label, icon } = cfg[source];
+  const { label, icon } = cfg[source] ?? cfg.MANUAL!;
   const display = source === "KIOSK" && kioskLabel ? kioskLabel : label;
   return (
     <span

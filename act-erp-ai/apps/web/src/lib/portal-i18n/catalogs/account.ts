@@ -180,6 +180,7 @@ export const accountMessages: Record<string, { en: string; es: string }> = {
   "account.details.tab.benefits": { en: "Benefits", es: "Beneficios" },
   "account.details.tab.training": { en: "Training", es: "Capacitación" },
   "account.details.personal": { en: "Personal", es: "Información personal" },
+  "account.details.email": { en: "Email", es: "Correo" },
   "account.details.gender": { en: "Gender", es: "Género" },
   "account.details.maritalStatus": { en: "Marital status", es: "Estado civil" },
   "account.details.dateOfBirth": { en: "Date of birth", es: "Fecha de nacimiento" },

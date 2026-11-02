@@ -111,11 +111,23 @@ export const InlinePanelContent = React.forwardRef<
 >(({ className, children, panelSlot, ...props }: React.ComponentPropsWithoutRef<"section"> & { panelSlot?: string }, ref) => {
   const { open } = usePanel();
   const localRef = React.useRef<HTMLElement | null>(null);
+  const [target, setTarget] = React.useState<HTMLElement | null>(null);
+  const [slotChecked, setSlotChecked] = React.useState(false);
+  // Re-resolve after paint so a sibling PanelSlot/Row mounted in the same
+  // commit is found. Without this, edit forms fall back into a narrow td.
+  React.useLayoutEffect(() => {
+    if (!panelSlot || !open) {
+      setTarget(null);
+      setSlotChecked(false);
+      return;
+    }
+    setTarget(findPanelSlot(panelSlot));
+    setSlotChecked(true);
+  }, [panelSlot, open]);
   React.useEffect(() => {
     if (open) localRef.current?.focus({ preventScroll: true });
     if (open) localRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [open]);
-  const target = panelSlot && open ? findPanelSlot(panelSlot) : null;
+  }, [open, target]);
   const content = (
     <Collapsible.Content asChild>
       <section tabIndex={-1} data-panel-open={open ? "" : undefined} ref={(node) => {
@@ -127,7 +139,21 @@ export const InlinePanelContent = React.forwardRef<
       </section>
     </Collapsible.Content>
   );
-  return target ? createPortal(content, target) : content;
+  if (target) return createPortal(content, target);
+  if (panelSlot && open) {
+    if (!slotChecked) return null;
+    // Slot missing: never expand inside a narrow actions cell.
+    if (typeof document !== "undefined") {
+      return createPortal(
+        <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto border-t bg-background p-3 shadow-lg sm:inset-y-0 sm:left-auto sm:right-0 sm:w-full sm:max-w-lg sm:border-l sm:border-t-0">
+          {content}
+        </div>,
+        document.body,
+      );
+    }
+    return null;
+  }
+  return content;
 });
 InlinePanelContent.displayName = "InlinePanelContent";
 

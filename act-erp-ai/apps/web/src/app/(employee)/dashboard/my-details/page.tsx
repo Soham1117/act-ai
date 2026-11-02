@@ -2,9 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  Mail,
-  Phone,
-  MapPin,
   FileText,
   Globe,
   HeartPulse,
@@ -22,7 +19,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { formatPhone, formatHours, getAvatarUrl, formatSSNLast4 } from "@/lib/format";
 import type { TimeEntrySource } from "@prisma/client";
 import { getDepartmentConfig } from "@/lib/departments";
@@ -85,7 +81,8 @@ export default async function MyDetailsPage() {
 
   return (
     <div className="grid min-w-0 gap-6 lg:grid-cols-[280px_1fr]">
-      <Card>
+      {/* Identity only — email / phone / address live under Basic info & Work. */}
+      <Card className="h-fit lg:sticky lg:top-16">
         <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
           <div className="relative h-24 w-24 overflow-hidden rounded-full border bg-muted">
             <Image
@@ -122,18 +119,6 @@ export default async function MyDetailsPage() {
               {deptCfg.label}
             </span>
           )}
-          <Separator className="my-1" />
-          <div className="w-full space-y-1.5 text-left text-xs">
-            <Row icon={<Mail className="h-3 w-3" />} value={employee.email} />
-            <Row
-              icon={<Phone className="h-3 w-3" />}
-              value={formatPhone(employee.phoneNumber)}
-            />
-            <Row
-              icon={<MapPin className="h-3 w-3" />}
-              value={[employee.city, employee.state].filter(Boolean).join(", ") || "—"}
-            />
-          </div>
         </CardContent>
       </Card>
 
@@ -159,6 +144,11 @@ export default async function MyDetailsPage() {
               <CardTitle className="text-base">{t("account.details.personal")}</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+              <Field label={t("account.details.email")} value={employee.email} />
+              <Field
+                label={t("account.details.phone")}
+                value={formatPhone(employee.phoneNumber)}
+              />
               <Field
                 label={t("account.details.gender")}
                 value={enumLabel(employee.gender)}
@@ -184,10 +174,6 @@ export default async function MyDetailsPage() {
               <Field
                 label={t("account.details.ssn")}
                 value={formatSSNLast4(employee.ssnLast4)}
-              />
-              <Field
-                label={t("account.details.phone")}
-                value={formatPhone(employee.phoneNumber)}
               />
               <Field
                 label={t("account.details.address")}
@@ -610,21 +596,6 @@ function Field({ label, value }: { label: string; value: string | null | undefin
         {label}
       </p>
       <p className="mt-0.5 break-words text-sm">{value ?? "—"}</p>
-    </div>
-  );
-}
-
-function Row({
-  icon,
-  value,
-}: {
-  icon: React.ReactNode;
-  value: string | null | undefined;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-muted-foreground">
-      <span className="opacity-60">{icon}</span>
-      <span className="truncate">{value ?? "—"}</span>
     </div>
   );
 }

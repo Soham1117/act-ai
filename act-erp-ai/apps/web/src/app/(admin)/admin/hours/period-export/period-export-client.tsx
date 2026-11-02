@@ -108,22 +108,38 @@ export function PeriodExportClient({
             <CardTitle className="text-base">Generate</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="pe-from">Start date</Label>
-                <DateField id="pe-from" value={from} onValueChange={setFrom} aria-label="Start date" />
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="flex w-full flex-col gap-1.5 sm:w-auto">
+                <Label
+                  htmlFor="pe-from"
+                  className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  From
+                </Label>
+                <DateField id="pe-from" value={from} onValueChange={setFrom} aria-label="From date" />
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="pe-to">Stop date</Label>
-                <DateField id="pe-to" value={to} onValueChange={setTo} aria-label="Stop date" />
+              <div className="flex w-full flex-col gap-1.5 sm:w-auto">
+                <Label
+                  htmlFor="pe-to"
+                  className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  To
+                </Label>
+                <DateField id="pe-to" value={to} onValueChange={setTo} aria-label="To date" />
               </div>
-              <div className="min-w-[12rem] space-y-1">
-                <Label htmlFor="pe-dept">Department</Label>
+              <div className="flex w-full min-w-[12rem] flex-col gap-1.5 sm:w-48">
+                <Label
+                  htmlFor="pe-dept"
+                  className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  Department
+                </Label>
                 <SimpleSelect
                   id="pe-dept"
                   value={dept}
                   onValueChange={setDept}
                   placeholder="All"
+                  triggerClassName="h-9"
                   options={[
                     { value: "", label: "All" },
                     ...departments.map((d) => ({ value: d.id, label: d.name })),
@@ -131,22 +147,26 @@ export function PeriodExportClient({
                 />
               </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {presets.map((p) => (
-                <Button
-                  key={p.id}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs"
-                  onClick={() => {
-                    setFrom(p.from);
-                    setTo(p.to);
-                  }}
-                >
-                  {p.label}
-                </Button>
-              ))}
+            <div className="flex flex-wrap gap-2">
+              {presets.map((p) => {
+                const active = from === p.from && to === p.to;
+                return (
+                  <Button
+                    key={p.id}
+                    type="button"
+                    size="sm"
+                    variant={active ? "secondary" : "outline"}
+                    className="h-8 rounded-md px-3 text-xs font-medium"
+                    aria-pressed={active}
+                    onClick={() => {
+                      setFrom(p.from);
+                      setTo(p.to);
+                    }}
+                  >
+                    {p.label}
+                  </Button>
+                );
+              })}
             </div>
 
             <div className="max-w-md space-y-1">
