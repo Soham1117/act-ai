@@ -1947,3 +1947,76 @@ model PayrollPeriodNote {
   @@unique([employeeId, periodStart, periodEnd])
   @@index([periodStart, periodEnd])
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Watch — read-only rules that raise findings for the manager.
+// Findings never change punches, pay, leave or employee records.
+// ──────────────────────────────────────────────────────────────────────
+
+enum WatchSeverity {
+  INFO
+  WARN
+  CRITICAL
+}
+
+enum WatchFindingStatus {
+  OPEN
+  ACKNOWLEDGED
+  SNOOZED
+  RESOLVED
+  DISMISSED
+}
+
+model WatchFinding {
+  id           String             @id @default(cuid())
+  ruleId       String
+  /// ruleId + subject (+ period). One row per issue; re-runs update lastSeenAt.
+  fingerprint  String             @unique
+  severity     WatchSeverity
+  status       WatchFindingStatus @default(OPEN)
+  subjectType  String
+  subjectId    String
+  employeeId   String?
+  title        String
+  detail       String             @db.Text
+  likelyCause  String?
+  suggestedFix String?
+  fixLink      String?
+  /// Ids and numbers the rule used. No SSN, bank or note contents.
+  evidence     Json
+  firstSeenAt  DateTime           @default(now())
+  lastSeenAt   DateTime           @default(now())
+  resolvedAt   DateTime?
+  snoozeUntil  DateTime?
+  handledById  String?            @db.Uuid
+  handledNote  String?            @db.Text
+
+  @@index([status, severity])
+  @@index([ruleId, status])
+  @@index([employeeId])
+}
+
+model WatchRun {
+  id           String    @id @default(cuid())
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  trigger      String // SCHEDULE | MANUAL
+  /// Shadow runs store findings but send no notifications.
+  shadow       Boolean   @default(true)
+  created      Int       @default(0)
+  updated      Int       @default(0)
+  autoResolved Int       @default(0)
+  rulesRun     Json?
+  errors       Json?
+
+  @@index([startedAt])
+}
+
+/// Per-rule switches plus the shared policy (rule id "policy").
+model WatchRuleConfig {
+  ruleId      String   @id
+  enabled     Boolean  @default(true)
+  params      Json?
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+}

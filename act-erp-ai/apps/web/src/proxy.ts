@@ -23,6 +23,7 @@ const PUBLIC_PATHS = [
   // segment prefix, so siblings like /api/v1/identityfoo or /api/v1/other stay
   // behind the session check.
   "/api/v1/identity",
+  "/api/internal/watch", // host cron; bearer-token auth in the route handler
 ];
 
 function isPublic(path: string) {
