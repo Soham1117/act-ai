@@ -100,16 +100,19 @@ fi
 # 4. Ship.
 # A private registry on the server (127.0.0.1 only) reached through an SSH tunnel.
 # `docker push` sends only the layers the server does not already have, so a normal
-# deploy uploads a few MB instead of the whole image.
-LOCAL_PORT=15000
-ssh -i "$KEY" -o ConnectTimeout=20 -o ExitOnForwardFailure=yes -N -L "127.0.0.1:$LOCAL_PORT:127.0.0.1:5000" "$HOST" &
+# deploy uploads a few MB instead of the whole image. Docker Desktop's daemon cannot
+# see the Windows loopback, so a small socat container forwards to the tunnel.
+TUNNEL_PORT=15000; FWD_PORT=15001
+ssh -i "$KEY" -o ConnectTimeout=20 -o ExitOnForwardFailure=yes -N -L "127.0.0.1:$TUNNEL_PORT:127.0.0.1:5000" "$HOST" &
 TUNNEL_PID=$!
+docker rm -f act-reg-fwd >/dev/null 2>&1 || true
+docker run -d --name act-reg-fwd -p "127.0.0.1:$FWD_PORT:5000" alpine/socat   tcp-listen:5000,fork,reuseaddr "tcp:host.docker.internal:$TUNNEL_PORT" >/dev/null
+trap 'rm -rf "$WORK"; docker rm -f act-reg-fwd >/dev/null 2>&1 || true; kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 sleep 3
-trap 'rm -rf "$WORK"; [ -n "${TUNNEL_PID:-}" ] && kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 for img in "${SHIP[@]}"; do
   name=${img%%:*}; tag=${img##*:}; short=${name#act-erp-lite-}
-  docker tag "$img" "127.0.0.1:$LOCAL_PORT/act-$short:$tag"
-  docker push -q "127.0.0.1:$LOCAL_PORT/act-$short:$tag"
+  docker tag "$img" "127.0.0.1:$FWD_PORT/act-$short:$tag"
+  docker push -q "127.0.0.1:$FWD_PORT/act-$short:$tag" >/dev/null
 done
 ssh_ "for i in ${SHIP[*]}; do n=\${i%%:*}; t=\${i##*:}; s=\${n#act-erp-lite-}; docker pull -q localhost:5000/act-\$s:\$t >/dev/null && docker tag localhost:5000/act-\$s:\$t \$i; done" </dev/null
 lap "image on server"
