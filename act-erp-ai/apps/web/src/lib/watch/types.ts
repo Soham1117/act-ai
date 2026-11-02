@@ -24,6 +24,11 @@ export type WatchPolicy = {
   missingClockOutGraceMin: number;
   hoursVariancePct: number;
   hoursVarianceMinHours: number;
+  earlyArrivalMinutes: number;
+  earlyArrivalCount: number;
+  scheduleVarianceHours: number;
+  contractTenureDays: number;
+  newKioskMinPriorEntries: number;
   digestHourLocal: number;
   digestRecipientEmails: string[];
 };
@@ -36,6 +41,11 @@ export const DEFAULT_POLICY: WatchPolicy = {
   missingClockOutGraceMin: 60,
   hoursVariancePct: 25,
   hoursVarianceMinHours: 4,
+  earlyArrivalMinutes: 20,
+  earlyArrivalCount: 3,
+  scheduleVarianceHours: 4,
+  contractTenureDays: 90,
+  newKioskMinPriorEntries: 5,
   digestHourLocal: 7,
   digestRecipientEmails: [
     "soham@americancompletiontools.com",

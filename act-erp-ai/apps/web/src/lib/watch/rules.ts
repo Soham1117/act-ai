@@ -18,6 +18,7 @@ export function evaluateMissingClockOut(
   policy: WatchPolicy,
   now: Date,
   periodClosesSoon: boolean,
+  kind: "time" | "contract" = "time",
 ): FindingDraft[] {
   const out: FindingDraft[] = [];
   for (const p of punches) {
@@ -28,16 +29,16 @@ export function evaluateMissingClockOut(
     const tooLong = ageMs > 12 * HOUR;
     if (!pastSchedule && !tooLong) continue;
     out.push({
-      fingerprint: `time.missing-clock-out:${p.entryId}`,
+      fingerprint: `${kind}.missing-clock-out:${p.entryId}`,
       severity: periodClosesSoon || ageMs > policy.maxShiftHours * HOUR ? "CRITICAL" : "WARN",
-      subjectType: "TimeEntry",
+      subjectType: kind === "time" ? "TimeEntry" : "ContractTimeEntry",
       subjectId: p.entryId,
-      employeeId: p.employeeId,
+      employeeId: kind === "time" ? p.employeeId : undefined,
       title: `${p.employeeName} has no clock-out`,
       detail: `Clocked in ${Math.floor(ageMs / HOUR)}h ${Math.floor((ageMs % HOUR) / MIN)}m ago and no clock-out is recorded.`,
       likelyCause: "Forgot to punch out, or the kiosk tap did not register.",
       suggestedFix: "Open the entry and set the clock-out from the real shift end.",
-      fixLink: "/admin/time-tracking",
+      fixLink: kind === "time" ? "/admin/time-tracking" : "/admin/contract-workers",
       evidence: {
         clockIn: p.clockIn.toISOString(),
         scheduledEnd: p.scheduledEnd?.toISOString() ?? null,
