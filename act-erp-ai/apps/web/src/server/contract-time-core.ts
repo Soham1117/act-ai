@@ -69,6 +69,8 @@ export async function withContractWorkerLock<T>(
 
 export function revalidateContractPages() {
   revalidatePath("/admin/contract-workers");
+  // Worker detail URLs under /admin/contract-workers/[id]
+  revalidatePath("/admin/contract-workers", "layout");
 }
 
 /**

@@ -3,12 +3,11 @@
 import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Download, Loader2, PenLine, X } from "lucide-react";
+import { Check, Download, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -24,13 +23,12 @@ import {
 import { PunchPhotos } from "@/components/punch-photos";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
-import { dateToBusinessLocal } from "@/lib/time-rules";
 import {
-  adminEditContractTimeEntry,
   bulkReviewContractTimeEntries,
   reviewContractTimeEntry,
 } from "@/server/actions/contract-workers";
 import { exportContractHoursCsv } from "./export-actions";
+import { ContractEntryRowActions } from "./entry-row-actions";
 import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 import { ApprovalBadge, type HoursRow } from "./shared";
 
@@ -92,10 +90,6 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rejectIds, setRejectIds] = useState<string[] | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
-  const [editRow, setEditRow] = useState<HoursRow | null>(null);
-  const [clockIn, setClockIn] = useState("");
-  const [clockOut, setClockOut] = useState("");
-  const [reason, setReason] = useState("");
 
   const reviewable = rows.filter(canReview);
   // Drop selections that are no longer reviewable after a refresh.
@@ -162,44 +156,6 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
       setRejectIds(null);
       setRejectNotes("");
       setSelected(new Set());
-      router.refresh();
-    });
-  }
-
-  function openEdit(r: HoursRow) {
-    if (pending) return;
-    setEditRow(r);
-    setClockIn(dateToBusinessLocal(new Date(r.clockIn)));
-    setClockOut(r.clockOut ? dateToBusinessLocal(new Date(r.clockOut)) : "");
-    setReason("");
-  }
-
-  function saveEdit() {
-    if (!editRow) return;
-    if (!clockIn) return toast.error("Enter a clock-in time.");
-    if (!editRow.isOpen && !clockOut) {
-      return toast.error("Enter a clock-out time for this closed entry.");
-    }
-    if (reason.trim().length < 3)
-      return toast.error("Enter a reason (at least 3 characters).");
-    startTransition(async () => {
-      const res = await runAction(() =>
-        adminEditContractTimeEntry({
-          id: editRow.id,
-          clockIn,
-          clockOut: clockOut || undefined,
-          reason: reason.trim(),
-        }),
-      );
-      if (!toastAction(res)) return;
-      if (editRow.isOpen && !clockOut) {
-        toast.success("Clock-in updated. The shift is still open.");
-      } else if (editRow.isOpen && clockOut) {
-        toast.success("Shift closed with the new times. Pending approval.");
-      } else {
-        toast.success("Times updated. The entry is pending approval again.");
-      }
-      setEditRow(null);
       router.refresh();
     });
   }
@@ -320,10 +276,16 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                         </Button>
                       </>
                     )}
-                    <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEdit(r)}>
-                      <PenLine className="mr-1 h-3.5 w-3.5" />
-                      Edit times
-                    </Button>
+                    <ContractEntryRowActions
+                      entry={{
+                        id: r.id,
+                        workerName: r.workerName,
+                        clockIn: r.clockIn,
+                        clockOut: r.clockOut,
+                        isOpen: r.isOpen,
+                      }}
+                      panelSlotId={`hours-${r.id}`}
+                    />
                   </div>
                 </div>
               </DataListCard>
@@ -465,10 +427,16 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                             </Button>
                           </>
                         )}
-                        <Button size="sm" variant="ghost" disabled={pending} onClick={() => openEdit(r)}>
-                          <PenLine className="mr-1 h-3.5 w-3.5" />
-                          Edit times
-                        </Button>
+                        <ContractEntryRowActions
+                          entry={{
+                            id: r.id,
+                            workerName: r.workerName,
+                            clockIn: r.clockIn,
+                            clockOut: r.clockOut,
+                            isOpen: r.isOpen,
+                          }}
+                          panelSlotId={`hours-${r.id}`}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -524,58 +492,6 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
         </InlinePanelContent>
       </InlinePanel>
 
-      <InlinePanel open={editRow !== null} onOpenChange={(v) => !pending && !v && setEditRow(null)}>
-        <InlinePanelContent panelSlot={editRow ? `hours-${editRow.id}` : undefined}>
-          <InlinePanelHeader>
-            <InlinePanelTitle>Edit times for {editRow?.workerName}</InlinePanelTitle>
-            <InlinePanelDescription>
-              {editRow?.isOpen
-                ? "Times are Central. Leave clock-out empty to keep the shift open, or set one to close it (pending approval). Breaks are kept."
-                : "Times are Central. Breaks are kept. After saving, the entry is pending approval again."}
-            </InlinePanelDescription>
-          </InlinePanelHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="cw-edit-in">Clock in</Label>
-              <Input
-                id="cw-edit-in"
-                type="datetime-local"
-                value={clockIn}
-                onChange={(e) => setClockIn(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="cw-edit-out">
-                Clock out{editRow?.isOpen ? " (optional)" : ""}
-              </Label>
-              <Input
-                id="cw-edit-out"
-                type="datetime-local"
-                value={clockOut}
-                onChange={(e) => setClockOut(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="cw-edit-reason">Reason (saved in the audit log)</Label>
-              <Textarea
-                id="cw-edit-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                maxLength={500}
-              />
-            </div>
-          </div>
-          <InlinePanelFooter>
-            <Button variant="outline" onClick={() => setEditRow(null)} disabled={pending}>
-              Cancel
-            </Button>
-            <Button onClick={saveEdit} disabled={pending}>
-              {pending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              Save times
-            </Button>
-          </InlinePanelFooter>
-        </InlinePanelContent>
-      </InlinePanel>
     </>
   );
 }

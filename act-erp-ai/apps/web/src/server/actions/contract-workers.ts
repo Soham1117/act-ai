@@ -1074,3 +1074,57 @@ export async function adminCreateManualContractTimeEntry(
     return failFromUnknown(err);
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Hard-delete
+// ──────────────────────────────────────────────────────────────────────
+
+const deleteSchema = z.object({
+  id: z.string().min(1),
+  reason: reasonSchema,
+});
+
+/**
+ * Permanently remove a contract time entry (and its breaks). Allowed for
+ * open, closed, pending, approved, or rejected entries. Reason is audited.
+ */
+export async function adminDeleteContractTimeEntry(
+  input: z.infer<typeof deleteSchema>,
+): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const data = deleteSchema.parse(input);
+    const found = await db.contractTimeEntry.findUnique({
+      where: { id: data.id },
+      select: { contractWorkerId: true },
+    });
+    if (!found) return fail("That time entry was already deleted. Refresh the page.");
+
+    const result = await withContractWorkerLock(found.contractWorkerId, async (tx) => {
+      const entry = await tx.contractTimeEntry.findUnique({
+        where: { id: data.id },
+        include: { breaks: true },
+      });
+      if (!entry) return null;
+      await tx.contractTimeEntry.delete({ where: { id: entry.id } });
+      return entry;
+    });
+    if (!result) return fail("That time entry was already deleted. Refresh the page.");
+
+    await audit({
+      action: "contract.time.delete",
+      resource: `ContractTimeEntry:${result.id}`,
+      diff: {
+        contractWorkerId: result.contractWorkerId,
+        reason: data.reason,
+        before: snapshot(result),
+        date: result.date.toISOString(),
+        jobCode: result.jobCode,
+      },
+    });
+    revalidateAll();
+    return ok();
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}

@@ -5,21 +5,14 @@ import { requireAdmin } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PunchPhotos } from "@/components/punch-photos";
-import {
-  formatBusinessTime,
-  formatDateOnly,
-  formatHours,
-  formatPhone,
-} from "@/lib/format";
+import { formatDateOnly, formatPhone } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
 import {
   getContractWorker,
   listContractWorkers,
 } from "@/server/queries/contract-workers";
-import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 import { AddContractEntryButton } from "../add-entry-panel";
-import { ApprovalBadge } from "../shared";
+import { RecentContractEntries } from "../recent-entries";
 
 export const metadata = { title: "Contract worker" };
 
@@ -51,6 +44,23 @@ export default async function ContractWorkerDetailPage({
     endDate: worker.endDate ? dateOnlyToString(worker.endDate) : null,
     status: worker.status,
   };
+  const entries = worker.timeEntries.map((e) => {
+    const open = e.status === "ACTIVE" || e.status === "ON_BREAK";
+    return {
+      id: e.id,
+      date: dateOnlyToString(e.date),
+      clockIn: e.clockIn.toISOString(),
+      clockOut: e.clockOut?.toISOString() ?? null,
+      totalBreakMin: e.totalBreakMin,
+      totalWorkMin: e.totalWorkMin,
+      isOpen: open,
+      approvalStatus: e.approvalStatus as "PENDING" | "APPROVED" | "REJECTED",
+      autoClosed: e.autoClosed,
+      hasClockInPhoto: !!e.clockInPhotoKey,
+      hasClockOutPhoto: !!e.clockOutPhotoKey,
+      fromKiosk: e.kioskSlug !== null,
+    };
+  });
 
   return (
     <>
@@ -114,122 +124,11 @@ export default async function ContractWorkerDetailPage({
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">
-              Recent entries ({worker.timeEntries.length})
+              Recent entries ({entries.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {worker.timeEntries.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                No time entries yet.
-              </p>
-            ) : (
-              <ResponsiveDataList
-                mobile={
-                  <div className="space-y-2 p-2">
-                    {worker.timeEntries.map((e) => {
-                      const open = e.status === "ACTIVE" || e.status === "ON_BREAK";
-                      return (
-                        <DataListCard key={e.id}>
-                          <div className="space-y-2 text-sm">
-                            <p className="text-xs text-muted-foreground">
-                              {formatDateOnly(e.date)}
-                            </p>
-                            <p className="font-mono text-xs">
-                              {formatBusinessTime(e.clockIn)}
-                              {e.clockOut
-                                ? ` → ${formatBusinessTime(e.clockOut)}`
-                                : " → open"}
-                            </p>
-                            <p className="font-mono text-xs tabular-nums">
-                              Work {open ? "—" : formatHours(e.totalWorkMin)} · breaks{" "}
-                              {formatHours(e.totalBreakMin)}
-                            </p>
-                            <PunchPhotos
-                              type="contract"
-                              entryId={e.id}
-                              hasIn={!!e.clockInPhotoKey}
-                              hasOut={!!e.clockOutPhotoKey}
-                              source={e.kioskSlug !== null ? "KIOSK" : null}
-                              clockIn={e.clockIn.toISOString()}
-                              clockOut={e.clockOut?.toISOString() ?? null}
-                            />
-                            <div className="flex flex-wrap gap-1.5">
-                              <ApprovalBadge status={e.approvalStatus} open={open} />
-                              {e.autoClosed && (
-                                <Badge variant="destructive" className="text-[10px]">
-                                  Auto-closed
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </DataListCard>
-                      );
-                    })}
-                  </div>
-                }
-                desktop={
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
-                          <th className="p-3 font-medium">Date</th>
-                          <th className="p-3 font-medium">Times</th>
-                          <th className="p-3 text-right font-medium">Breaks</th>
-                          <th className="p-3 text-right font-medium">Work</th>
-                          <th className="p-3 font-medium">Photos</th>
-                          <th className="p-3 font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {worker.timeEntries.map((e) => {
-                          const open = e.status === "ACTIVE" || e.status === "ON_BREAK";
-                          return (
-                            <tr key={e.id} className="border-b last:border-0">
-                              <td className="whitespace-nowrap p-3 text-xs">
-                                {formatDateOnly(e.date)}
-                              </td>
-                              <td className="whitespace-nowrap p-3 font-mono text-xs">
-                                {formatBusinessTime(e.clockIn)}
-                                {e.clockOut
-                                  ? ` → ${formatBusinessTime(e.clockOut)}`
-                                  : " → open"}
-                              </td>
-                              <td className="p-3 text-right font-mono text-xs tabular-nums">
-                                {formatHours(e.totalBreakMin)}
-                              </td>
-                              <td className="p-3 text-right font-mono tabular-nums">
-                                {open ? "—" : formatHours(e.totalWorkMin)}
-                              </td>
-                              <td className="p-3">
-                                <PunchPhotos
-                                  type="contract"
-                                  entryId={e.id}
-                                  hasIn={!!e.clockInPhotoKey}
-                                  hasOut={!!e.clockOutPhotoKey}
-                                  source={e.kioskSlug !== null ? "KIOSK" : null}
-                                  clockIn={e.clockIn.toISOString()}
-                                  clockOut={e.clockOut?.toISOString() ?? null}
-                                />
-                              </td>
-                              <td className="p-3">
-                                <div className="flex flex-wrap gap-1.5">
-                                  <ApprovalBadge status={e.approvalStatus} open={open} />
-                                  {e.autoClosed && (
-                                    <Badge variant="destructive" className="text-[10px]">
-                                      Auto-closed
-                                    </Badge>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                }
-              />
-            )}
+            <RecentContractEntries workerName={worker.name} entries={entries} />
           </CardContent>
         </Card>
       </div>
