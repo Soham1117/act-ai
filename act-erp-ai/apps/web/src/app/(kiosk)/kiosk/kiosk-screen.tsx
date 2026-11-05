@@ -267,11 +267,18 @@ export function KioskScreen({
   }
 
   async function runAction(m: LookupMatch, action: KioskActionName, pinValue?: string) {
-    // Best-effort photo for clock in/out only; null never blocks the punch.
-    const photo =
-      action === "CLOCK_IN" || action === "CLOCK_OUT"
-        ? ((await camera.capture()) ?? undefined)
-        : undefined;
+    // Photo for clock in/out only. A missing photo (camera off) never blocks the
+    // punch, but a working camera that sees no face does.
+    let photo: string | undefined;
+    if (action === "CLOCK_IN" || action === "CLOCK_OUT") {
+      const shot = await camera.capture();
+      if (shot.noFace) {
+        toast.error(t("No face detected. Look at the camera and try again."));
+        setPin("");
+        return false;
+      }
+      photo = shot.photo ?? undefined;
+    }
     let res: Awaited<ReturnType<typeof kioskAction>>;
     try {
       res = await kioskAction({

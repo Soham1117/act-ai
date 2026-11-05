@@ -5,7 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { expect, type Browser, type Page } from "@playwright/test";
+import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { businessYmd, db } from "./db";
 import { ADMIN_STATE, BASE_URL, IP_INSIDE, env } from "./test-data";
 
@@ -20,7 +20,7 @@ export const KIOSK_NAMES = [
   "lock-emp", "lock-emp2", "lock-ip", "lock-reset",
   // camera
   "cam-roster", "cam-on", "cam-idle", "cam-hidden", "cam-punch", "cam-denied", "cam-noapi",
-  "cam-photo", "cam-hang", "cam-hang2", "cam-break",
+  "cam-photo", "cam-hang", "cam-hang2", "cam-break", "cam-noface",
   // session
   "sess-revoked", "sess-expired", "sess-wrongcookie", "sess-other-a", "sess-other-b", "sess-slide",
   "sess-end", "sess-roster", "sess-lookup", "sess-refresh-fail", "sess-idle",
@@ -193,7 +193,26 @@ export type OpenOpts = {
   permissions?: string[];
   /** Do not open the page yet. */
   noGoto?: boolean;
+  /** Keep the face check on. Off by default: Chrome's fake camera shows no face. */
+  faceCheck?: boolean;
 };
+
+/**
+ * Chrome's fake camera never shows a face, so by default block the face model;
+ * the kiosk then fails open. With `on`, serve the detector WASM from node_modules
+ * so the real check runs without the CDN.
+ */
+export async function routeFaceCheck(context: BrowserContext, on = false) {
+  if (!on) {
+    await context.route("**/blaze_face_short_range.tflite", (r) => r.abort());
+    return;
+  }
+  await context.route("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@*/wasm/*", (r) =>
+    r.fulfill({
+      path: `node_modules/@mediapipe/tasks-vision/wasm/${new URL(r.request().url()).pathname.split("/").pop()}`,
+    }),
+  );
+}
 
 /** Opens /kiosk/<slug> in a fresh context holding the kiosk's device cookie. */
 export async function openK(browser: Browser, name: KioskName | string, opts: OpenOpts = {}): Promise<Page> {
@@ -207,6 +226,7 @@ export async function openK(browser: Browser, name: KioskName | string, opts: Op
       { name: "act_kiosk", value: opts.cookie ?? kioskCookie(name), url: BASE_URL },
     ]);
   }
+  await routeFaceCheck(context, opts.faceCheck);
   for (const script of opts.init ?? []) await context.addInitScript(script);
   const page = await context.newPage();
   if (opts.clock) await page.clock.install();

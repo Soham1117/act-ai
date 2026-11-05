@@ -239,6 +239,22 @@ test.describe("kiosk camera: not available", () => {
   });
 });
 
+test.describe("kiosk camera: face check", () => {
+  test("a working camera that sees no face refuses the punch and keeps the card open", async ({
+    browser,
+  }) => {
+    // Chrome's fake camera is a test pattern, so the real detector finds no face.
+    const page = await openK(browser, "cam-noface", { init: [CAMERA_SPY], faceCheck: true });
+    await cardWithPin(page, EMP.flow, PIN);
+    await expect.poll(() => camLive(page)).toBe(1);
+    await clockInBtn(page).click();
+    await expect(toast(page, /no face detected/i)).toBeVisible({ timeout: 15_000 });
+    expect(await entriesOf(EMP.flow)).toHaveLength(0);
+    await expect(clockInBtn(page)).toBeVisible();
+    await page.context().close();
+  });
+});
+
 test.describe("kiosk camera: photos", () => {
   test("clock in and clock out store a JPEG each; the admin sees and opens them", async ({ browser }) => {
     const page = await openK(browser, "cam-photo", { init: [CAMERA_SPY] });

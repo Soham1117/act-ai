@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useKioskLanguage } from "./kiosk-language";
 import { CameraOff } from "lucide-react";
 import { getCenterSquareCrop } from "@/lib/kiosk-photo-crop";
+import { loadFaceDetector } from "@/lib/kiosk-face-detector";
 
 export type PunchCameraStatus = "idle" | "starting" | "on" | "off";
 
@@ -12,8 +13,12 @@ export type PunchCamera = {
   start: () => void;
   /** Stop all tracks and clear the preview. Safe to call at any time. */
   stop: () => void;
-  /** JPEG data URL of the current frame, or null on any failure (never throws). */
-  capture: () => Promise<string | null>;
+  /**
+   * JPEG of a frame with a face in it. `noFace` is true only when the camera and
+   * detector both work but no face showed up; the punch must then be refused.
+   * Any other failure gives `{ photo: null, noFace: false }` (never throws).
+   */
+  capture: () => Promise<PunchCapture>;
   /** Mirrored, center-cropped square JPEG for a profile photo. */
   captureProfile: () => Promise<string | null>;
   /** Callback ref for the preview <video>. It can mount before or after start(). */
@@ -21,8 +26,14 @@ export type PunchCamera = {
   status: PunchCameraStatus;
 };
 
+export type PunchCapture = { photo: string | null; noFace: boolean };
+
 const READY_WAIT_MS = 1500;
 const MAX_WIDTH = 480;
+/** How long to keep looking for a face before refusing the punch. */
+const FACE_WAIT_MS = 2000;
+/** Fail open if the detector is still loading after this long. */
+const DETECTOR_WAIT_MS = 4000;
 
 /**
  * Best-effort front camera for punch photos. The stream runs only between
@@ -71,6 +82,7 @@ export function usePunchCamera(): PunchCamera {
     wantedRef.current = true;
     const gen = genRef.current;
     setStatus("starting");
+    void loadFaceDetector(); // warm up while the person enters their PIN
     void (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("no camera api");
@@ -104,21 +116,41 @@ export function usePunchCamera(): PunchCamera {
     }
   }, []);
 
-  const capture = useCallback(async () => {
+  const capture = useCallback(async (): Promise<PunchCapture> => {
+    const none = { photo: null, noFace: false };
     try {
       const v = await readyVideo();
-      if (!v) return null;
+      if (!v) return none;
+      const detector = await Promise.race([
+        loadFaceDetector(),
+        new Promise<null>((r) => setTimeout(() => r(null), DETECTOR_WAIT_MS)),
+      ]);
       const scale = Math.min(1, MAX_WIDTH / v.videoWidth);
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(v.videoWidth * scale);
       canvas.height = Math.round(v.videoHeight * scale);
       const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-      const url = canvas.toDataURL("image/jpeg", 0.7);
-      return url.startsWith("data:image/jpeg") ? url : null;
+      if (!ctx) return none;
+      const began = Date.now();
+      for (;;) {
+        ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+        let face = true; // fail open when the detector is unavailable
+        if (detector) {
+          try {
+            face = detector.detect(canvas).detections.length > 0;
+          } catch {
+            face = true;
+          }
+        }
+        if (face) {
+          const url = canvas.toDataURL("image/jpeg", 0.7);
+          return { photo: url.startsWith("data:image/jpeg") ? url : null, noFace: false };
+        }
+        if (Date.now() - began > FACE_WAIT_MS) return { photo: null, noFace: true };
+        await new Promise((r) => setTimeout(r, 150));
+      }
     } catch {
-      return null;
+      return none;
     }
   }, [readyVideo]);
 

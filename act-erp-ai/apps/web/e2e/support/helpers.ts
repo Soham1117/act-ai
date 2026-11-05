@@ -23,7 +23,7 @@ export async function failServerActions(
 ): Promise<{ count: () => number }> {
   let n = 0;
   await page.route("**/*", async (route) => {
-    if (!isServerAction(route)) return route.continue();
+    if (!isServerAction(route)) return route.fallback();
     const body = route.request().postData() ?? "";
     const matches =
       !opts.match || (typeof opts.match === "string" ? body.includes(opts.match) : opts.match.test(body));
@@ -50,7 +50,7 @@ export async function failServerActions(
 export async function delayServerActions(page: Page, ms = 1500): Promise<{ count: () => number }> {
   let n = 0;
   await page.route("**/*", async (route) => {
-    if (!isServerAction(route)) return route.continue();
+    if (!isServerAction(route)) return route.fallback();
     n += 1;
     await new Promise((r) => setTimeout(r, ms));
     return route.continue();
@@ -98,6 +98,8 @@ export async function openKiosk(
       url: BASE_URL,
     },
   ]);
+  // Chrome's fake camera shows no face: block the face model so the kiosk fails open.
+  await context.route("**/blaze_face_short_range.tflite", (r) => r.abort());
   const page = await context.newPage();
   await page.goto(`/kiosk/${slug}`);
   return page;

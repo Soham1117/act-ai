@@ -218,8 +218,14 @@ export function ContractCrewPanel({
     pinValue: string,
   ) {
     {
-      // Best-effort photo; null never blocks the punch.
-      const photo = (await camera.capture()) ?? undefined;
+      // A missing photo (camera off) never blocks the punch; no face does.
+      const shot = await camera.capture();
+      if (shot.noFace) {
+        toast.error(t("No face detected. Look at the camera and try again."));
+        setPin("");
+        return;
+      }
+      const photo = shot.photo ?? undefined;
       const res = await runAction(() =>
         kioskContractAction({ slug, workerId: worker.id, action, pin: pinValue, photo }),
       );

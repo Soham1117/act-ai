@@ -58,7 +58,7 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    // Skip static assets, image optimisation, and favicon.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Skip static assets, image optimisation, favicon, and the kiosk face model.
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|tflite)$).*)",
   ],
 };

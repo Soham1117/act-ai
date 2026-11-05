@@ -19,6 +19,8 @@ export const kioskSpanish: Record<string, string> = {
     "Este quiosco se actualizó. Recarga la página e inténtalo de nuevo.",
   "End kiosk session": "Cerrar sesión del quiosco",
   "Camera off": "Cámara apagada",
+  "No face detected. Look at the camera and try again.":
+    "No se detectó un rostro. Mira a la cámara e inténtalo de nuevo.",
   "The kiosk was updated. Reloading…": "El quiosco se actualizó. Recargando…",
   In: "En turno",
   "On shift": "En turno",

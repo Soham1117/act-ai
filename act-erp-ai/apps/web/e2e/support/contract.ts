@@ -7,6 +7,7 @@ import { db, businessYmd } from "./db";
 import { isServerAction } from "./helpers";
 import { BASE_URL, IP_INSIDE, JOB_CODE, env } from "./test-data";
 import { CW_AGENCY, cwKioskSlug, cwKioskSuffix } from "./contract-data";
+import { routeFaceCheck } from "./kiosk";
 
 export const uniq = (prefix: string) => `${prefix} ${randomBytes(3).toString("hex")}`;
 
@@ -129,7 +130,7 @@ export const auditCount = (action: string, resourceContains: string) =>
 export async function tamperActions(page: Page, rewrite: (body: string) => string) {
   let n = 0;
   await page.route("**/*", async (route) => {
-    if (!isServerAction(route)) return route.continue();
+    if (!isServerAction(route)) return route.fallback();
     const body = route.request().postData() ?? "";
     const next = rewrite(body);
     if (next !== body) n += 1;
@@ -152,7 +153,7 @@ export async function captureActions(page: Page, opts: { block?: boolean } = {})
       seen.push({ url: r.url(), headers: r.headers(), body: r.postData() ?? "" });
       if (opts.block) return route.abort("failed"); // capture only: the server never sees it
     }
-    return route.continue();
+    return route.fallback();
   });
   return seen;
 }
@@ -182,6 +183,7 @@ export async function openCrewKiosk(
   await context.addCookies([
     { name: "act_kiosk", value: env("E2E_KIOSK_COOKIE") + cwKioskSuffix(n), url: BASE_URL },
   ]);
+  await routeFaceCheck(context);
   const page = await context.newPage();
   if (opts.noCamera) {
     await page.addInitScript(() => {
