@@ -63,6 +63,7 @@ async function recentPunches(since: Date, extra: object = {}): Promise<PunchRow[
       actualClockIn: true,
       actualClockOut: true,
       timesheetNotes: true,
+      approvalStatus: true,
       employee: { select: { name: true } },
     },
   });
@@ -82,6 +83,7 @@ async function recentPunches(since: Date, extra: object = {}): Promise<PunchRow[
     actualIn: r.actualClockIn,
     actualOut: r.actualClockOut,
     notes: r.timesheetNotes,
+    approvalStatus: r.approvalStatus,
   }));
 }
 

@@ -18,7 +18,7 @@ const schema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
-/** Acknowledge, snooze, dismiss or reopen one finding. Audited. */
+/** Review, recheck, snooze, dismiss or reopen one finding. Audited. */
 export async function actOnFinding(input: z.input<typeof schema>): Promise<ActionResult> {
   const actor = await requireAdmin();
   try {
@@ -27,8 +27,27 @@ export async function actOnFinding(input: z.input<typeof schema>): Promise<Actio
     if (!finding) return fail("That flag no longer exists.");
     const next = applyAction(finding.status, data.action as never, new Date());
     if (!next) return fail("That action doesn't apply to this flag any more. Refresh the page.");
-    await db.$transaction([
-      db.watchFinding.update({
+    if (data.action === "RESOLVE") {
+      if (!ALL_JOBS.some((job) => job.id === finding.ruleId)) return fail("This check is no longer available.");
+      const result = await runWatch({ trigger: "MANUAL", shadow: true, ruleIds: [finding.ruleId] });
+      if (result.skipped) return fail("A check is already running. Try again in a minute.");
+      revalidatePath("/admin/watch");
+      if (result.errors.length) return fail("The recheck failed. The flag has been kept. Try again in a minute.");
+      const current = await db.watchFinding.findUnique({ where: { id: finding.id } });
+      if (current?.status !== "RESOLVED") {
+        return fail(`Still flagged: ${current?.detail ?? finding.detail} Review the entry, or choose Not a problem if the flag does not apply.`);
+      }
+    }
+    const saved = await db.$transaction(async (tx) => {
+      if (data.action === "RESOLVE") {
+        // The runner has already resolved it. Attach the review only while it
+        // remains resolved; a concurrent run may have reopened a recurrence.
+        const updated = await tx.watchFinding.updateMany({
+          where: { id: finding.id, status: "RESOLVED" },
+          data: { handledById: actor.id, handledNote: data.note || null },
+        });
+        if (updated.count === 0) return false;
+      } else await tx.watchFinding.update({
         where: { id: finding.id },
         data: {
           status: next.status,
@@ -37,8 +56,8 @@ export async function actOnFinding(input: z.input<typeof schema>): Promise<Actio
           handledNote: data.note || null,
           resolvedAt: null,
         },
-      }),
-      db.auditLog.create({
+      });
+      await tx.auditLog.create({
         data: {
           actorId: actor.id,
           actorEmail: actor.email,
@@ -46,9 +65,11 @@ export async function actOnFinding(input: z.input<typeof schema>): Promise<Actio
           resource: `WatchFinding:${finding.id}`,
           diff: { ruleId: finding.ruleId, from: finding.status, to: next.status, note: data.note ?? null },
         },
-      }),
-    ]);
+      });
+      return true;
+    });
     revalidatePath("/admin/watch");
+    if (!saved) return fail("This issue changed during the recheck. Refresh and review it again.");
     return ok();
   } catch (error) {
     return failFromUnknown(error);
@@ -131,6 +152,7 @@ export async function runWatchNow(): Promise<ActionResult<{ created: number; upd
       },
     });
     revalidatePath("/admin/watch");
+    if (result.errors.length) return fail(`${result.errors.length} check(s) failed. Existing flags from those checks have been kept. Try again in a minute.`);
     return ok({ created: result.created, updated: result.updated, autoResolved: result.autoResolved });
   } catch (error) {
     return failFromUnknown(error);

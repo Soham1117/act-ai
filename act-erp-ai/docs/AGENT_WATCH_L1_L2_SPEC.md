@@ -1,6 +1,6 @@
 # Persona Watch: L1 flags and L2 digest (plain code, no AI)
 
-Proposed November 2, 2026. Spec only; nothing built. Source ideas: `AI_AGENT_USE_CASES.md` (numbers like #1 refer to it).
+Originally proposed November 2, 2026. L1/L2 are implemented; see the progress and maintenance notes below. Source ideas: `AI_AGENT_USE_CASES.md` (numbers like #1 refer to it).
 
 ## Goal
 
@@ -26,7 +26,7 @@ A scheduled job reads existing data, raises **findings** (flags) for the manager
 | Scheduled runner pattern | `runDueHoursExportSchedules` in `src/server/hours-export-runner.ts` |
 | Page | New admin page next to Hours / Time tracking; reuse `hours-ui.tsx`, click-to-sort tables, `inline-panel.tsx` |
 
-Scheduler: see Decisions. The existing hours-export runner is not scheduled in prod today.
+Scheduler: Watch runs from the host cron every 15 minutes. The separate hours-export runner still has no scheduled caller.
 
 ## Data model (additive, one migration)
 
@@ -270,7 +270,7 @@ Rules read these at run time, never from code constants. Changing a setting take
 2. How do we know a temp password is unchanged? Does the app record it? (otherwise skip `hr.temp-password`)
 3. Backup status source for `sys.backup-stale`: the prod cron writes to `/home/ubuntu/act-backups/erp-backup.log`; decide in phase 5.
 
-## Progress (updated Nov 2, 2026)
+## Progress (updated Nov 6, 2026)
 
 Legend: [x] done, [~] partly, [ ] not started.
 
@@ -295,7 +295,7 @@ Legend: [x] done, [~] partly, [ ] not started.
 ### Phase 2: findings page
 - [x] /admin/watch: tabs, severity filter, search, details, acknowledge, snooze, dismiss, reopen
 - [x] "Check now" button, audit log on every action
-- [ ] Browser test (upload e2e spec)
+- [x] Browser tests for review, verified resolution, corrected entries, simultaneous checks, keyboard use and long names (November 6)
 - [ ] Rules tab: on/off per rule
 
 ### Phase 3: digest
@@ -332,6 +332,7 @@ Rules switched off by default (noisy on today's data): `time.missing-clock-in` (
 - HR: 74, 76, 77, 79, 80, 81, 83, 84, 85, 87, 89, 91, 92
 - Data and security: 93, 95, 99, 100, 102, 104, 105, 106, 107 (idle kiosks only), 108 (database size only)
 - Reports: 48, 52, 110, 113, 115, 116, 117
+- Daily digest: 51, with in-app notifications and email
 
 **Not built, with the reason**
 - 10 buddy punching, 9 blurry or mismatched photo: need image analysis (AI)
@@ -345,4 +346,22 @@ Rules switched off by default (noisy on today's data): `time.missing-clock-in` (
 - 62 delegation: needs an "away" status for admins
 - 109, 119 undo feedback and trust score: need L3/L4 actions first
 - 111, 112 "ask the system" and plain-language explanations: need a language model (later, optional)
-- 51 daily digest: the text builder exists; sending it (notification and email) is not built
+
+## Maintenance fixes (November 6, 2026)
+
+- The runner claims its unfinished run inside a short transaction with a Postgres advisory lock. Manual and scheduled requests cannot both pass the check-and-create race. Abandoned runs retain the existing ten-minute recovery window. Fatal setup failures finish and record the run.
+- Shadow runs send no notifications or email. The scheduled endpoint explicitly uses live mode; manual checks and individual rechecks use shadow mode.
+- Digest delivery tracks successful email recipients and the in-app notification in `WatchDigest.summary`. Failed channels can retry on the next scheduled run; successful channels are skipped. Notification creation and its delivery marker commit together. Legacy completed digests do not resend on deployment. An email accepted by the provider immediately before a process/database failure can still be retried because the provider has no idempotency key.
+- `Mark reviewed` keeps the finding acknowledged and unresolved. `Recheck and resolve` reruns that rule and clears the flag only when its condition is gone. Both actions are admin-only and audited; neither changes hours or pay.
+- Admin-approved employee shifts up to the existing 24-hour admin limit are valid. Pending shifts over the configured review threshold still flag; approved shifts over 24 hours and overlapping non-rejected entries still flag. The kiosk's 16-hour forgotten-punch cutoff remains unchanged.
+- Shift and overtime findings link to the employee's actual date or week, rather than opening the approvals page at its default current week.
+
+## Next stage: L3 before L4
+
+L3 and L4 remain roadmap items, not implemented agent capabilities. Start L3 with one bounded action type: a draft missing-clock-out correction. A scheduled end is a suggestion, never proof of time worked.
+
+Before execution, the approval queue must show the original entry, proposed change, source evidence and reason. Approval must recheck permissions, entry version, overlaps and payroll-close state in the same transaction as the change. Repeated approvals must be idempotent. Log the proposal, approver, before/after values and result. Provide a reversible action where the period is still open; reject undo if intervening edits or a closed period make it unsafe. Notification drafts require separate approval to send.
+
+Acceptance: creating or rejecting a proposal changes no punch; approving once applies exactly the reviewed change; stale and duplicate approvals cannot overwrite newer edits; unauthorized users cannot list or execute proposals; failed execution remains actionable and audited.
+
+L4 requires an explicit opt-in per action type, an operator-controlled off switch, limits and safe undo. A run of twenty approvals alone is insufficient evidence to automate an action. Do not infer or automatically reduce worked hours, auto-fill unpaid breaks, or auto-merge employee identities. Consider template reminders before actions affecting hours, pay or benefits.

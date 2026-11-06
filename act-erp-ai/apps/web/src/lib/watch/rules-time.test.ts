@@ -35,6 +35,7 @@ const punch = (o: Partial<PunchRow> = {}): PunchRow => ({
   actualIn: null,
   actualOut: null,
   notes: null,
+  approvalStatus: "PENDING",
   ...o,
 });
 
@@ -87,6 +88,24 @@ describe("lunch", () => {
 });
 
 describe("impossible and duplicate shifts", () => {
+  it("accepts an approved 17-hour shift but still flags it before approval", () => {
+    const long = punch({ clockOut: t("2026-10-29T06:00:00Z"), approvalStatus: "APPROVED" });
+    expect(evaluateImpossibleShifts([long], DEFAULT_POLICY)).toEqual([]);
+    const findings = evaluateImpossibleShifts([{ ...long, approvalStatus: "PENDING" }], DEFAULT_POLICY);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.fixLink).toBe("/admin/hours?employee=p1&from=2026-10-28&to=2026-10-28");
+    expect(findings[0]?.evidence).toMatchObject({ spanMinutes: 1020, approvalStatus: "PENDING" });
+  });
+  it("accepts exactly 24 approved hours, but still flags longer shifts and overlaps", () => {
+    const long = punch({ clockOut: t("2026-10-29T13:00:00Z"), approvalStatus: "APPROVED" });
+    expect(evaluateImpossibleShifts([long], DEFAULT_POLICY)).toEqual([]);
+    expect(evaluateImpossibleShifts([{ ...long, clockOut: t("2026-10-29T13:01:00Z") }], DEFAULT_POLICY)).toHaveLength(1);
+    const other = punch({ id: "overlap", approvalStatus: "APPROVED" });
+    expect(evaluateImpossibleShifts([long, other], DEFAULT_POLICY).some((f) => f.fingerprint.startsWith("time.overlap:"))).toBe(true);
+  });
+  it("ignores rejected entries when checking long shifts and overlaps", () => {
+    expect(evaluateImpossibleShifts([punch({ approvalStatus: "REJECTED", clockOut: t("2026-10-29T13:00:00Z") }), punch({ id: "valid" })], DEFAULT_POLICY)).toEqual([]);
+  });
   it("flags a shift over the maximum", () => {
     const long = punch({ clockOut: t("2026-10-29T13:00:00Z") });
     expect(evaluateImpossibleShifts([long], DEFAULT_POLICY)[0]?.fingerprint).toBe("time.impossible-shift:e1");

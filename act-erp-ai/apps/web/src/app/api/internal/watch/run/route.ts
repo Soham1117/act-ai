@@ -20,7 +20,7 @@ function authorized(req: Request): boolean {
 export async function POST(req: Request) {
   if (!authorized(req)) return Response.json({ error: "unauthorized" }, { status: 401, headers });
   try {
-    const result = await runWatch({ trigger: "SCHEDULE", shadow: true });
+    const result = await runWatch({ trigger: "SCHEDULE", shadow: false });
     return Response.json(result, { headers });
   } catch (e) {
     console.error("[watch] run failed", e);

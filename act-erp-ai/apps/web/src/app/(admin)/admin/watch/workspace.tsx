@@ -21,7 +21,8 @@ const SEVERITY_STYLE: Record<Row["severity"], string> = {
   INFO: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
 };
 const ACTION_LABEL: Record<FindingAction, string> = {
-  ACKNOWLEDGE: "Acknowledge",
+  ACKNOWLEDGE: "Mark reviewed",
+  RESOLVE: "Recheck and resolve",
   SNOOZE_1D: "Snooze 1 day",
   SNOOZE_7D: "Snooze 1 week",
   DISMISS: "Not a problem",
@@ -68,20 +69,20 @@ export function WatchWorkspace({ data }: { data: Data }) {
   function act(row: Row, action: FindingAction) {
     start(async () => {
       const res = await runAction(() => actOnFinding({ id: row.id, action, note: note || undefined }));
+      router.refresh();
       if (!toastAction(res)) return;
-      toast.success(ACTION_LABEL[action]);
+      toast.success(action === "RESOLVE" ? "Rechecked. The issue is resolved." : action === "ACKNOWLEDGE" ? "Marked reviewed. The flag stays until the issue is resolved." : ACTION_LABEL[action]);
       setNote("");
       setOpenId(null);
-      router.refresh();
     });
   }
 
   function runNow() {
     start(async () => {
       const res = await runAction(() => runWatchNow());
+      router.refresh();
       if (!toastAction(res)) return;
       toast.success(`Checked. ${res.created} new, ${res.autoResolved} cleared.`);
-      router.refresh();
     });
   }
 
@@ -148,7 +149,7 @@ export function WatchWorkspace({ data }: { data: Data }) {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[48rem] text-sm">
             <thead className="bg-muted/50 text-left">
               <tr>
                 <th className="px-3 py-2">Level</th>
@@ -163,25 +164,37 @@ export function WatchWorkspace({ data }: { data: Data }) {
                 <Fragment key={r.id}>
                   <tr
                     className="cursor-pointer border-t hover:bg-muted/40"
-                    onClick={() => setOpenId(openId === r.id ? null : r.id)}
+                    onClick={() => { setOpenId(openId === r.id ? null : r.id); setNote(""); }}
                   >
                     <td className="px-3 py-2" data-sort-value={SEVERITY_ORDER[r.severity]}>
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${SEVERITY_STYLE[r.severity]}`}>
                         {r.severity === "WARN" ? "Warning" : r.severity === "CRITICAL" ? "Critical" : "Info"}
                       </span>
                     </td>
-                    <td className="px-3 py-2">{r.title}</td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        className="rounded text-left [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-expanded={openId === r.id}
+                        aria-controls={`watch-detail-${r.id}`}
+                        onClick={(event) => { event.stopPropagation(); setOpenId(openId === r.id ? null : r.id); setNote(""); }}
+                      >
+                        {r.title}
+                      </button>
+                    </td>
                     <td className="px-3 py-2">{r.employeeName ?? "-"}</td>
                     <td className="px-3 py-2" data-sort-value={r.firstSeenAt}>{ago(r.firstSeenAt)}</td>
-                    <td className="px-3 py-2">{r.status === "ACKNOWLEDGED" ? "Acknowledged" : r.status === "SNOOZED" ? `Snoozed${r.snoozeUntil ? ` until ${new Date(r.snoozeUntil).toLocaleDateString()}` : ""}` : r.status === "DISMISSED" ? "Dismissed" : "Open"}</td>
+                    <td className="px-3 py-2">{r.status === "ACKNOWLEDGED" ? "Reviewed · unresolved" : r.status === "SNOOZED" ? `Snoozed${r.snoozeUntil ? ` until ${new Date(r.snoozeUntil).toLocaleDateString()}` : ""}` : r.status === "DISMISSED" ? "Dismissed" : "Open"}</td>
                   </tr>
                   {openId === r.id && (
                     <tr className="border-t bg-muted/20">
-                      <td colSpan={5} className="space-y-3 px-4 py-3">
+                      <td id={`watch-detail-${r.id}`} colSpan={5} className="px-4 py-3">
+                        <div className="max-w-[calc(100vw-4rem)] space-y-3 [overflow-wrap:anywhere] md:max-w-none">
                         <p className="whitespace-pre-line">{r.detail}</p>
                         {r.likelyCause && <p><span className="font-medium">Likely cause:</span> {r.likelyCause}</p>}
                         {r.suggestedFix && <p><span className="font-medium">Suggested fix:</span> {r.suggestedFix}</p>}
                         {r.handledNote && <p className="text-muted-foreground">Note: {r.handledNote}</p>}
+                        {!isReport(r) && <p className="text-sm text-muted-foreground">Mark reviewed records that you have seen the flag. Recheck and resolve clears it when the check confirms the issue is gone.</p>}
                         <div className="flex flex-wrap items-center gap-2">
                           {r.fixLink && (
                             <Button asChild size="sm">
@@ -199,7 +212,9 @@ export function WatchWorkspace({ data }: { data: Data }) {
                             placeholder="Optional note"
                             className="h-8 max-w-xs"
                             aria-label="Note"
+                            maxLength={500}
                           />
+                        </div>
                         </div>
                       </td>
                     </tr>

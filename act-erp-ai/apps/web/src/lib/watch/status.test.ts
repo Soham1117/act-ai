@@ -7,6 +7,11 @@ describe("applyAction", () => {
   it("acknowledges an open finding", () => {
     expect(applyAction("OPEN", "ACKNOWLEDGE", now)).toEqual({ status: "ACKNOWLEDGED", snoozeUntil: null });
   });
+  it("offers a verified resolution separately from acknowledging", () => {
+    expect(allowedActions("ACKNOWLEDGED")).toContain("RESOLVE");
+    expect(applyAction("ACKNOWLEDGED", "RESOLVE", now)).toEqual({ status: "RESOLVED", snoozeUntil: null });
+    expect(applyAction("DISMISSED", "RESOLVE", now)).toBeNull();
+  });
   it("snoozes for 1 and 7 days", () => {
     expect(applyAction("OPEN", "SNOOZE_1D", now)?.snoozeUntil?.toISOString()).toBe("2026-11-03T12:00:00.000Z");
     expect(applyAction("OPEN", "SNOOZE_7D", now)?.snoozeUntil?.toISOString()).toBe("2026-11-09T12:00:00.000Z");

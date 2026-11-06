@@ -1,8 +1,9 @@
-export type FindingAction = "ACKNOWLEDGE" | "SNOOZE_1D" | "SNOOZE_7D" | "DISMISS" | "REOPEN";
+export type FindingAction = "ACKNOWLEDGE" | "RESOLVE" | "SNOOZE_1D" | "SNOOZE_7D" | "DISMISS" | "REOPEN";
 export type FindingStatus = "OPEN" | "ACKNOWLEDGED" | "SNOOZED" | "RESOLVED" | "DISMISSED";
 
 export const FINDING_ACTIONS: FindingAction[] = [
   "ACKNOWLEDGE",
+  "RESOLVE",
   "SNOOZE_1D",
   "SNOOZE_7D",
   "DISMISS",
@@ -15,11 +16,11 @@ const DAY_MS = 24 * 60 * 60_000;
 export function allowedActions(status: FindingStatus): FindingAction[] {
   switch (status) {
     case "OPEN":
-      return ["ACKNOWLEDGE", "SNOOZE_1D", "SNOOZE_7D", "DISMISS"];
+      return ["ACKNOWLEDGE", "RESOLVE", "SNOOZE_1D", "SNOOZE_7D", "DISMISS"];
     case "ACKNOWLEDGED":
-      return ["SNOOZE_1D", "SNOOZE_7D", "DISMISS", "REOPEN"];
+      return ["RESOLVE", "SNOOZE_1D", "SNOOZE_7D", "DISMISS", "REOPEN"];
     case "SNOOZED":
-      return ["ACKNOWLEDGE", "DISMISS", "REOPEN"];
+      return ["ACKNOWLEDGE", "RESOLVE", "DISMISS", "REOPEN"];
     case "DISMISSED":
       return ["REOPEN"];
     case "RESOLVED":
@@ -36,6 +37,9 @@ export function applyAction(
   switch (action) {
     case "ACKNOWLEDGE":
       return { status: "ACKNOWLEDGED", snoozeUntil: null };
+    case "RESOLVE":
+      // The server must rerun the rule and verify the finding is gone first.
+      return { status: "RESOLVED", snoozeUntil: null };
     case "SNOOZE_1D":
       return { status: "SNOOZED", snoozeUntil: new Date(now.getTime() + DAY_MS) };
     case "SNOOZE_7D":

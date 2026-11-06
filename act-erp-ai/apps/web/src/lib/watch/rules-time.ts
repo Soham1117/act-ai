@@ -1,4 +1,5 @@
 import { holidayName } from "./holidays";
+import { ADMIN_MAX_SHIFT_MINUTES, addDaysDateOnly, dateOnlyToString, parseDateOnly } from "@/lib/time-rules";
 import type { FindingDraft, WatchPolicy } from "./types";
 
 const MIN = 60_000;
@@ -21,10 +22,13 @@ export type PunchRow = {
   actualIn: Date | null;
   actualOut: Date | null;
   notes: string | null;
+  approvalStatus: "PENDING" | "APPROVED" | "REJECTED";
 };
 
 const hours = (min: number) => (min / 60).toFixed(1);
 const empLink = (id: string) => `/admin/employees/${id}`;
+const hoursLink = (id: string, from: string, to = from) =>
+  `/admin/hours?${new URLSearchParams({ employee: id, from, to })}`;
 
 /** time.missing-clock-in: a shift started and nobody punched in. */
 export type ExpectedShift = {
@@ -86,7 +90,7 @@ export function evaluateOvertimePace(rows: WeekPace[], policy: WatchPolicy): Fin
         : `${hours(r.workedMin)}h worked plus ${hours(r.scheduledRemainingMin)}h still scheduled = ${hours(projected)}h.`,
       likelyCause: "Long shifts or extra days on the schedule.",
       suggestedFix: "Shorten remaining shifts if overtime is not wanted, otherwise nothing to do.",
-      fixLink: "/admin/schedules",
+      fixLink: hoursLink(r.employeeId, r.weekStart, dateOnlyToString(addDaysDateOnly(parseDateOnly(r.weekStart)!, 6))),
       evidence: { weekStart: r.weekStart, workedMin: r.workedMin, projectedMin: projected },
     });
   }
@@ -137,19 +141,23 @@ export function evaluateImpossibleShifts(entries: PunchRow[], policy: WatchPolic
   const maxMin = policy.maxShiftHours * 60;
   const byPerson = new Map<string, PunchRow[]>();
   for (const e of entries) {
-    if (e.clockOut && (e.clockOut.getTime() - e.clockIn.getTime()) / MIN > maxMin) {
+    if (e.approvalStatus === "REJECTED") continue;
+    // Admin forms already accept genuine shifts up to 24 hours. Approval
+    // confirms a long shift; it must not keep returning as an impossible one.
+    const limitMin = e.approvalStatus === "APPROVED" ? Math.max(maxMin, ADMIN_MAX_SHIFT_MINUTES) : maxMin;
+    if (e.clockOut && (e.clockOut.getTime() - e.clockIn.getTime()) / MIN > limitMin) {
       out.push({
         fingerprint: `time.impossible-shift:${e.id}`,
         severity: "CRITICAL",
         subjectType: "TimeEntry",
         subjectId: e.id,
         employeeId: e.employeeId,
-        title: `${e.name}: shift longer than ${policy.maxShiftHours}h`,
+        title: `${e.name}: shift longer than ${limitMin / 60}h needs review`,
         detail: `${e.date}: ${hours((e.clockOut.getTime() - e.clockIn.getTime()) / MIN)}h between punch in and out.`,
-        likelyCause: "Forgotten clock-out that was fixed late.",
-        suggestedFix: "Open the entry and correct the clock-out.",
-        fixLink: "/admin/time-tracking",
-        evidence: {},
+        likelyCause: "A long shift or a forgotten clock-out.",
+        suggestedFix: "Verify the hours. Approve a genuine shift up to 24 hours, or correct the clock-out.",
+        fixLink: hoursLink(e.employeeId, e.date),
+        evidence: { date: e.date, clockIn: e.clockIn.toISOString(), clockOut: e.clockOut.toISOString(), spanMinutes: (e.clockOut.getTime() - e.clockIn.getTime()) / MIN, approvalStatus: e.approvalStatus },
       });
     }
     const list = byPerson.get(e.employeeId) ?? [];
@@ -172,7 +180,7 @@ export function evaluateImpossibleShifts(entries: PunchRow[], policy: WatchPolic
           detail: `${prev.date} and ${cur.date} entries overlap in time.`,
           likelyCause: "Duplicate or mistyped entry.",
           suggestedFix: "Delete or correct one of the two entries.",
-          fixLink: "/admin/time-tracking",
+          fixLink: hoursLink(cur.employeeId, prev.date, cur.date),
           evidence: { ids: [prev.id, cur.id] },
         });
       }

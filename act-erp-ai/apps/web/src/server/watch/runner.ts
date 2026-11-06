@@ -27,56 +27,71 @@ export type WatchRunResult = {
 
 /**
  * Runs every enabled rule, stores findings, auto-resolves the ones that are no
- * longer true. Read-only with respect to everything except Watch tables.
+ * longer true. Business records stay read-only; live scheduled runs may also
+ * deliver the daily digest.
  */
-export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: boolean; now?: Date }): Promise<WatchRunResult> {
+export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: boolean; now?: Date; ruleIds?: string[] }): Promise<WatchRunResult> {
   const now = opts.now ?? new Date();
-  const running = await db.watchRun.findFirst({
-    where: { finishedAt: null, startedAt: { gt: new Date(now.getTime() - STALE_RUN_MS) } },
+  // Serialize the check-and-create. A separate check lets simultaneous manual
+  // and cron requests both start a run before either sees the other's row.
+  const claim = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('watch-run-claim'))`;
+    const running = await tx.watchRun.findFirst({
+      where: { finishedAt: null, startedAt: { gt: new Date(now.getTime() - STALE_RUN_MS) } },
+    });
+    if (running) return { run: running, skipped: true };
+    const run = await tx.watchRun.create({ data: { trigger: opts.trigger, shadow: opts.shadow ?? true } });
+    return { run, skipped: false };
   });
-  if (running) {
-    return { runId: running.id, skipped: "already-running", created: 0, updated: 0, autoResolved: 0, errors: [] };
+  if (claim.skipped) {
+    return { runId: claim.run.id, skipped: "already-running", created: 0, updated: 0, autoResolved: 0, errors: [] };
   }
-  const run = await db.watchRun.create({ data: { trigger: opts.trigger, shadow: opts.shadow ?? true } });
-  const policy = await loadPolicy();
+  const run = claim.run;
   const errors: WatchRunResult["errors"] = [];
   const rulesRun: string[] = [];
   let created = 0;
   let updated = 0;
   let autoResolved = 0;
 
-  for (const job of ALL_JOBS) {
-    if (!(await isEnabled(job.id, job.defaultEnabled ?? true))) {
-      // Switched off: clear anything it raised earlier so the list does not keep stale flags.
-      const cleared = await storeFindings(job.id, [], now);
-      autoResolved += cleared.autoResolved;
-      continue;
+  try {
+    const policy = await loadPolicy();
+    for (const job of ALL_JOBS) {
+      if (opts.ruleIds && !opts.ruleIds.includes(job.id)) continue;
+      try {
+        if (!(await isEnabled(job.id, job.defaultEnabled ?? true))) {
+          // Switched off: clear anything it raised earlier so the list does not keep stale flags.
+          const cleared = await storeFindings(job.id, [], now);
+          autoResolved += cleared.autoResolved;
+          continue;
+        }
+        const drafts = await job.run({ now, policy });
+        rulesRun.push(job.id);
+        const counts = await storeFindings(job.id, drafts, now);
+        created += counts.created;
+        updated += counts.updated;
+        autoResolved += counts.autoResolved;
+      } catch (err) {
+        errors.push({ ruleId: job.id, message: (err instanceof Error ? err.message : String(err)).slice(0, 500) });
+      }
     }
-    try {
-      const drafts = await job.run({ now, policy });
-      rulesRun.push(job.id);
-      const counts = await storeFindings(job.id, drafts, now);
-      created += counts.created;
-      updated += counts.updated;
-      autoResolved += counts.autoResolved;
-    } catch (err) {
-      errors.push({ ruleId: job.id, message: (err instanceof Error ? err.message : String(err)).slice(0, 500) });
-    }
-  }
 
-  if (opts.trigger === "SCHEDULE") {
-    try {
-      const digest = await sendDailyDigestIfDue(now, policy);
-      for (const e of digest.errors) errors.push({ ruleId: "digest", message: e });
-    } catch (err) {
-      errors.push({ ruleId: "digest", message: (err instanceof Error ? err.message : String(err)).slice(0, 500) });
+    if (opts.trigger === "SCHEDULE" && !run.shadow && !opts.ruleIds) {
+      try {
+        const digest = await sendDailyDigestIfDue(now, policy);
+        for (const e of digest.errors) errors.push({ ruleId: "digest", message: e });
+      } catch (err) {
+        errors.push({ ruleId: "digest", message: (err instanceof Error ? err.message : String(err)).slice(0, 500) });
+      }
     }
+  } catch (err) {
+    errors.push({ ruleId: "runner", message: (err instanceof Error ? err.message : String(err)).slice(0, 500) });
+    throw err;
+  } finally {
+    await db.watchRun.update({
+      where: { id: run.id },
+      data: { finishedAt: new Date(), created, updated, autoResolved, rulesRun, errors },
+    });
   }
-
-  await db.watchRun.update({
-    where: { id: run.id },
-    data: { finishedAt: new Date(), created, updated, autoResolved, rulesRun, errors },
-  });
   return { runId: run.id, created, updated, autoResolved, errors };
 }
 
