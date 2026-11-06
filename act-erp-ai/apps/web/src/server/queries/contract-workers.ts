@@ -11,6 +11,7 @@ import type { ApprovalStatus, ContractWorkerStatus, Prisma } from "@prisma/clien
 import { db } from "@/lib/db";
 import { businessDateOnly, formatBusinessTime } from "@/lib/format";
 import { isEndingSoon } from "@/lib/contract-workers";
+import { buildContractHoursWorkbook } from "@/lib/contract-hours-workbook";
 import { csvRow } from "@/lib/payroll-overtime";
 import { dateOnlyToString, isStaleShift } from "@/lib/time-rules";
 
@@ -156,11 +157,11 @@ export async function onSiteNow() {
  * hours for the export range. Empty ranges return only the header line so the
  * client can treat them as "nothing to export".
  */
-export async function contractHoursCsv(args: {
+async function contractHoursGroups(args: {
   from: Date;
   to: Date;
   agencyId?: string;
-}): Promise<string> {
+}) {
   const entries = await listContractTimeEntries(args);
   type Group = {
     agency: string;
@@ -210,6 +211,11 @@ export async function contractHoursCsv(args: {
       a.workerId.localeCompare(b.workerId) ||
       a.date.getTime() - b.date.getTime(),
   );
+  return sorted;
+}
+
+export async function contractHoursCsv(args: { from: Date; to: Date; agencyId?: string }): Promise<string> {
+  const sorted = await contractHoursGroups(args);
   const header = csvRow([
     "Agency",
     "Worker ID",
@@ -256,4 +262,17 @@ export async function contractHoursCsv(args: {
     "",
   ]);
   return [title, header, ...lines, totals].join("\r\n");
+}
+
+export async function contractHoursWorkbook(args: { from: Date; to: Date; agencyId?: string }) {
+  const groups = await contractHoursGroups(args);
+  if (!groups.length) return null;
+  return buildContractHoursWorkbook(groups.map((g) => ({
+    agency: g.agency, workerId: g.workerId, name: g.name,
+    date: dateOnlyToString(g.date), clockIn: formatBusinessTime(g.first),
+    clockOut: g.last ? formatBusinessTime(g.last) : "",
+    breakMin: g.breakMin, workMin: g.workMin,
+    jobCode: [...g.jobCodes].join(" / "),
+    approval: g.approvals.size === 1 ? [...g.approvals][0]! : "MIXED",
+  })), dateOnlyToString(args.from), dateOnlyToString(args.to));
 }

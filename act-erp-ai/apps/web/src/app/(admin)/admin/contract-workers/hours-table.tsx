@@ -27,7 +27,7 @@ import {
   bulkReviewContractTimeEntries,
   reviewContractTimeEntry,
 } from "@/server/actions/contract-workers";
-import { exportContractHoursCsv } from "./export-actions";
+import { exportContractHoursWorkbook } from "./export-actions";
 import { ContractEntryRowActions } from "./entry-row-actions";
 import { DataListCard, ResponsiveDataList } from "@/components/mobile";
 import { ApprovalBadge, type HoursRow } from "./shared";
@@ -48,22 +48,22 @@ export function DownloadHoursCsvButton({
   function download() {
     startTransition(async () => {
       const res = await runAction(() =>
-        exportContractHoursCsv({ from, to, agencyId: agencyId || undefined }),
+        exportContractHoursWorkbook({ from, to, agencyId: agencyId || undefined }),
       );
       if (!toastAction(res)) return;
-      // Header row only: nothing to export.
-      if (!res.csv.includes("\n")) {
+      // Empty range: nothing to export.
+      if (!res.xlsx) {
         toast.info("No entries in this range, so there is nothing to export.");
         return;
       }
-      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+      const blob = new Blob([Uint8Array.from(atob(res.xlsx), (c) => c.charCodeAt(0))], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `contract-hours-${from}-to-${to}.csv`;
+      a.download = `contract-hours-${from}-to-${to}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("CSV downloaded");
+      toast.success("Excel downloaded");
     });
   }
   return (
@@ -79,7 +79,7 @@ export function DownloadHoursCsvButton({
       ) : (
         <Download className="mr-1.5 h-3.5 w-3.5" />
       )}
-      Download CSV
+      Download Excel
     </Button>
   );
 }

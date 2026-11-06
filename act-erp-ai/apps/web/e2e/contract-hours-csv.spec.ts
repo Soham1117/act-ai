@@ -1,9 +1,10 @@
+import AdmZip from "adm-zip";
+import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import { businessYmd } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE } from "./support/test-data";
 import {
-  downloadText,
   hoursUrl,
   makeAgency,
   makeEntry,
@@ -41,12 +42,31 @@ function detailRows(text: string): string[][] {
 
 async function openHours(page: Page, agencyId: string, extra = "", from = businessYmd(6), to = businessYmd(0)) {
   await page.goto(hoursUrl(`&hagency=${agencyId}${extra}`, from, to));
-  await expect(page.getByRole("button", { name: /download csv/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /download excel/i })).toBeVisible();
 }
-const download = (page: Page) =>
-  downloadText(page, () => page.getByRole("button", { name: /download csv/i }).click());
+async function download(page: Page) {
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: /download excel/i }).click();
+  const file = await pending;
+  const zip = new AdmZip(await readFile((await file.path())!));
+  const workbook = zip.readAsText("xl/workbook.xml");
+  expect(workbook.indexOf('name="Worker totals"')).toBeLessThan(workbook.indexOf('name="Daily hours"'));
+  const xml = zip.readAsText("xl/worksheets/sheet2.xml");
+  const decode = (value: string) => value.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const rows = [...xml.matchAll(/<row[^>]*>(.*?)<\/row>/g)].map((match) => {
+    const cells: string[] = Array(10).fill("");
+    for (const cell of match[1]!.matchAll(/<c r="([A-J])\d+"[^>]*>(.*?)<\/c>/g)) {
+      const col = cell[1]!.charCodeAt(0) - 65;
+      const value = /<t[^>]*>(.*?)<\/t>/.exec(cell[2]!)?.[1];
+      const number = /<v>(.*?)<\/v>/.exec(cell[2]!)?.[1];
+      cells[col] = value !== undefined ? decode(value) : number !== undefined ? col === 7 ? Number(number).toFixed(2) : number : "";
+    }
+    return cells;
+  }).filter((row) => row.some(Boolean));
+  return { filename: file.suggestedFilename(), text: rows.map((row) => row.map((value) => `"${value.replace(/"/g, '\"\"')}"`).join(",")).join("\r\n") };
+}
 
-test.describe("admin hours: CSV export", () => {
+test.describe("admin hours: Excel export", () => {
   test("exports one row per worker per day with merged punches, rejected hours excluded", async ({ page }) => {
     const agency = await makeAgency();
     const w1 = await makeWorker({ agencyId: agency.id, name: "Csv Alpha" });
@@ -59,8 +79,8 @@ test.describe("admin hours: CSV export", () => {
     await makeEntry(w2.id, { daysAgo: 2, in: "06:00", out: "14:15", approval: "APPROVED" });
     await openHours(page, agency.id);
     const { filename, text } = await download(page);
-    await expect(toast(page, /csv downloaded/i)).toBeVisible();
-    expect(filename).toBe(`contract-hours-${businessYmd(6)}-to-${businessYmd(0)}.csv`);
+    await expect(toast(page, /excel downloaded/i)).toBeVisible();
+    expect(filename).toBe(`contract-hours-${businessYmd(6)}-to-${businessYmd(0)}.xlsx`);
     const rows = parseCsv(text);
     expect(rows[0]![0]).toBe(`Contract hours ${businessYmd(6)} to ${businessYmd(0)}`);
     expect(rows[1]).toEqual(HEADER);
@@ -113,11 +133,11 @@ test.describe("admin hours: CSV export", () => {
     page.on("download", () => {
       downloaded = true;
     });
-    await page.getByRole("button", { name: /download csv/i }).click();
+    await page.getByRole("button", { name: /download excel/i }).click();
     await expect(toast(page, /no entries in this range, so there is nothing to export\./i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /download csv/i })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /download excel/i })).toBeEnabled();
     expect(downloaded).toBe(false);
-    await expect(toast(page, /csv downloaded/i)).toHaveCount(0);
+    await expect(toast(page, /excel downloaded/i)).toHaveCount(0);
   });
 
   test("spreadsheet formulas in names are neutralised and quotes are escaped", async ({ page }) => {
@@ -127,17 +147,17 @@ test.describe("admin hours: CSV export", () => {
     await openHours(page, agency.id);
     const { text } = await download(page);
     const [row] = detailRows(text);
-    expect(row![2]).toBe(`'=HYPERLINK("http://evil.test","x")`);
-    expect(text).toContain(`"'=HYPERLINK(""http://evil.test"",""x"")"`);
+    expect(row![2]).toBe(`=HYPERLINK("http://evil.test","x")`);
+    expect(text).toContain(`"=HYPERLINK(""http://evil.test"",""x"")"`);
   });
 
   test("the server refuses an invalid date range", async ({ page }) => {
     const agency = await makeAgency();
     await openHours(page, agency.id);
     await tamperActions(page, (b) => b.replace(/"\d{4}-\d{2}-\d{2}"/, '"2026-02-30"'));
-    await page.getByRole("button", { name: /download csv/i }).click();
+    await page.getByRole("button", { name: /download excel/i }).click();
     await expect(toast(page, /choose a valid date range/i)).toBeVisible();
-    await expect(toast(page, /csv downloaded/i)).toHaveCount(0);
+    await expect(toast(page, /excel downloaded/i)).toHaveCount(0);
   });
 
   test("server failure while exporting shows an error and no file", async ({ page }) => {
@@ -146,25 +166,25 @@ test.describe("admin hours: CSV export", () => {
     let downloaded = false;
     page.on("download", () => (downloaded = true));
     await failServerActions(page, "500");
-    await page.getByRole("button", { name: /download csv/i }).click();
+    await page.getByRole("button", { name: /download excel/i }).click();
     await expect(toast(page, SERVER_ERROR)).toBeVisible();
     await expectNoCrash(page);
     expect(downloaded).toBe(false);
   });
 
-  test("double-clicking Download CSV exports once", async ({ page }) => {
+  test("double-clicking Download Excel exports once", async ({ page }) => {
     const agency = await makeAgency();
     const w = await makeWorker({ agencyId: agency.id });
     await makeEntry(w.id, { daysAgo: 1 });
     await openHours(page, agency.id);
     const slow = await delayServerActions(page, 1200);
-    const btn = page.getByRole("button", { name: /download csv/i });
+    const btn = page.getByRole("button", { name: /download excel/i });
     const files: string[] = [];
     page.on("download", (d) => files.push(d.suggestedFilename()));
     await btn.click();
     await expect(btn).toBeDisabled();
     await btn.click({ force: true, timeout: 1000 }).catch(() => undefined);
-    await expect(toast(page, /csv downloaded/i)).toBeVisible();
+    await expect(toast(page, /excel downloaded/i)).toBeVisible();
     expect(slow.count()).toBe(1);
     expect(files).toHaveLength(1);
   });
