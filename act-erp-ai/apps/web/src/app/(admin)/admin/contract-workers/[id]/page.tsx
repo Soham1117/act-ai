@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateOnly, formatPhone } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
@@ -87,12 +88,15 @@ export default async function ContractWorkerDetailPage({
           </>
         }
       />
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap gap-2">
         <AddContractEntryButton
           workers={[entryWorker]}
           jobCodes={jobCodes}
           fixedWorkerId={worker.id}
         />
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/admin/contract-workers?tab=hours&worker=${worker.id}`}>View and export hours</Link>
+        </Button>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>

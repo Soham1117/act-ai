@@ -64,6 +64,7 @@ export default async function ContractWorkersPage({
   const rangeFrom = fromParsed <= toParsed ? fromParsed : toParsed;
   const rangeTo = fromParsed <= toParsed ? toParsed : fromParsed;
   const hAgency = one(sp.hagency);
+  const hWorker = one(sp.worker);
   const approvalRaw = one(sp.approval);
   const approval: ApprovalStatus | undefined =
     approvalRaw === "PENDING" || approvalRaw === "APPROVED" || approvalRaw === "REJECTED"
@@ -84,6 +85,7 @@ export default async function ContractWorkersPage({
         from: rangeFrom,
         to: rangeTo,
         agencyId: hAgency || undefined,
+        workerId: hWorker || undefined,
         approvalStatus: approval,
       }),
       db.jobCode.findMany({
@@ -393,6 +395,7 @@ export default async function ContractWorkersPage({
                       From
                     </label>
                     <Input
+                      key={fromStr}
                       id="cw-h-from"
                       type="date"
                       name="from"
@@ -405,6 +408,7 @@ export default async function ContractWorkersPage({
                       To
                     </label>
                     <Input
+                      key={toStr}
                       id="cw-h-to"
                       type="date"
                       name="to"
@@ -420,6 +424,7 @@ export default async function ContractWorkersPage({
                       Agency
                     </label>
                     <FormSimpleSelect
+                      key={hAgency}
                       id="cw-h-agency"
                       name="hagency"
                       defaultValue={hAgency}
@@ -428,6 +433,21 @@ export default async function ContractWorkersPage({
                       options={[
                         { value: "", label: "All agencies" },
                         ...agencyOptions.map((a) => ({ value: a.id, label: a.name })),
+                      ]}
+                    />
+                  </div>
+                  <div className="w-full space-y-1 sm:w-auto">
+                    <label className="text-xs text-muted-foreground" htmlFor="cw-h-worker">Worker</label>
+                    <FormSimpleSelect
+                      key={hWorker}
+                      id="cw-h-worker"
+                      name="worker"
+                      defaultValue={hWorker}
+                      className="h-9 w-full sm:w-64"
+                      placeholder="All workers"
+                      options={[
+                        { value: "", label: "All workers" },
+                        ...allWorkers.map((w) => ({ value: w.id, label: `${w.name} (${w.workerId})` })),
                       ]}
                     />
                   </div>
@@ -469,6 +489,7 @@ export default async function ContractWorkersPage({
                       from={fromStr}
                       to={toStr}
                       agencyId={hAgency}
+                      workerId={hWorker}
                     />
                   </div>
                 </FilterStack>

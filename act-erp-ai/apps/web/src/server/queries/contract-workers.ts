@@ -101,6 +101,7 @@ export async function listContractTimeEntries(args: {
   from: Date;
   to: Date;
   agencyId?: string;
+  workerId?: string;
   approvalStatus?: ApprovalStatus;
 }) {
   return db.contractTimeEntry.findMany({
@@ -108,6 +109,7 @@ export async function listContractTimeEntries(args: {
       date: { gte: args.from, lte: args.to },
       ...(args.approvalStatus ? { approvalStatus: args.approvalStatus } : {}),
       ...(args.agencyId ? { contractWorker: { agencyId: args.agencyId } } : {}),
+      ...(args.workerId ? { contractWorkerId: args.workerId } : {}),
     },
     orderBy: [{ date: "desc" }, { clockIn: "desc" }],
     include: {
@@ -161,6 +163,7 @@ async function contractHoursGroups(args: {
   from: Date;
   to: Date;
   agencyId?: string;
+  workerId?: string;
 }) {
   const entries = await listContractTimeEntries(args);
   type Group = {
@@ -264,7 +267,7 @@ export async function contractHoursCsv(args: { from: Date; to: Date; agencyId?: 
   return [title, header, ...lines, totals].join("\r\n");
 }
 
-export async function contractHoursWorkbook(args: { from: Date; to: Date; agencyId?: string }) {
+export async function contractHoursWorkbook(args: { from: Date; to: Date; agencyId?: string; workerId?: string }) {
   const groups = await contractHoursGroups(args);
   if (!groups.length) return null;
   return buildContractHoursWorkbook(groups.map((g) => ({

@@ -33,6 +33,7 @@ import { loadHoursPeriodPresets, resolveHoursRange } from "@/lib/hours-period";
 import { EntryActions, ManualEntryButton } from "../time-tracking/time-tools";
 import { entryPanelSlotId, type EntryRowData } from "../time-tracking/time-types";
 import { cn } from "@/lib/utils";
+import { DownloadEmployeeHoursButton } from "./download-employee-hours";
 
 export const metadata = { title: "Individual hours" };
 
@@ -259,6 +260,7 @@ export default async function IndividualHoursPage({
               <HoursFilterRow>
                 <HoursField label="From" htmlFor="ih-from">
                   <FormDateField
+                    key={fromStr}
                     id="ih-from"
                     name="from"
                     defaultValue={fromStr}
@@ -267,6 +269,7 @@ export default async function IndividualHoursPage({
                 </HoursField>
                 <HoursField label="To" htmlFor="ih-to">
                   <FormDateField
+                    key={toStr}
                     id="ih-to"
                     name="to"
                     defaultValue={toStr}
@@ -276,6 +279,7 @@ export default async function IndividualHoursPage({
                 <Button type="submit" size="sm" className="h-9 w-full sm:w-auto">
                   Update
                 </Button>
+                {selected && <DownloadEmployeeHoursButton employeeId={selected.id} from={fromStr} to={toStr} />}
               </HoursFilterRow>
             </form>
             <HoursPresetChips
@@ -320,7 +324,7 @@ export default async function IndividualHoursPage({
                   No entries in range.
                 </p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="relative overflow-x-auto">
                   <table className={cn(hoursTableClass, "min-w-[720px]")}>
                     <thead className={hoursTheadClass}>
                       <tr>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useState, useTransition, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, Download, Loader2, X } from "lucide-react";
@@ -39,16 +39,26 @@ export function DownloadHoursCsvButton({
   from,
   to,
   agencyId,
+  workerId,
 }: {
   from: string;
   to: string;
   agencyId: string;
+  workerId?: string;
 }) {
   const [pending, startTransition] = useTransition();
-  function download() {
+  function download(event: MouseEvent<HTMLButtonElement>) {
+    const form = event.currentTarget.form;
+    const data = form ? new FormData(form) : null;
+    const input = {
+      from: String(data?.get("from") ?? from),
+      to: String(data?.get("to") ?? to),
+      agencyId: String(data?.get("hagency") ?? agencyId) || undefined,
+      workerId: String(data?.get("worker") ?? workerId ?? "") || undefined,
+    };
     startTransition(async () => {
       const res = await runAction(() =>
-        exportContractHoursWorkbook({ from, to, agencyId: agencyId || undefined }),
+        exportContractHoursWorkbook(input),
       );
       if (!toastAction(res)) return;
       // Empty range: nothing to export.
@@ -60,7 +70,7 @@ export function DownloadHoursCsvButton({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `contract-hours-${from}-to-${to}.xlsx`;
+      a.download = res.filename;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Excel downloaded");

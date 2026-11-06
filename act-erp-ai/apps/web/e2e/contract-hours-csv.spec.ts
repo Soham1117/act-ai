@@ -55,10 +55,10 @@ async function download(page: Page) {
   const decode = (value: string) => value.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   const rows = [...xml.matchAll(/<row[^>]*>(.*?)<\/row>/g)].map((match) => {
     const cells: string[] = Array(10).fill("");
-    for (const cell of match[1]!.matchAll(/<c r="([A-J])\d+"[^>]*>(.*?)<\/c>/g)) {
+    for (const cell of match[1]!.matchAll(/<c r="([A-J])\d+"[^>]*?(?:\/>|>(.*?)<\/c>)/g)) {
       const col = cell[1]!.charCodeAt(0) - 65;
-      const value = /<t[^>]*>(.*?)<\/t>/.exec(cell[2]!)?.[1];
-      const number = /<v>(.*?)<\/v>/.exec(cell[2]!)?.[1];
+      const value = /<t[^>]*>(.*?)<\/t>/.exec(cell[2] ?? "")?.[1];
+      const number = /<v>(.*?)<\/v>/.exec(cell[2] ?? "")?.[1];
       cells[col] = value !== undefined ? decode(value) : number !== undefined ? col === 7 ? Number(number).toFixed(2) : number : "";
     }
     return cells;
