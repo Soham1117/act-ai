@@ -16,8 +16,8 @@ async function assertActor(tx: Tx, actor: Actor) {
   if (!user || user.role !== "ADMIN" || accessLevelFor(user) !== "FULL") throw new Error("You no longer have permission to review Watch proposals.");
 }
 
-async function log(tx: Tx, actor: Actor, id: string, action: string, diff: Prisma.InputJsonObject) {
-  await tx.auditLog.create({ data: { actorId: actor.id, actorEmail: actor.email, action: `watch.proposal.${action}`, resource: `WatchProposal:${id}`, diff } });
+async function log(tx: Tx, actor: Actor | null, id: string, action: string, diff: Prisma.InputJsonObject) {
+  await tx.auditLog.create({ data: { actorId: actor?.id ?? null, actorEmail: actor ? actor.email : "system:watch", action: `watch.proposal.${action}`, resource: `WatchProposal:${id}`, diff } });
 }
 
 /** Row locks serialize proposal execution against payroll close/reopen. */
@@ -27,31 +27,68 @@ async function assertOpenPeriod(tx: Tx, date: Date) {
   if (closed) throw new Error("This entry belongs to a closed pay period. Reopen the period before changing hours.");
 }
 
+/** Shared draft-only path. A null actor is reserved for the internal scheduled runner. */
+async function createDraft(actor: Actor | null, input: { findingId: string; reason: string }, now: Date): Promise<ActionResult<{ id: string; created: boolean }>> {
+  const finding = await db.watchFinding.findUnique({ where: { id: input.findingId } });
+  if (!finding || finding.ruleId !== "time.missing-clock-out" || finding.subjectType !== "TimeEntry") return fail("Choose an employee missing-clock-out finding.");
+  const found = await db.timeEntry.findUnique({ where: { id: finding.subjectId }, select: { employeeId: true } });
+  if (!found) return fail("That time entry no longer exists.");
+  return withEmployeeLock(found.employeeId, async (tx) => {
+    if (actor) await assertActor(tx, actor);
+    const currentFinding = await tx.watchFinding.findUnique({ where: { id: finding.id } });
+    const statuses = actor ? ["OPEN", "ACKNOWLEDGED", "SNOOZED"] : ["OPEN", "ACKNOWLEDGED"];
+    if (!currentFinding || !statuses.includes(currentFinding.status) || currentFinding.ruleId !== finding.ruleId || currentFinding.subjectType !== "TimeEntry" || currentFinding.subjectId !== finding.subjectId) return fail("This flag changed. Refresh and review it again.");
+    const entry = await tx.timeEntry.findUnique({ where: { id: finding.subjectId }, include: { breaks: true } });
+    if (!entry || entry.clockOut || !["ACTIVE", "ON_BREAK"].includes(entry.status)) return fail("This shift is already closed.");
+    if (entry.breaks.some((b) => !b.endTime)) return fail("This shift has an open break. Confirm the break end in Hours before drafting a correction.");
+    // A scheduled run never recreates a rejected/undone proposal or refreshes a
+    // stale pending draft. An admin can deliberately create a new draft instead.
+    const existing = await tx.watchProposal.findFirst({ where: { entryId: entry.id, ...(actor ? { status: "PENDING" as const } : {}) } });
+    if (existing) return ok({ id: existing.id, created: false });
+    await tx.$queryRaw`SELECT id FROM "Schedule" WHERE "employeeId" = ${entry.employeeId} AND date = ${entry.date} FOR SHARE`;
+    const schedules = await tx.schedule.findMany({ where: { employeeId: entry.employeeId, date: entry.date } });
+    const suggested = scheduledClockOut(entry, schedules, now);
+    if (!suggested) return fail("There is no single valid scheduled end for this shift. Confirm the actual clock-out in Hours instead.");
+    await tx.$queryRaw`SELECT id FROM "PayrollCalendar" WHERE "payPeriodStart" <= ${entry.date} AND "payPeriodEnd" >= ${entry.date} FOR UPDATE`;
+    const closed = await tx.payrollCalendar.findFirst({ where: { closedAt: { not: null }, payPeriodStart: { lte: entry.date }, payPeriodEnd: { gte: entry.date } }, select: { id: true } });
+    if (closed) return fail("This entry belongs to a closed pay period. Reopen the period before drafting a correction.");
+    const invalid = validateEntryTimes({ clockIn: entry.clockIn, clockOut: suggested.clockOut, breaks: entry.breaks, maxShiftMs: ADMIN_MAX_SHIFT_MS, now });
+    if (invalid) return fail(invalid);
+    const overlap = await tx.timeEntry.findFirst({ where: { employeeId: entry.employeeId, id: { not: entry.id }, approvalStatus: { not: "REJECTED" }, clockIn: { lt: suggested.clockOut }, OR: [{ clockOut: null }, { clockOut: { gt: entry.clockIn } }] }, select: { id: true } });
+    if (overlap) return fail("The proposed correction overlaps another time entry.");
+    const before = proposalEntrySnapshot(entry);
+    const evidence = { scheduleId: suggested.scheduleId, scheduleUpdatedAt: suggested.scheduleUpdatedAt, scheduledEnd: suggested.clockOut.toISOString(), warning: "Scheduled time is a suggestion, not proof of time worked. Confirm the actual end before approval." };
+    const proposal = await tx.watchProposal.create({ data: { findingId: finding.id, entryId: entry.id, employeeId: entry.employeeId, before, proposedClockOut: suggested.clockOut, reason: input.reason, evidence, createdById: actor?.id ?? null } });
+    await log(tx, actor, proposal.id, "create", { findingId: finding.id, before, proposedClockOut: suggested.clockOut.toISOString(), reason: input.reason, evidence, automatic: actor === null });
+    return ok({ id: proposal.id, created: true });
+  });
+}
+
 export async function createProposal(actor: Actor, input: { findingId: string; reason: string }): Promise<ActionResult<{ id: string }>> {
   try {
-    const finding = await db.watchFinding.findUnique({ where: { id: input.findingId } });
-    if (!finding || finding.ruleId !== "time.missing-clock-out" || finding.subjectType !== "TimeEntry") return fail("Choose an employee missing-clock-out finding.");
-    const found = await db.timeEntry.findUnique({ where: { id: finding.subjectId }, select: { employeeId: true } });
-    if (!found) return fail("That time entry no longer exists.");
-    return await withEmployeeLock(found.employeeId, async (tx) => {
-      await assertActor(tx, actor);
-      const currentFinding = await tx.watchFinding.findUnique({ where: { id: finding.id } });
-      if (!currentFinding || !["OPEN", "ACKNOWLEDGED", "SNOOZED"].includes(currentFinding.status) || currentFinding.subjectId !== finding.subjectId) return fail("This flag changed. Refresh and review it again.");
-      const entry = await tx.timeEntry.findUnique({ where: { id: finding.subjectId }, include: { breaks: true } });
-      if (!entry || entry.clockOut || !["ACTIVE", "ON_BREAK"].includes(entry.status)) return fail("This shift is already closed.");
-      if (entry.breaks.some((b) => !b.endTime)) return fail("This shift has an open break. Confirm the break end in Hours before drafting a correction.");
-      const schedules = await tx.schedule.findMany({ where: { employeeId: entry.employeeId, date: entry.date } });
-      const suggested = scheduledClockOut(entry, schedules, new Date());
-      if (!suggested) return fail("There is no single valid scheduled end for this shift. Confirm the actual clock-out in Hours instead.");
-      const existing = await tx.watchProposal.findFirst({ where: { entryId: entry.id, status: "PENDING" } });
-      if (existing) return ok({ id: existing.id });
-      const before = proposalEntrySnapshot(entry);
-      const evidence = { scheduleId: suggested.scheduleId, scheduleUpdatedAt: suggested.scheduleUpdatedAt, scheduledEnd: suggested.clockOut.toISOString(), warning: "Scheduled time is a suggestion, not proof of time worked. Confirm the actual end before approval." };
-      const proposal = await tx.watchProposal.create({ data: { findingId: finding.id, entryId: entry.id, employeeId: entry.employeeId, before, proposedClockOut: suggested.clockOut, reason: input.reason, evidence, createdById: actor.id } });
-      await log(tx, actor, proposal.id, "create", { findingId: finding.id, before, proposedClockOut: suggested.clockOut.toISOString(), reason: input.reason, evidence });
-      return ok({ id: proposal.id });
-    });
+    const result = await createDraft(actor, input, new Date());
+    return result.ok ? ok({ id: result.id }) : result;
   } catch (error) { return failFromUnknown(error); }
+}
+
+/** Internal L3 generation only: never closes, approves or changes a punch. */
+export async function queueAutomaticClockOutProposals(now: Date): Promise<{ created: number; skipped: number; errors: string[] }> {
+  const findings = await db.watchFinding.findMany({
+    where: { ruleId: "time.missing-clock-out", subjectType: "TimeEntry", status: { in: ["OPEN", "ACKNOWLEDGED"] } },
+    select: { id: true },
+    orderBy: { firstSeenAt: "asc" },
+  });
+  const counts = { created: 0, skipped: 0, errors: [] as string[] };
+  for (const finding of findings) {
+    try {
+      const result = await createDraft(null, { findingId: finding.id, reason: "Watch detected a missing clock-out. The scheduled end is a draft suggestion; an admin must verify the actual end of work." }, now);
+      if (result.ok && result.created) counts.created++;
+      else counts.skipped++;
+    } catch (error) {
+      counts.errors.push(`${finding.id}: ${failFromUnknown(error).error}`.slice(0, 500));
+    }
+  }
+  return counts;
 }
 
 export async function decideProposal(actor: Actor, input: { id: string; action: Decision; confirmedActualEnd?: boolean }): Promise<ActionResult<{ id: string; status: string }>> {

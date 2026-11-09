@@ -23,7 +23,7 @@ export async function adminWatchProposals() {
     });
     const evidence = p.evidence as { scheduleId?: string; scheduleUpdatedAt?: string };
     return {
-      id: p.id, status: p.status, entryId: p.entryId, employeeId: p.employeeId, date: before.date.slice(0, 10),
+      id: p.id, status: p.status, entryId: p.entryId, employeeId: p.employeeId, date: before.date.slice(0, 10), automatic: p.createdById === null,
       name: people.get(p.employeeId)?.name ?? "Deleted employee",
       employeeCode: people.get(p.employeeId)?.employeeId ?? p.employeeId,
       clockIn: before.clockIn, originalClockOut: before.clockOut,

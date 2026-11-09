@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  finding: vi.fn(), entry: vi.fn(), entryOrThrow: vi.fn(), entryOther: vi.fn(), entryUpdate: vi.fn(),
+  finding: vi.fn(), findings: vi.fn(), entry: vi.fn(), entryOrThrow: vi.fn(), entryOther: vi.fn(), entryUpdate: vi.fn(),
   proposal: vi.fn(), proposalCreate: vi.fn(), proposalUpdate: vi.fn(), schedules: vi.fn(),
   user: vi.fn(), period: vi.fn(), query: vi.fn(), audit: vi.fn(), close: vi.fn(), lock: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
-  watchFinding: { findUnique: mocks.finding }, timeEntry: { findUnique: mocks.entry }, watchProposal: { findUnique: mocks.proposal },
+  watchFinding: { findUnique: mocks.finding, findMany: mocks.findings }, timeEntry: { findUnique: mocks.entry }, watchProposal: { findUnique: mocks.proposal },
 } }));
 vi.mock("@/server/time-core", () => ({ withEmployeeLock: mocks.lock, closeOpenEntry: mocks.close }));
 
-import { createProposal, decideProposal } from "./proposals";
+import { createProposal, decideProposal, queueAutomaticClockOutProposals } from "./proposals";
 import { proposalEntrySnapshot } from "@/lib/watch/proposals";
 
 const actor = { id: "admin", email: "admin@example.test" };
@@ -30,6 +30,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   entry = { id: "entry", employeeId: "employee", date: new Date("2026-10-01"), clockIn: start, clockOut: null, status: "ACTIVE", approvalStatus: "PENDING", totalWorkMin: 0, totalBreakMin: 0, updatedAt: start, jobCode: "SHOP", autoClosed: false, lastEditedById: null, editReason: null, approvedById: null, approvalDate: null, approvalNotes: null, breaks: [] };
   proposal = { id: "proposal", findingId: "finding", entryId: "entry", employeeId: "employee", status: "PENDING", before: proposalEntrySnapshot(entry as never), proposedClockOut: end, reason: "Confirmed missed punch", evidence: { scheduleId: "schedule", scheduleUpdatedAt: start.toISOString() } };
+  mocks.findings.mockResolvedValue([{ id: "finding" }]);
   mocks.user.mockResolvedValue({ role: "ADMIN", employee: null });
   mocks.lock.mockImplementation(async (_id, callback) => callback(tx));
   mocks.finding.mockResolvedValue({ id: "finding", ruleId: "time.missing-clock-out", subjectType: "TimeEntry", subjectId: "entry", status: "OPEN" });
@@ -126,5 +127,73 @@ describe("L3 missing-clock-out lifecycle", () => {
     expect(mocks.close).not.toHaveBeenCalled();
     expect(mocks.proposalUpdate).not.toHaveBeenCalled();
     expect(mocks.audit).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("automatic missing-clock-out drafts", () => {
+  const now = new Date("2026-10-02T00:00:00Z");
+  beforeEach(() => { mocks.proposal.mockResolvedValue(null); });
+
+  it("creates only a pending draft with system attribution and no punch changes", async () => {
+    expect(await queueAutomaticClockOutProposals(now)).toEqual({ created: 1, skipped: 0, errors: [] });
+    expect(mocks.findings).toHaveBeenCalledWith(expect.objectContaining({ where: { ruleId: "time.missing-clock-out", subjectType: "TimeEntry", status: { in: ["OPEN", "ACKNOWLEDGED"] } } }));
+    expect(mocks.proposalCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ createdById: null, proposedClockOut: end, before: expect.objectContaining({ clockOut: null }) }) });
+    expect(mocks.audit).toHaveBeenCalledWith({ data: expect.objectContaining({ actorId: null, actorEmail: "system:watch", action: "watch.proposal.create", diff: expect.objectContaining({ automatic: true }) }) });
+    expect(mocks.close).not.toHaveBeenCalled();
+    expect(mocks.entryUpdate).not.toHaveBeenCalled();
+    expect(mocks.proposalUpdate).not.toHaveBeenCalled();
+    expect(mocks.user).not.toHaveBeenCalled();
+  });
+
+  it.each(["PENDING", "REJECTED", "APPLIED", "UNDONE"])("does not recreate an entry's %s proposal", async (status) => {
+    mocks.proposal.mockResolvedValue({ ...proposal, status });
+    expect(await queueAutomaticClockOutProposals(now)).toEqual({ created: 0, skipped: 1, errors: [] });
+    expect(mocks.proposal).toHaveBeenCalledWith({ where: { entryId: "entry" } });
+    expect(mocks.proposalCreate).not.toHaveBeenCalled();
+    expect(mocks.proposalUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each(["closed shift", "open break", "missing schedule", "ambiguous schedules", "future scheduled end", "closed period", "overlap", "invalid break", "dismissed finding", "snoozed finding"])("skips ineligible %s without error or business writes", async (kind) => {
+    if (kind === "closed shift") entry.clockOut = end;
+    if (kind === "open break") entry.breaks = [{ id: "break", startTime: start, endTime: null }];
+    if (kind === "missing schedule") mocks.schedules.mockResolvedValue([]);
+    if (kind === "ambiguous schedules") {
+      const schedule = { id: "schedule", date: new Date("2026-10-01"), startTime: "08:00", endTime: "16:00", updatedAt: start };
+      mocks.schedules.mockResolvedValue([schedule, { ...schedule, id: "second" }]);
+    }
+    if (kind === "closed period") mocks.period.mockResolvedValue({ id: "closed" });
+    if (kind === "overlap") mocks.entryOther.mockResolvedValue({ id: "other" });
+    if (kind === "invalid break") entry.breaks = [{ id: "break", startTime: new Date(start.getTime() - 60_000), endTime: end }];
+    if (kind === "dismissed finding" || kind === "snoozed finding") mocks.finding.mockResolvedValue({ id: "finding", ruleId: "time.missing-clock-out", subjectType: "TimeEntry", subjectId: "entry", status: kind === "dismissed finding" ? "DISMISSED" : "SNOOZED" });
+    const result = await queueAutomaticClockOutProposals(kind === "future scheduled end" ? start : now);
+    expect(result).toEqual({ created: 0, skipped: 1, errors: [] });
+    expect(mocks.proposalCreate).not.toHaveBeenCalled();
+    expect(mocks.close).not.toHaveBeenCalled();
+    expect(mocks.entryUpdate).not.toHaveBeenCalled();
+  });
+
+  it("serializes simultaneous generation and does not replace the first snapshot", async () => {
+    let saved: object | null = null;
+    let serial = Promise.resolve();
+    mocks.proposal.mockImplementation(async () => saved);
+    mocks.proposalCreate.mockImplementation(async ({ data }) => { saved = { id: "proposal", ...data }; return saved; });
+    mocks.lock.mockImplementation((_id, callback) => {
+      const result = serial.then(() => callback(tx));
+      serial = result.then(() => undefined);
+      return result;
+    });
+    const results = await Promise.all([queueAutomaticClockOutProposals(now), queueAutomaticClockOutProposals(now)]);
+    expect(results.reduce((sum, r) => sum + r.created, 0)).toBe(1);
+    expect(results.reduce((sum, r) => sum + r.skipped, 0)).toBe(1);
+    expect(mocks.proposalCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.audit).toHaveBeenCalledTimes(1);
+    expect(mocks.proposalUpdate).not.toHaveBeenCalled();
+  });
+
+  it("reports unexpected persistence failures instead of counting them as skips", async () => {
+    mocks.audit.mockRejectedValue(new Error("Audit unavailable"));
+    expect(await queueAutomaticClockOutProposals(now)).toEqual({ created: 0, skipped: 0, errors: ["finding: Audit unavailable"] });
+    expect(mocks.close).not.toHaveBeenCalled();
   });
 });

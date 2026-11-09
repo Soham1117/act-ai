@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(), lock: vi.fn(), running: vi.fn(), createRun: vi.fn(), finishRun: vi.fn(),
   config: vi.fn(), findFinding: vi.fn(), createFinding: vi.fn(), updateFinding: vi.fn(), resolveFindings: vi.fn(),
   firstRule: vi.fn(), secondRule: vi.fn(), digest: vi.fn(),
+  firstRuleId: "time.impossible-shift", queueDrafts: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ db: {
@@ -14,10 +15,11 @@ vi.mock("@/lib/db", () => ({ db: {
   watchFinding: { findUnique: mocks.findFinding, create: mocks.createFinding, update: mocks.updateFinding, updateMany: mocks.resolveFindings },
 } }));
 vi.mock("./jobs", () => ({ ALL_JOBS: [
-  { id: "time.impossible-shift", run: mocks.firstRule },
+  { get id() { return mocks.firstRuleId; }, run: mocks.firstRule },
   { id: "other.rule", run: mocks.secondRule },
 ] }));
 vi.mock("./digest", () => ({ sendDailyDigestIfDue: mocks.digest }));
+vi.mock("./proposals", () => ({ queueAutomaticClockOutProposals: mocks.queueDrafts }));
 
 import { runWatch } from "./runner";
 
@@ -28,6 +30,8 @@ const draft: FindingDraft = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.firstRuleId = "time.impossible-shift";
+  mocks.queueDrafts.mockResolvedValue({ created: 1, skipped: 0, errors: [] });
   mocks.transaction.mockImplementation(async (callback) => callback({
     $executeRaw: mocks.lock,
     watchRun: { findFirst: mocks.running, create: mocks.createRun },
@@ -42,6 +46,41 @@ beforeEach(() => {
 });
 
 describe("Watch runner", () => {
+  it("queues drafts after a successful live scheduled missing-clock-out check", async () => {
+    mocks.firstRuleId = "time.missing-clock-out";
+    const now = new Date("2026-11-09T20:00:00Z");
+    const result = await runWatch({ trigger: "SCHEDULE", shadow: false, now });
+    expect(mocks.queueDrafts).toHaveBeenCalledExactlyOnceWith(now);
+    expect(mocks.resolveFindings.mock.invocationCallOrder[0]).toBeLessThan(mocks.queueDrafts.mock.invocationCallOrder[0]!);
+    expect(result.draftsCreated).toBe(1);
+  });
+
+  it("does not queue drafts during manual checks, shadow runs or individual rechecks", async () => {
+    mocks.firstRuleId = "time.missing-clock-out";
+    await runWatch({ trigger: "MANUAL" });
+    await runWatch({ trigger: "SCHEDULE", shadow: true });
+    await runWatch({ trigger: "SCHEDULE", shadow: false, ruleIds: ["time.missing-clock-out"] });
+    expect(mocks.queueDrafts).not.toHaveBeenCalled();
+  });
+
+  it("does not queue drafts when the missing-clock-out rule is disabled or fails", async () => {
+    mocks.firstRuleId = "time.missing-clock-out";
+    mocks.config.mockImplementation(async ({ where }) => where.ruleId === "time.missing-clock-out" ? { enabled: false } : null);
+    await runWatch({ trigger: "SCHEDULE", shadow: false });
+    mocks.config.mockResolvedValue(null);
+    mocks.firstRule.mockRejectedValue(new Error("check failed"));
+    await runWatch({ trigger: "SCHEDULE", shadow: false });
+    expect(mocks.queueDrafts).not.toHaveBeenCalled();
+  });
+
+  it("records draft-generation failures while continuing the digest and other checks", async () => {
+    mocks.firstRuleId = "time.missing-clock-out";
+    mocks.queueDrafts.mockResolvedValue({ created: 0, skipped: 0, errors: ["Database error while drafting"] });
+    const result = await runWatch({ trigger: "SCHEDULE", shadow: false });
+    expect(result.errors).toContainEqual({ ruleId: "proposal.missing-clock-out", message: "Database error while drafting" });
+    expect(mocks.secondRule).toHaveBeenCalled();
+    expect(mocks.digest).toHaveBeenCalled();
+  });
   it("claims the run under a database lock and skips an active run", async () => {
     mocks.running.mockResolvedValue({ id: "existing" });
     expect(await runWatch({ trigger: "MANUAL" })).toMatchObject({ skipped: "already-running", runId: "existing" });

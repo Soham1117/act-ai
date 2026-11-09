@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { test, expect, type Page } from "@playwright/test";
 import { db } from "./support/db";
 import { ct, PT, sessionFor } from "./support/payroll-time";
@@ -102,4 +103,42 @@ test("employees cannot list correction proposals", async ({ browser }) => {
     await expect(page).toHaveURL(/\/unauthorized|\/dashboard/);
     await expect(page.getByRole("button", { name: "Approve correction", exact: true })).toHaveCount(0);
   } finally { await context.close(); }
+});
+
+test("scheduled drafts are attributed to Watch, change no punches, and are not recreated after rejection", async ({ page }) => {
+  const f = await fixture();
+  const oldPolicy = await db.watchRuleConfig.findUnique({ where: { ruleId: "policy" } });
+  // This isolated test database must never send a real digest.
+  const params = { ...(oldPolicy?.params as Record<string, unknown> ?? {}), digestRecipientEmails: [] };
+  await db.watchRuleConfig.upsert({ where: { ruleId: "policy" }, create: { ruleId: "policy", params }, update: { params } });
+  async function scheduledCheck() {
+    const response = await page.request.post("/api/internal/watch/run", { headers: { authorization: `Bearer ${process.env.WATCH_CRON_TOKEN}` } });
+    expect(response.status()).toBe(200);
+    const result = await response.json();
+    expect(result.skipped).toBeUndefined();
+    expect(result.errors.filter((e: { ruleId: string }) => e.ruleId === "proposal.missing-clock-out")).toEqual([]);
+  }
+  try {
+    await scheduledCheck();
+    const proposal = await db.watchProposal.findFirstOrThrow({ where: { entryId: f.entry.id } });
+    expect(proposal.createdById).toBeNull();
+    expect(proposal.status).toBe("PENDING");
+    expect((await db.timeEntry.findUniqueOrThrow({ where: { id: f.entry.id } })).clockOut).toBeNull();
+    expect(await db.auditLog.findFirst({ where: { resource: `WatchProposal:${proposal.id}`, action: "watch.proposal.create" } })).toMatchObject({ actorId: null, actorEmail: "system:watch" });
+    await scheduledCheck();
+    expect(await db.watchProposal.count({ where: { entryId: f.entry.id } })).toBe(1);
+    await page.goto("/admin/watch/proposals");
+    const row = page.getByRole("article", { name: `Correction for ${f.employee.name}`, exact: true });
+    await expect(row).toContainText("Automatically drafted");
+    await expect(row.getByRole("button", { name: "Approve correction", exact: true })).toBeDisabled();
+    await row.getByRole("button", { name: "Reject draft", exact: true }).click();
+    await expect.poll(async () => (await db.watchProposal.findUniqueOrThrow({ where: { id: proposal.id } })).status).toBe("REJECTED");
+    await scheduledCheck();
+    expect(await db.watchProposal.count({ where: { entryId: f.entry.id } })).toBe(1);
+    expect((await db.timeEntry.findUniqueOrThrow({ where: { id: f.entry.id } })).clockOut).toBeNull();
+  } finally {
+    await f.cleanup();
+    if (oldPolicy) await db.watchRuleConfig.update({ where: { ruleId: "policy" }, data: { params: oldPolicy.params ?? Prisma.DbNull } });
+    else await db.watchRuleConfig.delete({ where: { ruleId: "policy" } });
+  }
 });

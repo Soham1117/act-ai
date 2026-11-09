@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { mergePolicy, type FindingDraft, type WatchPolicy } from "@/lib/watch/types";
 import { sendDailyDigestIfDue } from "./digest";
 import { ALL_JOBS } from "./jobs";
+import { queueAutomaticClockOutProposals } from "./proposals";
 
 const POLICY_ID = "policy";
 const STALE_RUN_MS = 10 * 60_000;
@@ -22,13 +23,14 @@ export type WatchRunResult = {
   created: number;
   updated: number;
   autoResolved: number;
+  draftsCreated: number;
   errors: Array<{ ruleId: string; message: string }>;
 };
 
 /**
  * Runs every enabled rule, stores findings, auto-resolves the ones that are no
- * longer true. Business records stay read-only; live scheduled runs may also
- * deliver the daily digest.
+ * longer true. Live scheduled runs can queue drafts and deliver the digest.
+ * Drafts never change punches; execution still requires explicit admin approval.
  */
 export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: boolean; now?: Date; ruleIds?: string[] }): Promise<WatchRunResult> {
   const now = opts.now ?? new Date();
@@ -44,7 +46,7 @@ export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: 
     return { run, skipped: false };
   });
   if (claim.skipped) {
-    return { runId: claim.run.id, skipped: "already-running", created: 0, updated: 0, autoResolved: 0, errors: [] };
+    return { runId: claim.run.id, skipped: "already-running", created: 0, updated: 0, autoResolved: 0, draftsCreated: 0, errors: [] };
   }
   const run = claim.run;
   const errors: WatchRunResult["errors"] = [];
@@ -52,6 +54,7 @@ export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: 
   let created = 0;
   let updated = 0;
   let autoResolved = 0;
+  let draftsCreated = 0;
 
   try {
     const policy = await loadPolicy();
@@ -70,6 +73,11 @@ export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: 
         created += counts.created;
         updated += counts.updated;
         autoResolved += counts.autoResolved;
+        if (job.id === "time.missing-clock-out" && opts.trigger === "SCHEDULE" && !run.shadow && !opts.ruleIds) {
+          const queued = await queueAutomaticClockOutProposals(now);
+          draftsCreated += queued.created;
+          errors.push(...queued.errors.map((message) => ({ ruleId: "proposal.missing-clock-out", message: message.slice(0, 500) })));
+        }
       } catch (err) {
         errors.push({ ruleId: job.id, message: (err instanceof Error ? err.message : String(err)).slice(0, 500) });
       }
@@ -92,7 +100,7 @@ export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: 
       data: { finishedAt: new Date(), created, updated, autoResolved, rulesRun, errors },
     });
   }
-  return { runId: run.id, created, updated, autoResolved, errors };
+  return { runId: run.id, created, updated, autoResolved, draftsCreated, errors };
 }
 
 async function storeFindings(ruleId: string, drafts: FindingDraft[], now: Date) {

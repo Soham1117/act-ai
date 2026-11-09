@@ -2050,7 +2050,7 @@ model WatchProposal {
   proposedClockOut DateTime
   reason           String              @db.Text
   evidence         Json
-  createdById      String              @db.Uuid
+  createdById      String?             @db.Uuid
   decidedById      String?             @db.Uuid
   decidedAt        DateTime?
   lastError        String?             @db.Text

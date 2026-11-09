@@ -35,7 +35,7 @@ function Proposal({ row }: { row: WatchProposalRow }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 [overflow-wrap:anywhere]">
           <h2 className="font-semibold">{row.name}</h2>
-          <p className="text-xs text-muted-foreground">{row.employeeCode} · Job {row.jobCode} · Drafted {dateTime(row.createdAt)} Central</p>
+          <p className="text-xs text-muted-foreground">{row.employeeCode} · Job {row.jobCode} · {row.automatic ? "Automatically drafted" : "Drafted"} {dateTime(row.createdAt)} Central</p>
         </div>
         <Badge variant={row.status === "PENDING" ? "warning" : "outline"}>{labels[row.status]}</Badge>
       </div>
@@ -81,7 +81,7 @@ export function ProposalQueue({ rows }: { rows: WatchProposalRow[] }) {
         <Button size="sm" variant={history ? "default" : "outline"} aria-pressed={history} onClick={() => setHistory(true)}>History ({completed.length})</Button>
       </div>
       {visible.length ? <div className="divide-y rounded-lg border">{visible.map((r) => <Proposal key={`${r.id}-${r.status}`} row={r} />)}</div> :
-        <p className="rounded-lg border p-6 text-sm text-muted-foreground">{history ? "No correction history yet." : <>No drafts awaiting review. Open a missing-clock-out flag in <Link href="/admin/watch" className="underline underline-offset-4">Watch</Link> to create one.</>}</p>}
+        <p className="rounded-lg border p-6 text-sm text-muted-foreground">{history ? "No correction history yet." : <>No drafts awaiting review. Scheduled Watch checks automatically draft eligible employee missing-clock-out corrections. You can also open a missing-clock-out flag in <Link href="/admin/watch" className="underline underline-offset-4">Watch</Link> to create one manually.</>}</p>}
       <p className="text-xs text-muted-foreground">Showing up to 200 recent drafts. No corrections run automatically, and no employee messages are sent from this queue.</p>
     </div>
   );

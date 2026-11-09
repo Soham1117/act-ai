@@ -370,9 +370,20 @@ L3 employee missing-clock-out drafts were deployed November 9, 2026 in applicati
 - [x] Desktop/mobile browser coverage: creating a draft changes nothing, simultaneous approvals apply once, safe undo restores the original open entry, stale drafts remain actionable, rejection changes no hours, and employees cannot list the queue.
 - [x] Deployed the additive `WatchProposal` table and application together in release `11fcfc1` after a database backup. Warm health, login, and a read-only proposal-table query passed.
 
-Boundaries: employee shifts only; a single valid schedule is required. Missing/ambiguous schedules and open breaks use the existing manual Hours workflow. Overnight schedules are supported; ambiguous DST times are refused. Creating drafts is an explicit admin action from a finding; the cron does not execute corrections. No notification sends, inferred break changes, payroll auto-approval or L4 execution are enabled. The existing schedule rows are locked while evidence is rechecked; the exact human-confirmed proposed end is always applied. Other schedule writers are not globally serialized with this workflow.
+Boundaries: employee shifts only; a single valid schedule is required. Missing/ambiguous schedules and open breaks use the existing manual Hours workflow. Overnight schedules are supported; ambiguous DST times are refused. In release `11fcfc1`, creating drafts is an explicit admin action from a finding. Automatic draft generation is the follow-up below; the cron never executes corrections. No notification sends, inferred break changes, payroll auto-approval or L4 execution are enabled. The existing schedule rows are locked while evidence is rechecked; the exact human-confirmed proposed end is always applied. Other schedule writers are not globally serialized with this workflow.
 
 Deployment: apply `apps/web/prisma/sql/20261109_watch_proposals.sql` (or the existing deploy script with `--schema`) before switching to the new image. Existing L1/L2 readers remain compatible. Roll back the application while retaining the additive table and its history; do not remove proposal or audit rows. All verification runs use the isolated test database, not production.
+
+### Automatic L3 draft generation (November 9 follow-up, local)
+
+- [x] After a successful enabled missing-clock-out check, live scheduled runs queue eligible employee corrections automatically. Manual checks, shadow runs, individual rechecks, disabled checks and failed checks do not generate drafts.
+- [x] Reuse the manual drafting checks: current open entry, no open breaks, a single valid past schedule, valid break times, no overlaps and no closed pay period. Every decision is rechecked under the employee lock.
+- [x] Record system-created drafts with no human creator and an audit actor of `system:watch`; show “Automatically drafted” in the review queue.
+- [x] Never overwrite an existing pending draft or recreate any entry proposal after rejection, application or undo. An admin may deliberately draft a fresh correction manually.
+- [x] Unexpected generation errors are retained in the Watch run; ineligible entries are skipped. No punch/break changes or extra notifications occur during generation.
+- [ ] Deploy follow-up code and `apps/web/prisma/sql/20261109_watch_automatic_drafts.sql` to allow a null system creator. Existing creator IDs and audit history remain intact; the old application remains compatible with the nullable column.
+
+The normal 15-minute schedule will populate the queue only when eligible missing-clock-out findings exist. An empty queue is valid when no eligible issues exist. Automatic creation does not approve a correction: actual-end confirmation and the existing human-only execution checks still apply.
 
 Next: eight-week L1 back-test/noise tuning; then define a separately approved L3 action for reminder drafts or contractor corrections. L4 still needs explicit per-action opt-in and limits before implementation.
 
