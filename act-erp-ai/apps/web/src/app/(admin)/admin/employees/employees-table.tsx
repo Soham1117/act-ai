@@ -36,6 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { getAvatarUrl } from "@/lib/format";
 import { getDepartmentConfig } from "@/lib/departments";
+import { PanelSlot } from "@/components/inline-panel";
 import { BulkActions } from "./bulk-actions";
 import { DataListCard, FilterStack, ResponsiveDataList } from "@/components/mobile";
 
@@ -54,7 +55,7 @@ export type Row = {
   profilePic: string | null;
 };
 
-export function EmployeesTable({ rows }: { rows: Row[] }) {
+export function EmployeesTable({ rows, actions }: { rows: Row[]; actions?: React.ReactNode }) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState("");
   const [rowSelection, setRowSelection] = React.useState({});
@@ -231,10 +232,16 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
 
   return (
     <div className="space-y-3">
-      <FilterStack>
-        <div className="relative w-full flex-1 sm:max-w-xs">
+      <FilterStack className="[&>div]:min-w-0">
+        {actions && (
+          <div className="shrink-0 [&_button]:min-h-11 sm:[&_button]:min-h-9">
+            {actions}
+          </div>
+        )}
+        <div className="relative w-full sm:w-auto sm:min-w-48 sm:flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
+            aria-label="Search employees"
             placeholder="Search name, email, ID…"
             value={globalFilter ?? ""}
             onChange={(e) => setGlobalFilter(e.target.value)}
@@ -244,7 +251,7 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
         {selected.length > 0 && (
           <BulkActions selected={selected} onDone={() => setRowSelection({})} />
         )}
-        <div className="flex w-full items-center justify-between gap-3 sm:ml-auto sm:w-auto">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:ml-auto sm:w-auto">
           <div className="flex flex-wrap items-center gap-2">
             <Switch
               id="show-inactive"
@@ -260,6 +267,7 @@ export function EmployeesTable({ rows }: { rows: Row[] }) {
           </span>
         </div>
       </FilterStack>
+      <PanelSlot id="add-employee" />
 
       <ResponsiveDataList
         mobile={

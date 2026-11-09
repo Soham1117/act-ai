@@ -30,10 +30,12 @@ export default async function DepartmentsPage() {
 
   return (
     <>
-      <PageHeader title="Departments" description={`${departments.length} departments`} />
-      <div className="mb-4">
-        <DepartmentForm />
-      </div>
+      <PageHeader
+        title="Departments"
+        description={`${departments.length} departments`}
+        actions={<DepartmentForm panelSlot="add-department" />}
+      />
+      <PanelSlot id="add-department" />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {departments.map((d) => {
           const cfg = getDepartmentConfig(d.name);

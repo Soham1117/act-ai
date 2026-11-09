@@ -170,23 +170,6 @@ export default async function IndividualHoursPage({
         description="Punch-level hours with rates and weekly OT. All times are Central."
       />
       <HoursSubnav />
-      <div className="mb-4">
-        <ManualEntryButton
-          employees={employees
-            .filter(
-              (e) =>
-                e.employmentStatus === "ACTIVE" ||
-                (employeeId !== "" && e.id === employeeId),
-            )
-            .map((e) => ({
-              id: e.id,
-              name: e.name,
-              employeeId: e.employeeId,
-            }))}
-          jobCodes={jobCodes}
-          fixedEmployeeId={employeeId || undefined}
-        />
-      </div>
 
       <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <Card className="h-fit overflow-hidden lg:sticky lg:top-16">
@@ -255,33 +238,52 @@ export default async function IndividualHoursPage({
 
         <div className="min-w-0 space-y-4">
           <HoursToolbarCard>
-            <form method="get" action="/admin/hours">
-              {employeeId ? <input type="hidden" name="employee" value={employeeId} /> : null}
-              <HoursFilterRow>
-                <HoursField label="From" htmlFor="ih-from">
-                  <FormDateField
-                    key={fromStr}
-                    id="ih-from"
-                    name="from"
-                    defaultValue={fromStr}
-                    aria-label="From date"
-                  />
-                </HoursField>
-                <HoursField label="To" htmlFor="ih-to">
-                  <FormDateField
-                    key={toStr}
-                    id="ih-to"
-                    name="to"
-                    defaultValue={toStr}
-                    aria-label="To date"
-                  />
-                </HoursField>
-                <Button type="submit" size="sm" className="h-9 w-full sm:w-auto">
-                  Update
-                </Button>
-                {selected && <DownloadEmployeeHoursButton employeeId={selected.id} from={fromStr} to={toStr} />}
-              </HoursFilterRow>
-            </form>
+            <div className="flex min-w-0 flex-wrap items-end gap-3">
+              <form method="get" action="/admin/hours" className="min-w-0 flex-1 basis-full sm:basis-auto">
+                {employeeId ? <input type="hidden" name="employee" value={employeeId} /> : null}
+                <HoursFilterRow>
+                  <HoursField label="From" htmlFor="ih-from">
+                    <FormDateField
+                      key={fromStr}
+                      id="ih-from"
+                      name="from"
+                      defaultValue={fromStr}
+                      aria-label="From date"
+                    />
+                  </HoursField>
+                  <HoursField label="To" htmlFor="ih-to">
+                    <FormDateField
+                      key={toStr}
+                      id="ih-to"
+                      name="to"
+                      defaultValue={toStr}
+                      aria-label="To date"
+                    />
+                  </HoursField>
+                  <Button type="submit" size="sm" className="h-9 w-full sm:w-auto">
+                    Update
+                  </Button>
+                  {selected && <DownloadEmployeeHoursButton employeeId={selected.id} from={fromStr} to={toStr} />}
+                </HoursFilterRow>
+              </form>
+              <div className="contents sm:[&>[data-state=closed]]:w-auto">
+                <ManualEntryButton
+                  employees={employees
+                    .filter(
+                      (e) =>
+                        e.employmentStatus === "ACTIVE" ||
+                        (employeeId !== "" && e.id === employeeId),
+                    )
+                    .map((e) => ({
+                      id: e.id,
+                      name: e.name,
+                      employeeId: e.employeeId,
+                    }))}
+                  jobCodes={jobCodes}
+                  fixedEmployeeId={employeeId || undefined}
+                />
+              </div>
+            </div>
             <HoursPresetChips
               presets={presets}
               activeFrom={fromStr}

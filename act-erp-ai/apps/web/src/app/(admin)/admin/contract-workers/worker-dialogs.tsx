@@ -55,11 +55,13 @@ export function WorkerForm({
   agencies,
   jobCodes,
   trigger = "add",
+  panelSlot,
 }: {
   worker?: WorkerRow;
   agencies: AgencyOption[];
   jobCodes: JobCodeOption[];
   trigger?: "add" | "edit";
+  panelSlot?: string;
 }) {
   const formId = useId();
   const router = useRouter();
@@ -148,7 +150,7 @@ export function WorkerForm({
           if (v && worker) reset();
         }}
       >
-        <InlinePanelContent panelSlot={worker ? `worker-${worker.id}` : undefined}>
+        <InlinePanelContent panelSlot={worker ? `worker-${worker.id}` : panelSlot}>
           <InlinePanelHeader>
             <InlinePanelTitle>
               {worker ? `Edit ${worker.workerId}` : "Add contract worker"}

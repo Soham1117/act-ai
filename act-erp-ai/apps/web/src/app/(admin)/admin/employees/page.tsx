@@ -35,7 +35,6 @@ export default async function EmployeesPage() {
         description={`${employees.length} record${employees.length === 1 ? "" : "s"} · ${departments.length} departments`}
 
       />
-      <div className="mb-6"><AddEmployeePanel departments={departments} /></div>
       {pendingHires.length > 0 && (
         <Card className="mb-4 border-amber-500/50 bg-amber-500/5">
           <CardHeader className="pb-2">
@@ -68,6 +67,7 @@ export default async function EmployeesPage() {
         </Card>
       )}
       <EmployeesTable
+        actions={<AddEmployeePanel departments={departments} />}
         rows={employees.map((e) => ({
           id: e.id,
           employeeId: e.employeeId,

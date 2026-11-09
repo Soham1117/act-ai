@@ -143,7 +143,7 @@ export function AddEmployeePanel({
           <Plus className="mr-2 h-4 w-4" /> Add employee
         </Button>
       </InlinePanelTrigger>
-      <InlinePanelContent className="max-w-lg ">
+      <InlinePanelContent panelSlot="add-employee" className="max-w-lg">
         <InlinePanelHeader>
           <InlinePanelTitle>New employee</InlinePanelTitle>
           <InlinePanelDescription>

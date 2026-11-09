@@ -3,6 +3,7 @@ import type { ApprovalStatus, ContractWorkerStatus } from "@prisma/client";
 import { Activity, Clock, HardHat, Timer } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { PanelSlot } from "@/components/inline-panel";
 import { PageHeader, StatCard } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
@@ -173,11 +174,10 @@ export default async function ContractWorkersPage({
     <>
       <PageHeader
         title="Contract workers"
+        actions={<WorkerForm agencies={agencyOptions} jobCodes={jobCodes} panelSlot="add-contract-worker" />}
         description="Agency staff on short projects. Separate from employees. No pay rates are stored. All times are Central."
       />
-      <div className="mb-4">
-        <WorkerForm agencies={agencyOptions} jobCodes={jobCodes} />
-      </div>
+      <PanelSlot id="add-contract-worker" />
       <div className="grid gap-3 sm:grid-cols-3">
         <StatCard
           label="On site now"
@@ -368,26 +368,9 @@ export default async function ContractWorkersPage({
         </TabsContent>
 
         <TabsContent value="hours" className="space-y-4">
-          <div className="flex flex-wrap items-start gap-2">
-            <AddContractEntryButton
-              workers={allWorkers.map((w) => ({
-                id: w.id,
-                name: w.name,
-                workerId: w.workerId,
-                jobCode: w.jobCode,
-                startDate: dateOnlyToString(w.startDate),
-                endDate: w.endDate ? dateOnlyToString(w.endDate) : null,
-                status: w.status,
-              }))}
-              jobCodes={jobCodes}
-            />
-            <Button asChild size="sm" variant="secondary" className="min-h-11 md:min-h-9">
-              <Link href="/admin/contract-workers/mass">Mass hours</Link>
-            </Button>
-          </div>
           <Card>
-            <CardContent className="p-4">
-              <form method="get" action="/admin/contract-workers">
+            <CardContent className="flex min-w-0 flex-wrap items-end gap-3 p-4">
+              <form method="get" action="/admin/contract-workers" className="min-w-0 flex-1 basis-full xl:basis-auto">
                 <FilterStack className="items-end">
                   <input type="hidden" name="tab" value="hours" />
                   <div className="w-full space-y-1 sm:w-auto">
@@ -494,6 +477,23 @@ export default async function ContractWorkersPage({
                   </div>
                 </FilterStack>
               </form>
+          <div className="flex w-full min-w-0 flex-wrap items-start gap-2 sm:w-auto has-[[data-state=open]]:w-full has-[[data-state=open]]:basis-full">
+            <AddContractEntryButton
+              workers={allWorkers.map((w) => ({
+                id: w.id,
+                name: w.name,
+                workerId: w.workerId,
+                jobCode: w.jobCode,
+                startDate: dateOnlyToString(w.startDate),
+                endDate: w.endDate ? dateOnlyToString(w.endDate) : null,
+                status: w.status,
+              }))}
+              jobCodes={jobCodes}
+            />
+            <Button asChild size="sm" variant="secondary" className="min-h-11 md:min-h-9">
+              <Link href="/admin/contract-workers/mass">Mass hours</Link>
+            </Button>
+          </div>
             </CardContent>
           </Card>
           <div className="grid gap-3 sm:grid-cols-2">

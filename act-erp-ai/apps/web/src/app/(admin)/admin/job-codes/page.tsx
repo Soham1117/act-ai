@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { PanelSlot } from "@/components/inline-panel";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { JobCodesTable } from "./job-codes-table";
@@ -38,10 +39,11 @@ export default async function JobCodesPage() {
     <>
       <PageHeader
         title="Job codes"
+        actions={<JobCodePanel departments={departments} panelSlot="add-job-code" />}
         description={`${jobCodes.length} total · ${active} active · ${inactive} inactive`}
 
       />
-      <div className="mb-6"><JobCodePanel departments={departments} /></div>
+      <PanelSlot id="add-job-code" />
       <Card>
         <CardContent className="p-0">
           <JobCodesTable
