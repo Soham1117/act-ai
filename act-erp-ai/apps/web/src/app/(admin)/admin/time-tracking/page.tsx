@@ -315,12 +315,12 @@ export default async function AdminTimeTrackingPage({
         <TabsContent value="attention" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Shifts open over 16 hours ({staleRows.length})</CardTitle>
+              <CardTitle className="text-base">Shifts open over 24 hours ({staleRows.length})</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {staleRows.length === 0 ? (
                 <p className="py-8 text-center text-xs text-muted-foreground">
-                  No stale shifts. Nothing is open longer than 16 hours.
+                  No stale shifts. Nothing is open longer than 24 hours.
                 </p>
               ) : (
                 <ul className="divide-y">

@@ -137,8 +137,8 @@ export const kioskSpanish: Record<string, string> = {
     "Este contrato aún no comienza. Consulta con un administrador.",
   "No active job code is set up, so this punch cannot be recorded. Ask an admin to add or reactivate a job code in Job codes.":
     "No hay un código de trabajo activo, así que no se puede registrar la entrada o salida. Pide a un administrador que agregue o reactive un código de trabajo en Códigos de trabajo.",
-  "Your previous shift was left open more than 16 hours. It was closed automatically and flagged for an admin to review.":
-    "Tu turno anterior quedó abierto por más de 16 horas. Se cerró automáticamente y se marcó para que un administrador lo revise.",
+  "Your previous shift was left open more than 24 hours. It was closed automatically and flagged for an admin to review.":
+    "Tu turno anterior quedó abierto por más de 24 horas. Se cerró automáticamente y se marcó para que un administrador lo revise.",
   "Your last shift was never clocked out. Clocking in now will close it and flag it for an admin to review.":
     "Nunca registraste la salida de tu último turno. Al registrar la entrada ahora, se cerrará y se marcará para que un administrador lo revise.",
   "A previous shift was left open": "Un turno anterior quedó abierto",

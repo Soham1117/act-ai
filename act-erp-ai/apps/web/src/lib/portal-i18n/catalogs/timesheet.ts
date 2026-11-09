@@ -14,8 +14,8 @@ export const timesheetMessages: Record<string, { en: string; es: string }> = {
   "timesheet.clockedIn": { en: "Clocked in", es: "Entrada registrada" },
   "timesheet.clockedOut": { en: "Clocked out", es: "Salida registrada" },
   "timesheet.staleShift": {
-    en: "This shift has been open over 16 hours. It will be closed and sent to an admin for review at your next punch.",
-    es: "Este turno lleva abierto más de 16 horas. Se cerrará y se enviará a un administrador para que lo revise cuando registres tu próximo movimiento.",
+    en: "This shift has been open over 24 hours. It will be closed and sent to an admin for review at your next punch.",
+    es: "Este turno lleva abierto más de 24 horas. Se cerrará y se enviará a un administrador para que lo revise cuando registres tu próximo movimiento.",
   },
   "timesheet.since": { en: "Since {time}", es: "Desde las {time}" },
   "timesheet.hoursThisWeek": { en: "Hours this week", es: "Horas esta semana" },

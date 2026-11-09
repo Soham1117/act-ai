@@ -2029,3 +2029,34 @@ model WatchDigest {
   recipientCount Int      @default(0)
   summary        Json?
 }
+
+enum WatchProposalStatus {
+  PENDING
+  APPLIED
+  REJECTED
+  UNDONE
+}
+
+/// L3: an explicit admin decision is required before a draft changes an entry.
+/// Snapshots remain available even if the source entry or finding is deleted.
+model WatchProposal {
+  id               String              @id @default(cuid())
+  findingId        String
+  entryId          String
+  employeeId       String
+  status           WatchProposalStatus @default(PENDING)
+  before           Json
+  after            Json?
+  proposedClockOut DateTime
+  reason           String              @db.Text
+  evidence         Json
+  createdById      String              @db.Uuid
+  decidedById      String?             @db.Uuid
+  decidedAt        DateTime?
+  lastError        String?             @db.Text
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@index([entryId])
+}

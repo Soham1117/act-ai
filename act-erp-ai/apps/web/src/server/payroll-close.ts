@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { formatDateOnly } from "@/lib/format";
 
 /**
@@ -24,12 +25,13 @@ export type PeriodCounts = { pending: number; open: number };
 /** Entries still needing attention inside each period: pending approval, and still clocked in. */
 export async function loadPeriodCounts(
   periods: { id: string; payPeriodStart: Date; payPeriodEnd: Date }[],
+  client: Pick<Prisma.TransactionClient, "timeEntry"> = db,
 ): Promise<Map<string, PeriodCounts>> {
   const out = new Map<string, PeriodCounts>(periods.map((p) => [p.id, { pending: 0, open: 0 }]));
   if (periods.length === 0) return out;
   const from = periods.reduce((m, p) => (p.payPeriodStart < m ? p.payPeriodStart : m), periods[0]!.payPeriodStart);
   const to = periods.reduce((m, p) => (p.payPeriodEnd > m ? p.payPeriodEnd : m), periods[0]!.payPeriodEnd);
-  const entries = await db.timeEntry.findMany({
+  const entries = await client.timeEntry.findMany({
     where: {
       date: { gte: from, lte: to },
       OR: [

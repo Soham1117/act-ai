@@ -12,11 +12,14 @@ export default async function WatchPage() {
     <>
       <PageHeader
         title="Watch"
-        description="Flags raised by automatic checks. Nothing here changes hours, pay or employee records."
+        description="Automatic checks flag issues for review. Draft corrections require an admin to verify and approve the change."
         actions={
+          <div className="flex flex-wrap gap-4">
+          <Link href="/admin/watch/proposals" className="text-sm underline underline-offset-4">Draft corrections</Link>
           <Link href="/admin/watch/rules" className="text-sm underline underline-offset-4">
             Rules and settings
           </Link>
+          </div>
         }
       />
       <WatchWorkspace data={data} />

@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
   audit: vi.fn(),
   counts: vi.fn(),
   database: {
+    $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
+    auditLog: { create: vi.fn() },
     payrollCalendar: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
   },
 }));
@@ -34,7 +37,8 @@ const past = {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.admin.mockResolvedValue({ id: "admin-1" });
+  mocks.admin.mockResolvedValue({ id: "admin-1", email: "admin@example.test" });
+  mocks.database.$transaction.mockImplementation(async (callback) => callback(mocks.database));
 });
 
 describe("closePayrollPeriod", () => {
@@ -44,6 +48,7 @@ describe("closePayrollPeriod", () => {
     const res = await closePayrollPeriod("p1");
     expect(res.ok).toBe(false);
     expect(mocks.database.payrollCalendar.updateMany).not.toHaveBeenCalled();
+    expect(mocks.database.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("closes a finished period with nothing outstanding and audits it", async () => {
@@ -55,13 +60,27 @@ describe("closePayrollPeriod", () => {
     expect(mocks.database.payrollCalendar.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "p1", closedAt: null } }),
     );
-    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "payroll.period.close" }));
+    expect(mocks.database.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "payroll.period.close", actorId: "admin-1", actorEmail: "admin@example.test" }),
+    }));
+    expect(mocks.counts).toHaveBeenCalledWith([past], mocks.database);
+    expect(mocks.database.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.counts.mock.invocationCallOrder[0]!);
+    expect(mocks.counts.mock.invocationCallOrder[0]).toBeLessThan(mocks.database.payrollCalendar.updateMany.mock.invocationCallOrder[0]!);
   });
 
   it("refuses an already closed period", async () => {
     mocks.database.payrollCalendar.findUnique.mockResolvedValue({ ...past, closedAt: new Date() });
     expect((await closePayrollPeriod("p1")).ok).toBe(false);
     expect(mocks.database.payrollCalendar.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not update or audit when the locked blocker check fails", async () => {
+    mocks.database.payrollCalendar.findUnique.mockResolvedValue(past);
+    mocks.counts.mockRejectedValue(new Error("Unavailable"));
+    expect((await closePayrollPeriod("p1")).ok).toBe(false);
+    expect(mocks.database.$queryRaw).toHaveBeenCalled();
+    expect(mocks.database.payrollCalendar.updateMany).not.toHaveBeenCalled();
+    expect(mocks.database.auditLog.create).not.toHaveBeenCalled();
   });
 
   it("refuses a period that is not over yet", async () => {

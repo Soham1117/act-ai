@@ -296,7 +296,7 @@ export default async function ContractWorkersPage({
                       </div>
                       {e.stale ? (
                         <Badge variant="destructive" className="text-[10px]">
-                          Open more than 16 hours
+                          Open more than 24 hours
                         </Badge>
                       ) : e.status === "ON_BREAK" ? (
                         <Badge variant="warning" className="text-[10px]">

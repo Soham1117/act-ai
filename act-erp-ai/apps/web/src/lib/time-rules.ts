@@ -7,13 +7,12 @@
 export const BUSINESS_TZ = "America/Chicago";
 
 /** Hard cap on a single shift. Anything longer is treated as a forgotten punch. */
-export const MAX_SHIFT_MINUTES = 16 * 60;
+export const MAX_SHIFT_MINUTES = 24 * 60;
 export const MAX_SHIFT_MS = MAX_SHIFT_MINUTES * 60_000;
 
 /**
- * Ceiling for admin create / edit / force clock-out. Higher than
- * {@link MAX_SHIFT_MINUTES} so real long shifts can be recorded; kiosk
- * auto-close still uses the 16h forgotten-punch rule.
+ * Ceiling for admin create / edit / force clock-out. Admin corrections and
+ * kiosk auto-close both allow up to 24 hours.
  */
 export const ADMIN_MAX_SHIFT_MINUTES = 24 * 60;
 export const ADMIN_MAX_SHIFT_MS = ADMIN_MAX_SHIFT_MINUTES * 60_000;
@@ -62,7 +61,7 @@ export function breakMinutes(b: BreakInput, clockIn: Date, shiftEnd: Date): numb
 
 /**
  * Totals for a closed entry. The shift end is capped at `maxShiftMs` after
- * clock-in (default 16h); `capped` tells the caller the entry needs attention.
+ * clock-in (default 24h); `capped` tells the caller the entry needs attention.
  * Pass {@link ADMIN_MAX_SHIFT_MS} for admin corrections of real long shifts.
  */
 export function computeEntryTotals(args: {
@@ -89,7 +88,7 @@ export function computeEntryTotals(args: {
 /**
  * Validate admin-supplied times for an entry. Returns a user-facing message or
  * null when valid. `clockOut` may be null only for an entry that stays open.
- * Default max length is 16h; pass {@link ADMIN_MAX_SHIFT_MS} for admin forms.
+ * Default max length is 24h; pass {@link ADMIN_MAX_SHIFT_MS} for admin forms.
  */
 export function validateEntryTimes(args: {
   clockIn: Date;

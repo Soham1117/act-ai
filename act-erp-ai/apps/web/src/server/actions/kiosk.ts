@@ -488,7 +488,7 @@ type KioskLookupOk = {
   mustChangePin: boolean;
   status: "ACTIVE" | "ON_BREAK" | "OUT";
   activeEntryId: string | null;
-  /** An earlier shift was left open >16h; clocking in closes it and flags it for review. */
+  /** An earlier shift was left open >24h; clocking in closes it and flags it for review. */
   staleShift: boolean;
   /** Server's current PIN setting for this kiosk; the client trusts this over its page props. */
   requirePin: boolean;

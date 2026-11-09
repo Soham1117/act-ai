@@ -296,7 +296,7 @@ Legend: [x] done, [~] partly, [ ] not started.
 - [x] /admin/watch: tabs, severity filter, search, details, acknowledge, snooze, dismiss, reopen
 - [x] "Check now" button, audit log on every action
 - [x] Browser tests for review, verified resolution, corrected entries, simultaneous checks, keyboard use and long names (November 6)
-- [ ] Rules tab: on/off per rule
+- [x] Rules tab: on/off per rule (implemented at `/admin/watch/rules`)
 
 ### Phase 3: digest
 - [x] Daily digest: in-app notification plus email to the configured recipients, once per business day at the set hour (Central), via the same 15-minute cron
@@ -358,7 +358,23 @@ Rules switched off by default (noisy on today's data): `time.missing-clock-in` (
 
 ## Next stage: L3 before L4
 
-L3 and L4 remain roadmap items, not implemented agent capabilities. Start L3 with one bounded action type: a draft missing-clock-out correction. A scheduled end is a suggestion, never proof of time worked.
+L3 employee missing-clock-out drafts are implemented locally as of November 9, 2026; L4 remains a roadmap item. A scheduled end is a suggestion, never proof of time worked.
+
+### L3 first slice (November 9, 2026)
+
+- [x] Create a persisted draft from an employee missing-clock-out flag. Require a reason; show the original entry, proposed end, counted hours, recorded breaks and schedule evidence at `/admin/watch/proposals`.
+- [x] Reject without changing punches. Approval requires explicit confirmation of the actual work end and leaves payroll approval pending.
+- [x] Serialize decisions with kiosk/admin punches using the employee lock. Recheck current admin access, complete entry/break snapshot and schedule version. Check overlaps and closed payroll periods in the applying transaction.
+- [x] Lock the pay-period row before closing/counting blockers, coordinating with proposal execution and undo.
+- [x] Idempotent approval and undo, transactional before/after audit, retained failure details. Undo refuses intervening edits, closed periods or a subsequent conflicting punch.
+- [x] Desktop/mobile browser coverage: creating a draft changes nothing, simultaneous approvals apply once, safe undo restores the original open entry, stale drafts remain actionable, rejection changes no hours, and employees cannot list the queue.
+- [ ] Deploy the additive `WatchProposal` table and application together (not deployed by this implementation task).
+
+Boundaries: employee shifts only; a single valid schedule is required. Missing/ambiguous schedules and open breaks use the existing manual Hours workflow. Overnight schedules are supported; ambiguous DST times are refused. Creating drafts is an explicit admin action from a finding; the cron does not execute corrections. No notification sends, inferred break changes, payroll auto-approval or L4 execution are enabled. The existing schedule rows are locked while evidence is rechecked; the exact human-confirmed proposed end is always applied. Other schedule writers are not globally serialized with this workflow.
+
+Deployment: apply `apps/web/prisma/sql/20261109_watch_proposals.sql` (or the existing deploy script with `--schema`) before switching to the new image. Existing L1/L2 readers remain compatible. Roll back the application while retaining the additive table and its history; do not remove proposal or audit rows. All verification runs use the isolated test database, not production.
+
+Next: eight-week L1 back-test/noise tuning; then define a separately approved L3 action for reminder drafts or contractor corrections. L4 still needs explicit per-action opt-in and limits before implementation.
 
 Before execution, the approval queue must show the original entry, proposed change, source evidence and reason. Approval must recheck permissions, entry version, overlaps and payroll-close state in the same transaction as the change. Repeated approvals must be idempotent. Log the proposal, approver, before/after values and result. Provide a reversible action where the period is still open; reject undo if intervening edits or a closed period make it unsafe. Notification drafts require separate approval to send.
 

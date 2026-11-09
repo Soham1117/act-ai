@@ -308,7 +308,7 @@ export function KioskScreen({
     if (res.autoClosed) {
       toast.warning(
         t(
-          "Your previous shift was left open more than 16 hours. It was closed automatically and flagged for an admin to review.",
+          "Your previous shift was left open more than 24 hours. It was closed automatically and flagged for an admin to review.",
         ),
         { duration: 10_000 },
       );

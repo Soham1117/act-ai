@@ -326,37 +326,47 @@ export async function deletePayrollPeriod(id: string): Promise<ActionResult> {
 export async function closePayrollPeriod(id: string): Promise<ActionResult> {
   const admin = await requireAdmin();
   try {
-    const period = await db.payrollCalendar.findUnique({ where: { id } });
-    if (!period) return fail("That pay period no longer exists. Refresh the page.");
-    if (period.closedAt) return fail("This pay period is already closed.");
-    const counts = (await loadPeriodCounts([period])).get(id)!;
-    const state = periodState({
-      start: period.payPeriodStart,
-      end: period.payPeriodEnd,
-      closedAt: null,
-      pending: counts.pending,
-      open: counts.open,
+    const outcome = await db.$transaction(async (tx) => {
+      // Match the row locks held by Watch corrections before checking blockers.
+      await tx.$queryRaw`SELECT id FROM "PayrollCalendar" WHERE id = ${id} FOR UPDATE`;
+      const period = await tx.payrollCalendar.findUnique({ where: { id } });
+      if (!period) return fail("That pay period no longer exists. Refresh the page.");
+      if (period.closedAt) return fail("This pay period is already closed.");
+      const counts = (await loadPeriodCounts([period], tx)).get(id)!;
+      const state = periodState({
+        start: period.payPeriodStart,
+        end: period.payPeriodEnd,
+        closedAt: null,
+        pending: counts.pending,
+        open: counts.open,
+      });
+      if (state === "UPCOMING" || state === "CURRENT") {
+        return fail("This pay period is not over yet. Close it after its last day.");
+      }
+      if (state === "REVIEW") {
+        const parts = [
+          counts.pending ? `${counts.pending} ${counts.pending === 1 ? "entry is" : "entries are"} waiting for approval` : "",
+          counts.open ? `${counts.open} ${counts.open === 1 ? "person is" : "people are"} still clocked in` : "",
+        ].filter(Boolean);
+        return fail(`Not ready to close: ${parts.join(" and ")}. Approve or fix them first.`);
+      }
+      const result = await tx.payrollCalendar.updateMany({
+        where: { id, closedAt: null },
+        data: { closedAt: new Date(), closedById: admin.id },
+      });
+      if (result.count === 0) return fail("This pay period was just closed by someone else.");
+      await tx.auditLog.create({
+        data: {
+          actorId: admin.id,
+          actorEmail: admin.email,
+          action: "payroll.period.close",
+          resource: `PayrollCalendar:${id}`,
+          diff: { title: period.title },
+        },
+      });
+      return ok();
     });
-    if (state === "UPCOMING" || state === "CURRENT") {
-      return fail("This pay period is not over yet. Close it after its last day.");
-    }
-    if (state === "REVIEW") {
-      const parts = [
-        counts.pending ? `${counts.pending} ${counts.pending === 1 ? "entry is" : "entries are"} waiting for approval` : "",
-        counts.open ? `${counts.open} ${counts.open === 1 ? "person is" : "people are"} still clocked in` : "",
-      ].filter(Boolean);
-      return fail(`Not ready to close: ${parts.join(" and ")}. Approve or fix them first.`);
-    }
-    const result = await db.payrollCalendar.updateMany({
-      where: { id, closedAt: null },
-      data: { closedAt: new Date(), closedById: admin.id },
-    });
-    if (result.count === 0) return fail("This pay period was just closed by someone else.");
-    await audit({
-      action: "payroll.period.close",
-      resource: `PayrollCalendar:${id}`,
-      diff: { title: period.title },
-    });
+    if (!outcome.ok) return outcome;
     revalidatePath("/admin/payroll");
     revalidatePath(`/admin/payroll/${id}`);
     return ok();

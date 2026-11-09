@@ -10,6 +10,7 @@ import { allowedActions, type FindingAction } from "@/lib/watch/status";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { actOnFinding, runWatchNow, sendTestDigest } from "@/server/actions/watch";
 import type { adminWatchData } from "@/server/queries/watch";
+import { DraftClockOut } from "./draft-clock-out";
 
 type Data = Awaited<ReturnType<typeof adminWatchData>>;
 type Row = Data["rows"][number];
@@ -149,7 +150,7 @@ export function WatchWorkspace({ data }: { data: Data }) {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[48rem] text-sm">
+          <table data-sorter="1" className="w-full min-w-[48rem] text-sm">
             <thead className="bg-muted/50 text-left">
               <tr>
                 <th className="px-3 py-2">Level</th>
@@ -194,6 +195,7 @@ export function WatchWorkspace({ data }: { data: Data }) {
                         {r.likelyCause && <p><span className="font-medium">Likely cause:</span> {r.likelyCause}</p>}
                         {r.suggestedFix && <p><span className="font-medium">Suggested fix:</span> {r.suggestedFix}</p>}
                         {r.handledNote && <p className="text-muted-foreground">Note: {r.handledNote}</p>}
+                        {r.ruleId === "time.missing-clock-out" && (r.status === "OPEN" || r.status === "ACKNOWLEDGED") && <DraftClockOut findingId={r.id} />}
                         {!isReport(r) && <p className="text-sm text-muted-foreground">Mark reviewed records that you have seen the flag. Recheck and resolve clears it when the check confirms the issue is gone.</p>}
                         <div className="flex flex-wrap items-center gap-2">
                           {r.fixLink && (

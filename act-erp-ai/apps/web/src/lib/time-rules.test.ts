@@ -17,16 +17,28 @@ import {
 const d = (s: string) => new Date(s);
 
 describe("shift length cap", () => {
-  it("flags shifts older than 16h as stale", () => {
+  it("flags shifts older than 24h as stale", () => {
     const ci = d("2026-03-02T10:00:00Z");
-    expect(isStaleShift(ci, d("2026-03-03T01:59:00Z"))).toBe(false);
-    expect(isStaleShift(ci, d("2026-03-03T02:01:00Z"))).toBe(true);
+    expect(isStaleShift(ci, d("2026-03-03T09:59:00Z"))).toBe(false);
+    expect(isStaleShift(ci, d("2026-03-03T02:01:00Z"))).toBe(false);
+    expect(isStaleShift(ci, d("2026-03-03T10:00:00Z"))).toBe(false);
+    expect(isStaleShift(ci, d("2026-03-03T10:01:00Z"))).toBe(true);
   });
-  it("caps proposed end at clockIn + 16h", () => {
+  it("counts shifts between 16 and 24 hours without auto-closing", () => {
+    const clockIn = d("2026-03-02T10:00:00Z");
+    for (const hours of [17, 24]) {
+      const clockOut = new Date(clockIn.getTime() + hours * 3_600_000);
+      const totals = computeEntryTotals({ clockIn, clockOut, breaks: [] });
+      expect(totals.capped).toBe(false);
+      expect(totals.totalWorkMin).toBe(hours * 60);
+      expect(validateEntryTimes({ clockIn, clockOut, breaks: [], now: clockOut })).toBeNull();
+    }
+  });
+  it("caps proposed end at clockIn + 24h", () => {
     const ci = d("2026-03-02T10:00:00Z");
     const r = capShiftEnd(ci, d("2026-03-04T10:00:00Z"));
     expect(r.capped).toBe(true);
-    expect(r.end.toISOString()).toBe("2026-03-03T02:00:00.000Z");
+    expect(r.end.toISOString()).toBe("2026-03-03T10:00:00.000Z");
     expect(capShiftEnd(ci, d("2026-03-02T18:00:00Z")).capped).toBe(false);
   });
 });
@@ -52,7 +64,7 @@ describe("computeEntryTotals", () => {
     expect(t.totalBreakMin).toBe(60);
     expect(t.totalWorkMin).toBe(300);
   });
-  it("caps counted minutes at 16h", () => {
+  it("caps counted minutes at 24h", () => {
     const t = computeEntryTotals({
       clockIn: ci,
       clockOut: d("2026-03-05T14:00:00Z"),
@@ -84,10 +96,10 @@ describe("validateEntryTimes", () => {
       validateEntryTimes({ clockIn: ci, clockOut: d("2026-03-09T13:00:00Z"), breaks: [], now }),
     ).toMatch(/after clock-in/);
   });
-  it("rejects shifts longer than 16h by default", () => {
+  it("rejects shifts longer than 24h by default", () => {
     expect(
-      validateEntryTimes({ clockIn: ci, clockOut: d("2026-03-10T08:00:01Z"), breaks: [], now }),
-    ).toMatch(/16 hours/);
+      validateEntryTimes({ clockIn: ci, clockOut: d("2026-03-10T14:00:01Z"), breaks: [], now: d("2026-03-11T12:00:00Z") }),
+    ).toMatch(/24 hours/);
   });
   it("allows up to 24h when maxShiftMs is the admin ceiling", () => {
     const later = d("2026-03-11T12:00:00Z");

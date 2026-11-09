@@ -113,7 +113,7 @@ function Status({ row }: { row: HoursEntryPresentation }) {
     <div className="flex max-w-full shrink-0 flex-wrap items-center gap-1.5">
       <HoursApprovalBadge status={row.approvalStatus} open={row.open} />
       {row.autoClosed && (
-        <Badge variant="destructive" className="text-[10px]" title="Auto-closed at the 16-hour cap. Verify the hours.">
+        <Badge variant="destructive" className="text-[10px]" title="Auto-closed at the shift limit. Verify the hours.">
           Auto-closed
         </Badge>
       )}
