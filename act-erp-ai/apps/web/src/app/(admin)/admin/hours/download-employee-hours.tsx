@@ -11,18 +11,21 @@ export function DownloadEmployeeHoursButton({
   employeeId,
   from,
   to,
+  formId,
 }: {
   employeeId: string;
   from: string;
   to: string;
+  formId?: string;
 }) {
   const [pending, start] = useTransition();
   return (
     <Button
       type="button"
+      form={formId}
       size="sm"
       variant="outline"
-      className="h-9 w-full sm:ml-auto sm:w-auto"
+      className="min-h-11 md:min-h-9"
       disabled={pending}
       onClick={(event) => {
         const data = event.currentTarget.form

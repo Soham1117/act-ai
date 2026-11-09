@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Loader2, PenLine, Plus, Square, Trash2, Undo2, X } from "lucide-react";
+import { Loader2, PenLine, Plus, Square, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
@@ -24,10 +22,11 @@ import {
   InlinePanelFooter,
   InlinePanelHeader,
   InlinePanelTitle,
-  PanelSlot,
 } from "@/components/inline-panel";
 import { InlineConfirmAction } from "@/components/inline-confirm-action";
-import { cn } from "@/lib/utils";
+import { HoursEntryList } from "@/components/hours-entry-list";
+import { HoursReviewButtons, HoursRejectEditor, HoursSelectionToolbar } from "@/components/hours-review-controls";
+import { hoursEditorClass, hoursRowActionClass } from "@/components/hours-ui";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
 import { ADMIN_MAX_SHIFT_MS, dateToBusinessLocal } from "@/lib/time-rules";
@@ -225,8 +224,9 @@ function EditEntryPanel({
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Clock in</Label>
+              <Label htmlFor={`employee-edit-in-${entry.id}`} className="text-xs">Clock in</Label>
               <Input
+                id={`employee-edit-in-${entry.id}`}
                 type="datetime-local"
                 className="min-h-11 md:min-h-9"
                 value={clockIn}
@@ -235,13 +235,14 @@ function EditEntryPanel({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Clock out</Label>
+              <Label htmlFor={`employee-edit-out-${entry.id}`} className="text-xs">Clock out</Label>
               {openEntry ? (
                 <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                   Still on shift. Use Force clock-out to close it.
                 </p>
               ) : (
                 <Input
+                  id={`employee-edit-out-${entry.id}`}
                   type="datetime-local"
                   className="min-h-11 md:min-h-9"
                   value={clockOut}
@@ -261,8 +262,10 @@ function EditEntryPanel({
             <Textarea rows={2} value={notes} maxLength={1000} onChange={(e) => setNotes(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Reason for change (required)</Label>
-            <Input
+            <Label htmlFor={`employee-edit-reason-${entry.id}`} className="text-xs">Reason for change (required)</Label>
+            <Textarea
+              id={`employee-edit-reason-${entry.id}`}
+              rows={2}
               className="min-h-11 md:min-h-9"
               value={reason}
               maxLength={500}
@@ -416,28 +419,29 @@ export function EntryActions({
         <Button
           size="sm"
           variant="outline"
-          className="h-8 gap-1 text-xs min-h-11 md:min-h-8"
+          className={`${hoursRowActionClass} md:w-9 md:p-0`}
           onClick={() => {
             setEditOpen(false);
             setForceOpen(true);
           }}
         >
-          <Square className="h-3 w-3" />
-          {compact ? "" : "Force clock-out"}
+          <Square aria-hidden="true" className="h-3.5 w-3.5" />
+          <span className={compact ? "sr-only" : "md:sr-only"}>Force clock-out</span>
         </Button>
       )}
       <Button
         size="sm"
         variant="outline"
-        className="h-8 gap-1 text-xs min-h-11 md:min-h-8"
+        className={`${hoursRowActionClass} md:w-9 md:p-0`}
         aria-label={`Edit time entry for ${entry.employeeName}`}
+        title={`Edit entry for ${entry.employeeName}`}
         onClick={() => {
           setForceOpen(false);
           setEditOpen(true);
         }}
       >
-        <PenLine className="h-3 w-3" />
-        {compact ? "" : "Edit"}
+        <PenLine aria-hidden="true" className="h-3.5 w-3.5" />
+        <span className={compact ? "sr-only" : "md:sr-only"}>Edit</span>
       </Button>
       {editOpen && (
         <EditEntryPanel
@@ -564,7 +568,7 @@ export function ManualEntryButton({
       <CollapsibleContent asChild>
         <section
           aria-labelledby={`${formId}-heading`}
-          className="min-w-0 space-y-4 rounded-lg border bg-card p-4 sm:p-6"
+          className={hoursEditorClass}
         >
           <div className="space-y-1.5">
             <h2 id={`${formId}-heading`} className="text-lg font-semibold">
@@ -679,48 +683,16 @@ export function ManualEntryButton({
 // Pending queue with bulk approve
 // ──────────────────────────────────────────────────────────────────────
 
-function RejectPanel({
-  title,
-  description,
-  open,
-  onOpenChange,
-  onConfirm,
-  pending,
-}: {
-  title: string;
-  description: string;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onConfirm: (reason: string) => void;
-  pending: boolean;
+function RejectPanel({ title, description, open, onOpenChange, onConfirm, pending, panelSlot }: {
+  title: string; description: string; open: boolean; onOpenChange: (v: boolean) => void;
+  onConfirm: (reason: string) => void; pending: boolean; panelSlot?: string;
 }) {
   const [reason, setReason] = useState("");
-  return (
-    <InlinePanel open={open} onOpenChange={onOpenChange}>
-      <InlinePanelContent className="my-2">
-        <InlinePanelHeader>
-          <InlinePanelTitle>{title}</InlinePanelTitle>
-          <InlinePanelDescription>{description}</InlinePanelDescription>
-        </InlinePanelHeader>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Reason (shown to the employee)</Label>
-          <Textarea rows={3} value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} />
-        </div>
-        <InlinePanelFooter>
-          <InlinePanelCancel disabled={pending}>Cancel</InlinePanelCancel>
-          <Button
-            variant="destructive"
-            className="min-h-11 md:min-h-9"
-            disabled={pending || reason.trim().length < 3}
-            onClick={() => onConfirm(reason.trim())}
-          >
-            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Reject
-          </Button>
-        </InlinePanelFooter>
-      </InlinePanelContent>
-    </InlinePanel>
-  );
+  return <InlinePanel open={open} onOpenChange={onOpenChange}>
+    <InlinePanelContent panelSlot={panelSlot} className="my-2">
+      <HoursRejectEditor title={title} description={description} reason={reason} onChange={setReason} pending={pending} minimumLength={3} reasonLabel="Reason (shown to the employee)" onCancel={()=>onOpenChange(false)} onConfirm={()=>onConfirm(reason.trim())} />
+    </InlinePanelContent>
+  </InlinePanel>;
 }
 
 function RowReview({ entry }: { entry: EntryRowData }) {
@@ -738,174 +710,53 @@ function RowReview({ entry }: { entry: EntryRowData }) {
     });
   }
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
-      <Button
-        size="sm"
-        variant="destructive"
-        className="min-h-11 md:min-h-9"
-        disabled={pending}
-        onClick={() => setRejectOpen(true)}
-        aria-label="Reject"
-      >
-        <X className="h-4 w-4" />
-      </Button>
-      <Button size="sm" variant="success" className="min-h-11 md:min-h-9" disabled={pending} onClick={() => run("APPROVED")}>
-        <Check className="h-4 w-4" /> Approve
-      </Button>
-      {rejectOpen && (
-        <RejectPanel
-          title="Reject time entry"
-          description={`${entry.employeeName}, ${formatDateOnly(entry.date)} (${formatHours(entry.totalWorkMin)}).`}
-          open={rejectOpen}
-          onOpenChange={setRejectOpen}
-          pending={pending}
-          onConfirm={(reason) => run("REJECTED", reason)}
-        />
-      )}
-    </div>
+    <>
+      <HoursReviewButtons name={entry.employeeName} pending={pending} onApprove={()=>run("APPROVED")} onReject={()=>setRejectOpen(true)} />
+      {rejectOpen && <RejectPanel title="Reject time entry" description={`${entry.employeeName}, ${formatDateOnly(entry.date)} (${formatHours(entry.totalWorkMin)}).`} open={rejectOpen} onOpenChange={setRejectOpen} pending={pending} panelSlot={entryPanelSlotId(entry.id)} onConfirm={(reason)=>run("REJECTED",reason)} />}
+    </>
   );
 }
 
-export function PendingQueue({
-  entries,
-  jobCodes,
-}: {
-  entries: EntryRowData[];
-  jobCodes: JobCodeOption[];
+export function PendingQueue(props: { entries: EntryRowData[]; jobCodes: JobCodeOption[] }) {
+  return <EmployeeHoursTable {...props} emptyMessage="Inbox zero. Nothing pending." />;
+}
+
+export function EmployeeHoursTable({ entries, jobCodes, emptyMessage }: {
+  entries: EntryRowData[]; jobCodes: JobCodeOption[]; emptyMessage?: string;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
   const [bulkReject, setBulkReject] = useState(false);
-
-  const allSelected = entries.length > 0 && entries.every((e) => selected.has(e.id));
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const reviewable = entries.filter(e=>e.approvalStatus==="PENDING" && e.status==="COMPLETED" && e.clockOut!==null);
+  const reviewableIds = new Set(reviewable.map(e=>e.id));
+  const activeSelected = reviewable.filter(e=>selected.has(e.id)).map(e=>e.id);
+  const allSelected = reviewable.length>0 && activeSelected.length===reviewable.length;
+  function toggle(id: string, on: boolean) {
+    setSelected(prev=>{const next=new Set(prev);if(on)next.add(id);else next.delete(id);return next;});
   }
-
   function bulk(decision: "APPROVED" | "REJECTED", notes?: string) {
-    startTransition(async () => {
-      const res = await runAction(() => bulkReviewTimeEntries({ ids: [...selected], decision, notes }));
-      if (!toastAction(res)) return;
-      toast.success(
-        `${res.updated} ${decision === "APPROVED" ? "approved" : "rejected"}` +
-          (res.skipped ? ` (${res.skipped} skipped: no longer pending)` : ""),
-      );
-      setSelected(new Set());
-      setBulkReject(false);
-      router.refresh();
+    startTransition(async()=>{
+      const res=await runAction(()=>bulkReviewTimeEntries({ids:activeSelected,decision,notes}));
+      if(!toastAction(res))return;
+      toast.success(`${res.updated} ${decision==="APPROVED"?"approved":"rejected"}`+(res.skipped?` (${res.skipped} skipped: no longer pending)`:""));
+      setSelected(new Set());setBulkReject(false);router.refresh();
     });
   }
-
-  if (entries.length === 0) {
-    return (
-      <div className="grid h-32 place-items-center text-xs text-muted-foreground">
-        Inbox zero. Nothing pending.
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-center gap-3 border-b p-3">
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Checkbox
-            checked={allSelected}
-            onCheckedChange={(v) =>
-              setSelected(v === true ? new Set(entries.map((e) => e.id)) : new Set())
-            }
-          />
-          Select all on this page
-        </label>
-        <span className="text-xs text-muted-foreground">{selected.size} selected</span>
-        <div className="ml-auto flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="destructive"
-            className="min-h-11 md:min-h-9"
-            disabled={pending || selected.size === 0}
-            onClick={() => setBulkReject(true)}
-          >
-            Reject selected
-          </Button>
-          <Button
-            size="sm"
-            variant="success"
-            className="min-h-11 md:min-h-9"
-            disabled={pending || selected.size === 0}
-            onClick={() => bulk("APPROVED")}
-          >
-            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <Check className="h-4 w-4" /> Approve selected
-          </Button>
-        </div>
-      </div>
-      {bulkReject && (
-        <div className="border-b px-3 pb-3">
-          <RejectPanel
-            title={`Reject ${selected.size} entries`}
-            description="The same reason is sent to each employee."
-            open={bulkReject}
-            onOpenChange={setBulkReject}
-            pending={pending}
-            onConfirm={(reason) => bulk("REJECTED", reason)}
-          />
-        </div>
-      )}
-      <ul className="divide-y">
-        {entries.map((e) => (
-          <li key={e.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <Checkbox
-                className="mt-2"
-                checked={selected.has(e.id)}
-                onCheckedChange={() => toggle(e.id)}
-                aria-label={`Select ${e.employeeName}`}
-              />
-              <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted">
-                <Image src={e.avatar} alt={e.employeeName} fill sizes="36px" className="object-cover" unoptimized />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="break-words text-sm font-medium">{e.employeeName}</p>
-                <p className="break-words text-[11px] text-muted-foreground">
-                  {formatDateOnly(e.date)} · {formatBusinessTime(e.clockIn)} to {formatBusinessTime(e.clockOut)} ·{" "}
-                  {e.jobCode} · {formatHours(e.totalWorkMin)}
-                  {e.totalBreakMin > 0 && ` (breaks ${formatHours(e.totalBreakMin)})`}
-                </p>
-                {e.autoClosed && (
-                  <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
-                    <AlertTriangle className="h-3 w-3 shrink-0" /> Auto-closed at the 16 hour cap. Verify the hours.
-                  </p>
-                )}
-                {e.editReason && !e.autoClosed && (
-                  <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{e.editReason}</p>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
-              <PunchPhotos
-                type="employee"
-                entryId={e.id}
-                hasIn={e.hasClockInPhoto}
-                hasOut={e.hasClockOutPhoto}
-                source={e.source}
-                clockIn={e.clockIn}
-                clockOut={e.clockOut}
-              />
-              {e.source === "MANUAL" && <Badge variant="outline" className="text-[10px]">Manual</Badge>}
-              <EntryActions entry={e} jobCodes={jobCodes} compact />
-              <RowReview entry={e} />
-            </div>
-            <PanelSlot id={entryPanelSlotId(e.id)} className="w-full basis-full" />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+  const selectAll=(checked: boolean)=>setSelected(checked?new Set(reviewable.map(e=>e.id)):new Set());
+  return <>
+    <HoursSelectionToolbar checked={allSelected} onSelectAll={selectAll} count={activeSelected.length} available={reviewable.length} pending={pending} onApprove={()=>bulk("APPROVED")} onReject={()=>setBulkReject(true)} onClear={()=>setSelected(new Set())} />
+    {bulkReject && <div className="border-b px-3"><RejectPanel title={`Reject ${activeSelected.length} entries`} description="The same reason is sent to each employee." open={bulkReject} onOpenChange={setBulkReject} pending={pending} onConfirm={reason=>bulk("REJECTED",reason)} /></div>}
+    <HoursEntryList emptyMessage={emptyMessage} selection={<Checkbox aria-label="Select all pending entries" disabled={!reviewable.length} checked={allSelected} onCheckedChange={v=>selectAll(v===true)} />}
+      extraColumns={[{key:"job",label:"Job"},{key:"rate",label:"Rate",numeric:true}]}
+      rows={entries.map(e=>({
+        id:e.id,name:e.employeeName,code:e.employeeCode,href:`/admin/employees/${e.employeeId}`,avatar:e.avatar,date:e.date,clockIn:e.clockIn,clockOut:e.clockOut,
+        workMin:e.totalWorkMin,breakMin:e.totalBreakMin,approvalStatus:e.approvalStatus,open:isOpen(e),autoClosed:e.autoClosed,editReason:e.editReason,approvalNotes:e.approvalNotes,
+        sourceLabel:e.source==="MANUAL"?"Manual":undefined,
+        metadata:{job:<span className="whitespace-nowrap font-mono">{e.jobCode}</span>,rate:e.rate!=null?`$${e.rate.toFixed(2)}`:"—"},
+        photos:<PunchPhotos type="employee" entryId={e.id} hasIn={e.hasClockInPhoto} hasOut={e.hasClockOutPhoto} source={e.source} clockIn={e.clockIn} clockOut={e.clockOut} />,
+        selection:reviewableIds.has(e.id)?<Checkbox checked={selected.has(e.id)} onCheckedChange={v=>toggle(e.id,v===true)} aria-label={`Select entry for ${e.employeeName}`} />:undefined,
+        actions:<><EntryActions entry={e} jobCodes={jobCodes} />{reviewableIds.has(e.id) && <RowReview entry={e} />}</>,panelId:entryPanelSlotId(e.id),
+      }))} />
+  </>;
 }

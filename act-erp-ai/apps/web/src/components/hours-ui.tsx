@@ -147,3 +147,9 @@ export const hoursTdClass = "px-3 py-2.5 align-middle";
 
 export const hoursRowClass =
   "border-b border-border/60 hover:bg-muted/30";
+
+export const hoursControlClass = "min-h-11 md:min-h-9";
+export const hoursLabelClass = "text-xs";
+export const hoursEditorClass =
+  "min-w-0 space-y-4 rounded-lg border bg-card p-4 sm:p-6";
+export const hoursRowActionClass = "min-h-11 gap-1.5 text-xs md:min-h-9";

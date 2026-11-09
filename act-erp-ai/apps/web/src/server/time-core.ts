@@ -47,6 +47,7 @@ export function revalidateTimePages() {
   revalidatePath("/dashboard/time-tracking");
   revalidatePath("/admin/time-tracking");
   revalidatePath("/admin/hours");
+  revalidatePath("/admin/hours/approvals");
   revalidatePath("/admin/hours/group");
   revalidatePath("/admin/hours/mass");
   revalidatePath("/admin/hours/period-export");

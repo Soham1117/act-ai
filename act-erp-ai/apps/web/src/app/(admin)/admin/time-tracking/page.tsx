@@ -42,7 +42,7 @@ import {
 } from "@/components/hours-ui";
 import { FormDateField } from "@/components/date-field";
 import { PanelSlot } from "@/components/inline-panel";
-import { EntryActions, ManualEntryButton, PendingQueue } from "./time-tools";
+import { EmployeeHoursTable, EntryActions, ManualEntryButton, PendingQueue } from "./time-tools";
 import { entryPanelSlotId, type EntryRowData } from "./time-types";
 
 export const metadata = { title: "Hours approvals" };
@@ -283,7 +283,7 @@ export default async function AdminTimeTrackingPage({
         title="Hours approvals"
         description="Live activity, approvals, history, and corrections. All times are Central."
       />
-      <HoursSubnav />
+      <HoursSubnav from={dateOnlyToString(rangeFrom)} to={dateOnlyToString(rangeTo)} />
       <div className="mb-4">
         <ManualEntryButton
           employees={employees.map((e) => ({
@@ -456,7 +456,7 @@ export default async function AdminTimeTrackingPage({
 
           <Card>
             <CardContent className="p-0">
-              <EntryList entries={entryRows} jobCodes={jobCodes} />
+              <EmployeeHoursTable entries={entryRows} jobCodes={jobCodes} />
               {pages > 1 && (
                 <Pager
                   page={page}

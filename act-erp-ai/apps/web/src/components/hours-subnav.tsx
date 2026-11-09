@@ -6,14 +6,16 @@ import { cn } from "@/lib/utils";
 
 const EMPLOYEE_LINKS = [
   { href: "/admin/hours", label: "Entries", exact: true },
-  { href: "/admin/hours/group", label: "Group totals" },
+  { href: "/admin/hours/approvals", label: "Approvals", exact: true },
   { href: "/admin/hours/mass", label: "Bulk entry" },
-  { href: "/admin/time-tracking", label: "Approvals" },
+  { href: "/admin/hours/group", label: "Group totals" },
+  { href: "/admin/time-tracking", label: "Activity", exact: true },
   { href: "/admin/hours/period-export", label: "Period export" },
   { href: "/admin/hours/timesheets", label: "Time sheets" },
 ];
 const CONTRACT_LINKS = [
   { href: "/admin/hours/contract-workers", label: "Entries", exact: true },
+  { href: "/admin/hours/contract-workers/approvals", label: "Approvals", exact: true },
   { href: "/admin/contract-workers/mass", label: "Bulk entry" },
 ];
 
@@ -42,7 +44,14 @@ export function HoursSubnav({ from, to }: { from?: string; to?: string } = {}) {
         ].map((item) => (
           <Link
             key={item.href}
-            href={item.href + range}
+            href={
+              (pathname.endsWith("/approvals") ||
+              pathname.startsWith("/admin/time-tracking")
+                ? item.href === "/admin/hours"
+                  ? "/admin/hours/approvals"
+                  : "/admin/hours/contract-workers/approvals"
+                : item.href) + range
+            }
             aria-current={item.active ? "page" : undefined}
             className={cn(
               "rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:py-1.5",

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { hoursControlClass, hoursEditorClass, hoursLabelClass } from "@/components/hours-ui";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -173,7 +174,7 @@ export function AddContractEntryButton({
 
   return (
     <Collapsible
-      className={cn("min-w-0 space-y-3", open && "w-full basis-full", className)}
+      className={cn("w-full min-w-0 space-y-3 sm:w-auto", open && "basis-full sm:w-full", className)}
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
@@ -185,18 +186,18 @@ export function AddContractEntryButton({
       }}
     >
       <CollapsibleTrigger asChild disabled={pending}>
-        <Button type="button" size="sm" variant="outline" className="min-h-11 w-full sm:w-auto md:min-h-9">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
+        <Button type="button" size="sm" className="min-h-11 w-full sm:w-auto md:min-h-9">
+          <Plus className="mr-1 h-3.5 w-3.5" />
           {label}
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent asChild>
         <section
           aria-labelledby={`${formId}-heading`}
-          className="max-w-3xl space-y-4 rounded-lg border bg-card p-4 sm:p-6"
+          className={hoursEditorClass}
         >
-          <div className="space-y-1">
-            <h2 id={`${formId}-heading`} className="text-lg font-semibold tracking-tight">
+          <div className="space-y-1.5">
+            <h2 id={`${formId}-heading`} className="text-lg font-semibold">
               Add contract hours
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -207,7 +208,7 @@ export function AddContractEntryButton({
           <form onSubmit={submit} className="space-y-4">
             {!fixedWorkerId && (
               <div className="space-y-1.5">
-                <Label htmlFor={`${formId}-worker`} className="text-xs">
+                <Label htmlFor={`${formId}-worker`} className={hoursLabelClass}>
                   Worker
                 </Label>
                 <SimpleSelect
@@ -228,26 +229,26 @@ export function AddContractEntryButton({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor={`${formId}-in`} className="text-xs">
+                <Label htmlFor={`${formId}-in`} className={hoursLabelClass}>
                   Clock in
                 </Label>
                 <Input
                   id={`${formId}-in`}
                   type="datetime-local"
-                  className="min-h-11 md:min-h-9"
+                  className={hoursControlClass}
                   value={clockIn}
                   onChange={(e) => setClockIn(e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`${formId}-out`} className="text-xs">
+                <Label htmlFor={`${formId}-out`} className={hoursLabelClass}>
                   Clock out
                 </Label>
                 <Input
                   id={`${formId}-out`}
                   type="datetime-local"
-                  className="min-h-11 md:min-h-9"
+                  className={hoursControlClass}
                   value={clockOut}
                   onChange={(e) => setClockOut(e.target.value)}
                   required
@@ -257,7 +258,7 @@ export function AddContractEntryButton({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
               <div className="space-y-1.5">
-                <Label htmlFor={`${formId}-job`} className="text-xs">
+                <Label htmlFor={`${formId}-job`} className={hoursLabelClass}>
                   Job code
                 </Label>
                 <SimpleSelect
@@ -275,7 +276,7 @@ export function AddContractEntryButton({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`${formId}-break`} className="text-xs">
+                <Label htmlFor={`${formId}-break`} className={hoursLabelClass}>
                   Break (min)
                 </Label>
                 <Input
@@ -283,7 +284,7 @@ export function AddContractEntryButton({
                   type="number"
                   min={0}
                   max={240}
-                  className="min-h-11 md:min-h-9"
+                  className={hoursControlClass}
                   value={breakMin}
                   onChange={(e) => setBreakMin(Number(e.target.value) || 0)}
                 />
@@ -291,7 +292,7 @@ export function AddContractEntryButton({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor={`${formId}-notes`} className="text-xs">
+              <Label htmlFor={`${formId}-notes`} className={hoursLabelClass}>
                 Notes
               </Label>
               <Textarea
@@ -304,12 +305,12 @@ export function AddContractEntryButton({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor={`${formId}-reason`} className="text-xs">
+              <Label htmlFor={`${formId}-reason`} className={hoursLabelClass}>
                 Reason (required)
               </Label>
               <Input
                 id={`${formId}-reason`}
-                className="min-h-11 md:min-h-9"
+                className={hoursControlClass}
                 value={reason}
                 maxLength={500}
                 onChange={(e) => setReason(e.target.value)}

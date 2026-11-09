@@ -35,14 +35,14 @@ export function HoursPeopleList({
             name="q"
             defaultValue={query}
             placeholder="Search…"
-            className="h-11 min-w-0 flex-1 sm:h-9"
+            className="h-11 min-w-0 flex-1 md:h-9"
             aria-label={`Search ${title.toLowerCase()}`}
           />
           <Button
             type="submit"
             size="sm"
             variant="secondary"
-            className="h-11 shrink-0 px-3 sm:h-9"
+            className="h-11 shrink-0 px-3 md:h-9"
           >
             Go
           </Button>
