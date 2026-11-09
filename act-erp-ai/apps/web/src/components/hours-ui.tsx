@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { HoursPeriodDropdown } from "@/components/hours-period-dropdown";
 import { Card, CardContent } from "@/components/ui/card";
 import { FilterStack } from "@/components/mobile";
 import { cn } from "@/lib/utils";
@@ -44,13 +43,9 @@ export function HoursField({
   );
 }
 
-/** Period preset chips — uniform height/padding, active state via aria-current when matching. */
+/** Compact period navigation, shared by all Hours views. */
 export function HoursPresetChips({
-  presets,
-  hrefFor,
-  activeFrom,
-  activeTo,
-  className,
+  presets, hrefFor, activeFrom, activeTo, className,
 }: {
   presets: PeriodPreset[];
   hrefFor: (p: PeriodPreset) => string;
@@ -58,25 +53,13 @@ export function HoursPresetChips({
   activeTo?: string;
   className?: string;
 }) {
+  const active = presets.find((p) => p.from === activeFrom && p.to === activeTo);
   return (
-    <div className={cn("flex flex-wrap gap-2", className)} role="list" aria-label="Period presets">
-      {presets.map((p) => {
-        const active = activeFrom === p.from && activeTo === p.to;
-        return (
-          <Button
-            key={p.id}
-            asChild
-            size="sm"
-            variant={active ? "secondary" : "outline"}
-            className="h-8 rounded-md px-3 text-xs font-medium"
-          >
-            <Link href={hrefFor(p)} aria-current={active ? "page" : undefined}>
-              {p.label}
-            </Link>
-          </Button>
-        );
-      })}
-    </div>
+    <HoursPeriodDropdown
+      options={presets.map((p) => ({ value: hrefFor(p), label: p.label }))}
+      value={active ? hrefFor(active) : ""}
+      className={className}
+    />
   );
 }
 

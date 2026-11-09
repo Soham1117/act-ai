@@ -198,34 +198,42 @@ export async function EmployeeHoursWorkspace({
         <div className="min-w-0 space-y-4">
           <HoursToolbarCard>
             <div className="flex min-w-0 flex-wrap items-end gap-3">
+              <HoursPresetChips
+                presets={presets}
+                activeFrom={fromStr}
+                activeTo={toStr}
+                hrefFor={(p) =>
+                  `${PATH}?from=${p.from}&to=${p.to}${employeeId ? `&employee=${employeeId}` : ""}`
+                }
+              />
               <form
                 id="employee-hours-filters"
                 method="get"
                 action={PATH}
-                className="min-w-0 flex-1 basis-full"
+                className="contents"
               >
                 {employeeId ? (
                   <input type="hidden" name="employee" value={employeeId} />
                 ) : null}
-                <HoursFilterRow>
-                  <HoursField label="From" htmlFor="ih-from">
+                <HoursFilterRow className="contents sm:contents">
+                  <HoursField label="From" className="sm:w-36" htmlFor="ih-from">
                     <FormDateField
                       key={fromStr}
                       id="ih-from"
                       name="from"
                       defaultValue={fromStr}
                       aria-label="From date"
-                      className="min-h-11 md:min-h-9"
+                      className="min-h-11 md:min-h-9 sm:w-full"
                     />
                   </HoursField>
-                  <HoursField label="To" htmlFor="ih-to">
+                  <HoursField label="To" className="sm:w-36" htmlFor="ih-to">
                     <FormDateField
                       key={toStr}
                       id="ih-to"
                       name="to"
                       defaultValue={toStr}
                       aria-label="To date"
-                      className="min-h-11 md:min-h-9"
+                      className="min-h-11 md:min-h-9 sm:w-full"
                     />
                   </HoursField>
                   <Button type="submit" size="sm" className="min-h-11 w-full sm:w-auto md:min-h-9">
@@ -233,7 +241,7 @@ export async function EmployeeHoursWorkspace({
                   </Button>
                 </HoursFilterRow>
               </form>
-              <div className="flex w-full min-w-0 flex-wrap items-start gap-2">
+              <div className="contents">
                 <div className="contents sm:[&>[data-state=closed]]:w-auto">
                   <ManualEntryButton
                     employees={employees
@@ -271,20 +279,12 @@ export async function EmployeeHoursWorkspace({
                   asChild
                   size="sm"
                   variant="ghost"
-                  className="min-h-11 sm:ml-auto md:min-h-9"
+                  className="min-h-11 md:min-h-9"
                 >
                   <Link href={PATH}>Current period</Link>
                 </Button>
               </div>
             </div>
-            <HoursPresetChips
-              presets={presets}
-              activeFrom={fromStr}
-              activeTo={toStr}
-              hrefFor={(p) =>
-                `${PATH}?from=${p.from}&to=${p.to}${employeeId ? `&employee=${employeeId}` : ""}`
-              }
-            />
           </HoursToolbarCard>
 
           <HoursStatRow>

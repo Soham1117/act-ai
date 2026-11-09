@@ -161,27 +161,35 @@ export async function ContractHoursWorkspace({
         <div className="min-w-0 space-y-4">
           <HoursToolbarCard>
             <div className="flex min-w-0 flex-wrap items-end gap-3">
-              <form id="contract-hours-filters" method="get" action={PATH} className="min-w-0 flex-1 basis-full">
+              <HoursPresetChips
+                presets={presets}
+                activeFrom={fromStr}
+                activeTo={toStr}
+                hrefFor={(p) =>
+                  href({ from: p.from, to: p.to, ...(hWorker ? { worker: hWorker } : {}) })
+                }
+              />
+              <form id="contract-hours-filters" method="get" action={PATH} className="contents">
                 {hWorker && <input type="hidden" name="worker" value={hWorker} />}
-                <HoursFilterRow>
-                  <HoursField label="From" htmlFor="cw-h-from">
+                <HoursFilterRow className="contents sm:contents">
+                  <HoursField label="From" className="sm:w-36" htmlFor="cw-h-from">
                     <FormDateField
                       key={fromStr}
                       id="cw-h-from"
                       name="from"
                       defaultValue={fromStr}
                       aria-label="From date"
-                      className="min-h-11 md:min-h-9"
+                      className="min-h-11 md:min-h-9 sm:w-full"
                     />
                   </HoursField>
-                  <HoursField label="To" htmlFor="cw-h-to">
+                  <HoursField label="To" className="sm:w-36" htmlFor="cw-h-to">
                     <FormDateField
                       key={toStr}
                       id="cw-h-to"
                       name="to"
                       defaultValue={toStr}
                       aria-label="To date"
-                      className="min-h-11 md:min-h-9"
+                      className="min-h-11 md:min-h-9 sm:w-full"
                     />
                   </HoursField>
                   <HoursField label="Agency" htmlFor="cw-h-agency">
@@ -190,7 +198,7 @@ export async function ContractHoursWorkspace({
                       id="cw-h-agency"
                       name="hagency"
                       defaultValue={hAgency}
-                      className="h-11 w-full md:h-9 sm:w-44"
+                      className="h-11 w-full md:h-9 sm:w-32"
                       placeholder="All agencies"
                       options={[
                         { value: "", label: "All agencies" },
@@ -204,7 +212,7 @@ export async function ContractHoursWorkspace({
                         id="cw-h-approval"
                         name="approval"
                         defaultValue={approval ?? ""}
-                        className="h-11 w-full md:h-9 sm:w-36"
+                        className="h-11 w-full md:h-9 sm:w-28"
                         placeholder="All"
                         options={[
                           { value: "", label: "All" },
@@ -224,7 +232,7 @@ export async function ContractHoursWorkspace({
                   </Button>
                 </HoursFilterRow>
               </form>
-              <div className="flex w-full min-w-0 flex-wrap items-start gap-2">
+              <div className="contents">
                 <AddContractEntryButton
                   workers={allWorkers.map((w) => ({
                     id: w.id,
@@ -257,20 +265,12 @@ export async function ContractHoursWorkspace({
                   asChild
                   size="sm"
                   variant="ghost"
-                  className="min-h-11 sm:ml-auto md:min-h-9"
+                  className="min-h-11 md:min-h-9"
                 >
                   <Link href={PATH}>Current week</Link>
                 </Button>
               </div>
             </div>
-            <HoursPresetChips
-              presets={presets}
-              activeFrom={fromStr}
-              activeTo={toStr}
-              hrefFor={(p) =>
-                href({ from: p.from, to: p.to, ...(hWorker ? { worker: hWorker } : {}) })
-              }
-            />
           </HoursToolbarCard>
           <HoursStatRow>
             <HoursStat label="Approved" value={formatHours(approvedMin)} />
