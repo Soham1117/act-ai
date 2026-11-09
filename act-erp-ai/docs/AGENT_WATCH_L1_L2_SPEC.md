@@ -374,14 +374,14 @@ Boundaries: employee shifts only; a single valid schedule is required. Missing/a
 
 Deployment: apply `apps/web/prisma/sql/20261109_watch_proposals.sql` (or the existing deploy script with `--schema`) before switching to the new image. Existing L1/L2 readers remain compatible. Roll back the application while retaining the additive table and its history; do not remove proposal or audit rows. All verification runs use the isolated test database, not production.
 
-### Automatic L3 draft generation (November 9 follow-up, local)
+### Automatic L3 draft generation (deployed November 9 in `204029c`)
 
 - [x] After a successful enabled missing-clock-out check, live scheduled runs queue eligible employee corrections automatically. Manual checks, shadow runs, individual rechecks, disabled checks and failed checks do not generate drafts.
 - [x] Reuse the manual drafting checks: current open entry, no open breaks, a single valid past schedule, valid break times, no overlaps and no closed pay period. Every decision is rechecked under the employee lock.
 - [x] Record system-created drafts with no human creator and an audit actor of `system:watch`; show “Automatically drafted” in the review queue.
 - [x] Never overwrite an existing pending draft or recreate any entry proposal after rejection, application or undo. An admin may deliberately draft a fresh correction manually.
 - [x] Unexpected generation errors are retained in the Watch run; ineligible entries are skipped. No punch/break changes or extra notifications occur during generation.
-- [ ] Deploy follow-up code and `apps/web/prisma/sql/20261109_watch_automatic_drafts.sql` to allow a null system creator. Existing creator IDs and audit history remain intact; the old application remains compatible with the nullable column.
+- [x] Deployed follow-up code and the nullable system-creator column in `204029c`, after a database backup. Warm check, health/login, and a read-only schema/proposal query passed. Existing creator IDs and audit history remain intact; the old application remains compatible with the nullable column.
 
 The normal 15-minute schedule will populate the queue only when eligible missing-clock-out findings exist. An empty queue is valid when no eligible issues exist. Automatic creation does not approve a correction: actual-end confirmation and the existing human-only execution checks still apply.
 
