@@ -9,15 +9,13 @@ import {
   HoursField,
   HoursFilterRow,
   HoursPresetChips,
-  HoursStat,
-  HoursStatRow,
   HoursToolbarCard,
 } from "@/components/hours-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FormDateField } from "@/components/date-field";
 import { FormSimpleSelect } from "@/components/simple-select";
-import { businessDateOnly, formatDateOnly, formatHours } from "@/lib/format";
+import { businessDateOnly, formatDateOnly } from "@/lib/format";
 import {
   addDaysDateOnly,
   dateOnlyToString,
@@ -108,17 +106,9 @@ export async function ContractHoursWorkspace({
       hasClockInPhoto: !!e.clockInPhotoKey,
       hasClockOutPhoto: !!e.clockOutPhotoKey,
     }));
-  const approvedMin = hoursRows
-    .filter((r) => r.approvalStatus === "APPROVED")
-    .reduce((s, r) => s + r.totalWorkMin, 0);
-  const pendingMin = hoursRows
-    .filter((r) => r.approvalStatus === "PENDING" && !r.isOpen)
-    .reduce((s, r) => s + r.totalWorkMin, 0);
-
   const fromStr = dateOnlyToString(rangeFrom);
   const toStr = dateOnlyToString(rangeTo);
 
-  const selected = allWorkers.find((w) => w.id === hWorker);
   const filters = {
     from: fromStr,
     to: toStr,
@@ -272,22 +262,6 @@ export async function ContractHoursWorkspace({
               </div>
             </div>
           </HoursToolbarCard>
-          <HoursStatRow>
-            <HoursStat label="Approved" value={formatHours(approvedMin)} />
-            <HoursStat label="Pending" value={formatHours(pendingMin)} />
-            <HoursStat label="Entries" value={hoursRows.length} />
-            <HoursStat
-              label="Scope"
-              value={
-                <span
-                  className="block truncate font-sans text-sm font-semibold"
-                  title={selected?.name}
-                >
-                  {selected?.name ?? "All contract workers"}
-                </span>
-              }
-            />
-          </HoursStatRow>
           <Card className="overflow-hidden">
             <CardHeader className="border-b border-border px-4 py-3">
               <CardTitle className="text-base font-semibold">
@@ -302,7 +276,7 @@ export async function ContractHoursWorkspace({
             </CardContent>
           </Card>
           <p className="text-xs text-muted-foreground">
-            Totals follow the filters above. Excel export uses the date range, agency, and
+            Excel export uses the date range, agency, and
             selected worker and combines each worker’s punches by day. Rejected entries
             add no hours.
           </p>

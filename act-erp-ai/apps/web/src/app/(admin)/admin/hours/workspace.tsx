@@ -8,17 +8,14 @@ import {
   HoursField,
   HoursFilterRow,
   HoursPresetChips,
-  HoursStat,
-  HoursStatRow,
   HoursToolbarCard,
 } from "@/components/hours-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { HoursPeopleList } from "@/components/hours-people-list";
 import { FormDateField } from "@/components/date-field";
-import { formatDateOnly, formatHours, getAvatarUrl } from "@/lib/format";
+import { formatDateOnly, getAvatarUrl } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
-import { allocateWeeklyOvertime } from "@/lib/payroll-overtime";
 import { loadHoursPeriodPresets, resolveHoursRange } from "@/lib/hours-period";
 import { EmployeeHoursTable, ManualEntryButton } from "../time-tracking/time-tools";
 import { type EntryRowData } from "../time-tracking/time-types";
@@ -144,18 +141,6 @@ export async function EmployeeHoursWorkspace({
 
   const rows = entries.map(toRow);
   const selected = employeeId ? employees.find((e) => e.id === employeeId) : null;
-
-  const ot = allocateWeeklyOvertime(
-    entries
-      .filter((e) => e.approvalStatus !== "REJECTED" && e.totalWorkMin > 0)
-      .map((e) => ({
-        date: dateOnlyToString(e.date),
-        clockIn: e.clockIn.getTime(),
-        minutes: e.totalWorkMin,
-      })),
-    fromStr,
-    toStr,
-  );
 
   const href = (extra: Record<string, string>) => {
     const params = new URLSearchParams({ from: fromStr, to: toStr, ...extra });
@@ -287,22 +272,6 @@ export async function EmployeeHoursWorkspace({
             </div>
           </HoursToolbarCard>
 
-          <HoursStatRow>
-            <HoursStat label="Regular" value={formatHours(ot.regularMin)} />
-            <HoursStat label="OT" value={formatHours(ot.overtimeMin)} />
-            <HoursStat
-              label="Total"
-              value={formatHours(ot.regularMin + ot.overtimeMin)}
-            />
-            <HoursStat
-              label="Scope"
-              value={
-                <span className="block truncate font-sans text-sm font-semibold">
-                  {selected?.name ?? "All employees"}
-                </span>
-              }
-            />
-          </HoursStatRow>
 
           <Card className="overflow-hidden">
             <CardHeader className="border-b border-border px-4 py-3">
