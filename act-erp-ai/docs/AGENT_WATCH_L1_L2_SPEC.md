@@ -358,7 +358,7 @@ Rules switched off by default (noisy on today's data): `time.missing-clock-in` (
 
 ## Next stage: L3 before L4
 
-L3 employee missing-clock-out drafts are implemented locally as of November 9, 2026; L4 remains a roadmap item. A scheduled end is a suggestion, never proof of time worked.
+L3 employee missing-clock-out drafts were deployed November 9, 2026 in application release `11fcfc1`; L4 remains a roadmap item. A scheduled end is a suggestion, never proof of time worked.
 
 ### L3 first slice (November 9, 2026)
 
@@ -368,7 +368,7 @@ L3 employee missing-clock-out drafts are implemented locally as of November 9, 2
 - [x] Lock the pay-period row before closing/counting blockers, coordinating with proposal execution and undo.
 - [x] Idempotent approval and undo, transactional before/after audit, retained failure details. Undo refuses intervening edits, closed periods or a subsequent conflicting punch.
 - [x] Desktop/mobile browser coverage: creating a draft changes nothing, simultaneous approvals apply once, safe undo restores the original open entry, stale drafts remain actionable, rejection changes no hours, and employees cannot list the queue.
-- [ ] Deploy the additive `WatchProposal` table and application together (not deployed by this implementation task).
+- [x] Deployed the additive `WatchProposal` table and application together in release `11fcfc1` after a database backup. Warm health, login, and a read-only proposal-table query passed.
 
 Boundaries: employee shifts only; a single valid schedule is required. Missing/ambiguous schedules and open breaks use the existing manual Hours workflow. Overnight schedules are supported; ambiguous DST times are refused. Creating drafts is an explicit admin action from a finding; the cron does not execute corrections. No notification sends, inferred break changes, payroll auto-approval or L4 execution are enabled. The existing schedule rows are locked while evidence is rechecked; the exact human-confirmed proposed end is always applied. Other schedule writers are not globally serialized with this workflow.
 
