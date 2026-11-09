@@ -1,6 +1,7 @@
 import Link from "next/link";
-import type { ApprovalStatus, ContractWorkerStatus } from "@prisma/client";
-import { Activity, Clock, HardHat, Timer } from "lucide-react";
+import { redirect } from "next/navigation";
+import type { ContractWorkerStatus } from "@prisma/client";
+import { Activity, HardHat, Timer } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { PanelSlot } from "@/components/inline-panel";
@@ -11,27 +12,21 @@ import { FilterStack, MobileTabsList } from "@/components/mobile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { businessDateOnly, formatBusinessTime, formatHours } from "@/lib/format";
+import { formatBusinessTime } from "@/lib/format";
 import {
-  addDaysDateOnly,
   dateOnlyToString,
-  parseDateOnly,
-  startOfBusinessWeek,
 } from "@/lib/time-rules";
 import {
   listAgencies,
-  listContractTimeEntries,
   listContractWorkers,
   onSiteNow,
 } from "@/server/queries/contract-workers";
 import { AgenciesTable, AgencyForm } from "./agencies-tab";
-import { DownloadHoursCsvButton, HoursTable } from "./hours-table";
 import { WorkerForm, ClockOutButton } from "./worker-dialogs";
 import { WorkersTable } from "./workers-table";
 import { PunchPhotos } from "@/components/punch-photos";
 import { FormSimpleSelect } from "@/components/simple-select";
-import { AddContractEntryButton } from "./add-entry-panel";
-import { type AgencyRow, type HoursRow, type WorkerRow } from "./shared";
+import { type AgencyRow, type WorkerRow } from "./shared";
 
 export const metadata = { title: "Contract workers" };
 
@@ -47,6 +42,15 @@ export default async function ContractWorkersPage({
   await requireAdmin();
   const sp = await searchParams;
   const tab = TABS.includes(one(sp.tab)) ? one(sp.tab) : "workers";
+  if (tab === "hours") {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(sp)) {
+      if (key !== "tab" && value !== undefined) {
+        for (const item of Array.isArray(value) ? value : [value]) params.append(key, item);
+      }
+    }
+    redirect(`/admin/hours/contract-workers${params.size ? `?${params}` : ""}`);
+  }
 
   // Workers tab filters
   const agencyFilter = one(sp.agency);
@@ -57,22 +61,7 @@ export default async function ContractWorkersPage({
       : undefined;
   const q = one(sp.q).trim();
 
-  // Hours tab filters (default: current Mon-Sun business week)
-  const today = businessDateOnly();
-  const weekStart = startOfBusinessWeek(today);
-  const fromParsed = parseDateOnly(one(sp.from)) ?? weekStart;
-  const toParsed = parseDateOnly(one(sp.to)) ?? addDaysDateOnly(weekStart, 6);
-  const rangeFrom = fromParsed <= toParsed ? fromParsed : toParsed;
-  const rangeTo = fromParsed <= toParsed ? toParsed : fromParsed;
-  const hAgency = one(sp.hagency);
-  const hWorker = one(sp.worker);
-  const approvalRaw = one(sp.approval);
-  const approval: ApprovalStatus | undefined =
-    approvalRaw === "PENDING" || approvalRaw === "APPROVED" || approvalRaw === "REJECTED"
-      ? approvalRaw
-      : undefined;
-
-  const [agencies, allWorkers, filteredWorkers, onSite, entries, jobCodes] =
+  const [agencies, allWorkers, filteredWorkers, onSite, jobCodes] =
     await Promise.all([
       listAgencies(),
       listContractWorkers({}),
@@ -82,13 +71,6 @@ export default async function ContractWorkersPage({
         search: q || undefined,
       }),
       onSiteNow(),
-      listContractTimeEntries({
-        from: rangeFrom,
-        to: rangeTo,
-        agencyId: hAgency || undefined,
-        workerId: hWorker || undefined,
-        approvalStatus: approval,
-      }),
       db.jobCode.findMany({
         where: { isActive: true },
         orderBy: { code: "asc" },
@@ -131,38 +113,6 @@ export default async function ContractWorkersPage({
     isActive: a.isActive,
     workerCount: a._count.workers,
   }));
-
-  const hoursRows: HoursRow[] = entries.map((e) => ({
-    id: e.id,
-    date: dateOnlyToString(e.date),
-    workerDbId: e.contractWorker.id,
-    workerCode: e.contractWorker.workerId,
-    workerName: e.contractWorker.name,
-    agencyName: e.contractWorker.agency.name,
-    project: e.contractWorker.project,
-    jobCode: e.jobCode,
-    clockIn: e.clockIn.toISOString(),
-    clockOut: e.clockOut?.toISOString() ?? null,
-    totalBreakMin: e.totalBreakMin,
-    totalWorkMin: e.totalWorkMin,
-    isOpen: e.status === "ACTIVE" || e.status === "ON_BREAK",
-    approvalStatus: e.approvalStatus,
-    approvalNotes: e.approvalNotes,
-    editReason: e.editReason,
-    autoClosed: e.autoClosed,
-    fromKiosk: e.kioskSlug !== null,
-    hasClockInPhoto: !!e.clockInPhotoKey,
-    hasClockOutPhoto: !!e.clockOutPhotoKey,
-  }));
-  const approvedMin = hoursRows
-    .filter((r) => r.approvalStatus === "APPROVED")
-    .reduce((s, r) => s + r.totalWorkMin, 0);
-  const pendingMin = hoursRows
-    .filter((r) => r.approvalStatus === "PENDING" && !r.isOpen)
-    .reduce((s, r) => s + r.totalWorkMin, 0);
-
-  const fromStr = dateOnlyToString(rangeFrom);
-  const toStr = dateOnlyToString(rangeTo);
 
   const onSiteByAgency = Array.from(
     onSite
@@ -210,12 +160,14 @@ export default async function ContractWorkersPage({
       )}
 
       <Tabs defaultValue={tab} className="mt-6 space-y-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
         <MobileTabsList>
           <TabsTrigger value="workers">Workers ({allWorkers.length})</TabsTrigger>
           <TabsTrigger value="on-site">On site ({onSite.length})</TabsTrigger>
-          <TabsTrigger value="hours">Hours</TabsTrigger>
           <TabsTrigger value="agencies">Agencies ({agencies.length})</TabsTrigger>
         </MobileTabsList>
+        <Button asChild variant="outline" size="sm" className="min-h-11 sm:ml-auto sm:min-h-9"><Link href="/admin/hours/contract-workers">View hours</Link></Button>
+        </div>
 
         <TabsContent value="workers" className="space-y-4">
           <Card>
@@ -365,159 +317,6 @@ export default async function ContractWorkersPage({
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="hours" className="space-y-4">
-          <Card>
-            <CardContent className="flex min-w-0 flex-wrap items-end gap-3 p-4">
-              <form method="get" action="/admin/contract-workers" className="min-w-0 flex-1 basis-full xl:basis-auto">
-                <FilterStack className="items-end">
-                  <input type="hidden" name="tab" value="hours" />
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label className="text-xs text-muted-foreground" htmlFor="cw-h-from">
-                      From
-                    </label>
-                    <Input
-                      key={fromStr}
-                      id="cw-h-from"
-                      type="date"
-                      name="from"
-                      defaultValue={fromStr}
-                      className="h-9 w-full sm:w-40"
-                    />
-                  </div>
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label className="text-xs text-muted-foreground" htmlFor="cw-h-to">
-                      To
-                    </label>
-                    <Input
-                      key={toStr}
-                      id="cw-h-to"
-                      type="date"
-                      name="to"
-                      defaultValue={toStr}
-                      className="h-9 w-full sm:w-40"
-                    />
-                  </div>
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label
-                      className="text-xs text-muted-foreground"
-                      htmlFor="cw-h-agency"
-                    >
-                      Agency
-                    </label>
-                    <FormSimpleSelect
-                      key={hAgency}
-                      id="cw-h-agency"
-                      name="hagency"
-                      defaultValue={hAgency}
-                      className="h-9 w-full sm:w-52"
-                      placeholder="All agencies"
-                      options={[
-                        { value: "", label: "All agencies" },
-                        ...agencyOptions.map((a) => ({ value: a.id, label: a.name })),
-                      ]}
-                    />
-                  </div>
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label className="text-xs text-muted-foreground" htmlFor="cw-h-worker">Worker</label>
-                    <FormSimpleSelect
-                      key={hWorker}
-                      id="cw-h-worker"
-                      name="worker"
-                      defaultValue={hWorker}
-                      className="h-9 w-full sm:w-64"
-                      placeholder="All workers"
-                      options={[
-                        { value: "", label: "All workers" },
-                        ...allWorkers.map((w) => ({ value: w.id, label: `${w.name} (${w.workerId})` })),
-                      ]}
-                    />
-                  </div>
-                  <div className="w-full space-y-1 sm:w-auto">
-                    <label
-                      className="text-xs text-muted-foreground"
-                      htmlFor="cw-h-approval"
-                    >
-                      Approval
-                    </label>
-                    <FormSimpleSelect
-                      id="cw-h-approval"
-                      name="approval"
-                      defaultValue={approval ?? ""}
-                      className="h-9 w-full sm:w-36"
-                      placeholder="All"
-                      options={[
-                        { value: "", label: "All" },
-                        { value: "PENDING", label: "Pending" },
-                        { value: "APPROVED", label: "Approved" },
-                        { value: "REJECTED", label: "Rejected" },
-                      ]}
-                    />
-                  </div>
-                  <Button type="submit" size="sm" className="w-full sm:w-auto">
-                    Apply
-                  </Button>
-                  <Button
-                    asChild
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-full sm:w-auto"
-                  >
-                    <Link href="/admin/contract-workers?tab=hours">Current week</Link>
-                  </Button>
-                  <div className="w-full sm:ml-auto sm:w-auto">
-                    <DownloadHoursCsvButton
-                      from={fromStr}
-                      to={toStr}
-                      agencyId={hAgency}
-                      workerId={hWorker}
-                    />
-                  </div>
-                </FilterStack>
-              </form>
-          <div className="flex w-full min-w-0 flex-wrap items-start gap-2 sm:w-auto has-[[data-state=open]]:w-full has-[[data-state=open]]:basis-full">
-            <AddContractEntryButton
-              workers={allWorkers.map((w) => ({
-                id: w.id,
-                name: w.name,
-                workerId: w.workerId,
-                jobCode: w.jobCode,
-                startDate: dateOnlyToString(w.startDate),
-                endDate: w.endDate ? dateOnlyToString(w.endDate) : null,
-                status: w.status,
-              }))}
-              jobCodes={jobCodes}
-            />
-            <Button asChild size="sm" variant="secondary" className="min-h-11 md:min-h-9">
-              <Link href="/admin/contract-workers/mass">Mass hours</Link>
-            </Button>
-          </div>
-            </CardContent>
-          </Card>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <StatCard
-              label="Approved hours"
-              value={formatHours(approvedMin)}
-              icon={<Clock className="h-4 w-4 text-primary" />}
-            />
-            <StatCard
-              label="Pending hours"
-              value={formatHours(pendingMin)}
-              icon={<Clock className="h-4 w-4" />}
-            />
-          </div>
-          <Card>
-            <CardContent className="p-0">
-              <HoursTable rows={hoursRows} />
-            </CardContent>
-          </Card>
-          <p className="text-[11px] text-muted-foreground">
-            Totals follow the filters above. The CSV uses the date range and agency only,
-            and merges several punches on one day into one row. Rejected entries add no
-            hours.
-          </p>
         </TabsContent>
 
         <TabsContent value="agencies">

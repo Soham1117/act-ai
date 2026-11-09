@@ -30,6 +30,8 @@ import {
 import { exportContractHoursWorkbook } from "./export-actions";
 import { ContractEntryRowActions } from "./entry-row-actions";
 import { DataListCard, ResponsiveDataList } from "@/components/mobile";
+import { hoursRowClass, hoursTableClass, hoursTdClass, hoursThClass, hoursTheadClass } from "@/components/hours-ui";
+import { cn } from "@/lib/utils";
 import { ApprovalBadge, type HoursRow } from "./shared";
 
 const canReview = (r: HoursRow) =>
@@ -224,15 +226,16 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                       </p>
                       <Link
                         href={`/admin/contract-workers/${r.workerDbId}`}
-                        className="text-sm font-medium hover:underline"
+                        className="block truncate text-sm font-medium hover:underline"
+                        title={r.workerName}
                       >
                         {r.workerName}
                       </Link>
-                      <p className="font-mono text-[11px] text-muted-foreground">
+                      <p className="truncate font-mono text-[11px] text-muted-foreground">
                         {r.workerCode}
                         {r.project ? ` · ${r.project}` : ""}
                       </p>
-                      <p className="text-xs text-muted-foreground">{r.agencyName}</p>
+                      <p className="truncate text-xs text-muted-foreground" title={r.agencyName}>{r.agencyName}</p>
                       <p className="font-mono text-xs">
                         {formatBusinessTime(r.clockIn)}
                         {r.clockOut ? ` → ${formatBusinessTime(r.clockOut)}` : " → open"}
@@ -267,6 +270,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                           size="sm"
                           variant="outline"
                           disabled={pending}
+                          aria-label={`Approve entry for ${r.workerName}`}
                           onClick={() => approve([r.id])}
                         >
                           <Check className="mr-1 h-3.5 w-3.5" />
@@ -276,6 +280,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                           size="sm"
                           variant="outline"
                           disabled={pending}
+                          aria-label={`Reject entry for ${r.workerName}`}
                           onClick={() => {
                             setRejectNotes("");
                             setRejectIds([r.id]);
@@ -306,10 +311,10 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
         }
         desktop={
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <th className="w-10 p-3">
+            <table data-sorter="1" className={cn(hoursTableClass, "min-w-[900px]")}>
+              <thead className={hoursTheadClass}>
+                <tr className="text-left">
+                  <th className={cn(hoursThClass, "w-10")}>
                     <Checkbox
                       aria-label="Select all pending entries"
                       disabled={reviewable.length === 0}
@@ -321,22 +326,23 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                       }
                     />
                   </th>
-                  <th className="p-3 font-medium">Date</th>
-                  <th className="p-3 font-medium">Worker</th>
-                  <th className="p-3 font-medium">Agency</th>
-                  <th className="p-3 font-medium">Times</th>
-                  <th className="p-3 text-right font-medium">Breaks</th>
-                  <th className="p-3 text-right font-medium">Work</th>
-                  <th className="p-3 font-medium">Photos</th>
-                  <th className="p-3 font-medium">Status</th>
-                  <th className="p-3 text-right font-medium">Actions</th>
+                  <th className={hoursThClass}>Date</th>
+                  <th className={hoursThClass}>Worker</th>
+                  <th className={hoursThClass}>In</th>
+                  <th className={hoursThClass}>Out</th>
+                  <th className={cn(hoursThClass, "text-right")}>Break</th>
+                  <th className={cn(hoursThClass, "text-right")}>Hours</th>
+                  <th className={hoursThClass}>Agency</th>
+                  <th className={hoursThClass}>Photos</th>
+                  <th className={hoursThClass}>Status</th>
+                  <th className={cn(hoursThClass, "text-right")}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <Fragment key={r.id}>
-                  <tr className="border-b align-middle last:border-0 [&:has(+tr_[data-panel-open])]:bg-primary/10">
-                    <td className="p-3">
+                  <tr className={cn(hoursRowClass, "last:border-0 [&:has(+tr_[data-panel-open])]:bg-primary/10")}>
+                    <td className={hoursTdClass}>
                       {canReview(r) && (
                         <Checkbox
                           aria-label={`Select entry for ${r.workerName}`}
@@ -345,25 +351,27 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                         />
                       )}
                     </td>
-                    <td className="whitespace-nowrap p-3 text-xs">
+                    <td className={cn(hoursTdClass, "whitespace-nowrap text-xs")}>
                       {formatDateOnly(r.date)}
                     </td>
-                    <td className="p-3">
+                    <td className={hoursTdClass}>
                       <Link
                         href={`/admin/contract-workers/${r.workerDbId}`}
-                        className="font-medium hover:underline"
+                        className="block max-w-48 truncate font-medium hover:underline"
+                        title={r.workerName}
                       >
                         {r.workerName}
                       </Link>
-                      <div className="font-mono text-[11px] text-muted-foreground">
+                      <div className="max-w-48 truncate font-mono text-[11px] text-muted-foreground">
                         {r.workerCode}
                         {r.project ? ` · ${r.project}` : ""}
                       </div>
                     </td>
-                    <td className="p-3">{r.agencyName}</td>
-                    <td className="whitespace-nowrap p-3 font-mono text-xs">
+                    <td className={cn(hoursTdClass, "whitespace-nowrap font-mono text-xs")}>
                       {formatBusinessTime(r.clockIn)}
-                      {r.clockOut ? ` → ${formatBusinessTime(r.clockOut)}` : " → open"}
+                    </td>
+                    <td className={cn(hoursTdClass, "whitespace-nowrap font-mono text-xs")}>
+                      {r.clockOut ? formatBusinessTime(r.clockOut) : "Open"}
                       {r.editReason && (
                         <div
                           className="max-w-[220px] truncate font-sans text-[11px] text-muted-foreground"
@@ -381,13 +389,14 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                         </div>
                       )}
                     </td>
-                    <td className="p-3 text-right font-mono text-xs tabular-nums">
+                    <td className={cn(hoursTdClass, "text-right font-mono text-xs tabular-nums")}>
                       {formatHours(r.totalBreakMin)}
                     </td>
-                    <td className="p-3 text-right font-mono tabular-nums">
+                    <td className={cn(hoursTdClass, "text-right font-mono tabular-nums")}>
                       {r.isOpen ? "—" : formatHours(r.totalWorkMin)}
                     </td>
-                    <td className="p-3">
+                    <td className={hoursTdClass}><span className="block max-w-40 truncate" title={r.agencyName}>{r.agencyName}</span></td>
+                    <td className={hoursTdClass}>
                       <PunchPhotos
                         type="contract"
                         entryId={r.id}
@@ -398,7 +407,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                         clockOut={r.clockOut}
                       />
                     </td>
-                    <td className="p-3">
+                    <td className={hoursTdClass}>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <ApprovalBadge status={r.approvalStatus} open={r.isOpen} />
                         {r.autoClosed && (
@@ -408,7 +417,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                         )}
                       </div>
                     </td>
-                    <td className="p-3">
+                    <td className={hoursTdClass}>
                       <div className="flex justify-end gap-1">
                         {canReview(r) && (
                           <>
@@ -450,7 +459,7 @@ export function HoursTable({ rows }: { rows: HoursRow[] }) {
                       </div>
                     </td>
                   </tr>
-                  <PanelSlotRow id={`hours-${r.id}`} colSpan={10} />
+                  <PanelSlotRow id={`hours-${r.id}`} colSpan={11} />
                   </Fragment>
                 ))}
               </tbody>

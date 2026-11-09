@@ -59,6 +59,7 @@ const NAV: Array<{
     group: "People",
     items: [
       { href: "/admin/employees", label: "Employees", icon: Users },
+      { href: "/admin/contract-workers", label: "Contract workers", icon: HardHat },
       { href: "/admin/departments", label: "Departments", icon: Building2 },
       { href: "/admin/job-codes", label: "Job codes", icon: Tags },
       { href: "/admin/onboarding", label: "Onboarding", icon: Shield },
@@ -68,7 +69,6 @@ const NAV: Array<{
     group: "Operations",
     items: [
       { href: "/admin/hours", label: "Hours", icon: Clock },
-      { href: "/admin/contract-workers", label: "Contract workers", icon: HardHat },
       { href: "/admin/schedules", label: "Schedules", icon: CalendarDays },
       { href: "/admin/leave", label: "Leave", icon: Plane },
       { href: "/admin/requests", label: "Requests", icon: ClipboardList },
@@ -111,6 +111,8 @@ function useAdminNav(aiEnabled: boolean) {
 
 /** Hours owns Individual/Group/Mass/… tabs plus Approvals at /admin/time-tracking. */
 function isNavActive(pathname: string, href: string) {
+  if (href === "/admin/contract-workers" && pathname.startsWith("/admin/contract-workers/mass")) return false;
+  if (href === "/admin/hours" && pathname.startsWith("/admin/contract-workers/mass")) return true;
   if (pathname === href) return true;
   if (href === "/admin") return false;
   if (pathname.startsWith(`${href}/`)) return true;

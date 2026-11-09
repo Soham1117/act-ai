@@ -23,9 +23,8 @@ import { PanelSlotRow } from "@/components/inline-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { HoursPeopleList } from "@/components/hours-people-list";
 import { FormDateField } from "@/components/date-field";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatBusinessTime, formatDateOnly, formatHours, getAvatarUrl } from "@/lib/format";
 import { dateOnlyToString } from "@/lib/time-rules";
 import { allocateWeeklyOvertime } from "@/lib/payroll-overtime";
@@ -35,7 +34,7 @@ import { entryPanelSlotId, type EntryRowData } from "../time-tracking/time-types
 import { cn } from "@/lib/utils";
 import { DownloadEmployeeHoursButton } from "./download-employee-hours";
 
-export const metadata = { title: "Individual hours" };
+export const metadata = { title: "Employee hours" };
 
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -166,75 +165,26 @@ export default async function IndividualHoursPage({
   return (
     <>
       <PageHeader
-        title="Individual hours"
+        title="Employee hours"
         description="Punch-level hours with rates and weekly OT. All times are Central."
       />
-      <HoursSubnav />
+      <HoursSubnav from={fromStr} to={toStr} />
 
       <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
-        <Card className="h-fit overflow-hidden lg:sticky lg:top-16">
-          <CardHeader className="space-y-3 border-b border-border p-3">
-            <CardTitle className="text-sm font-semibold">Employees</CardTitle>
-            <form method="get" action="/admin/hours" className="flex gap-2">
-              <input type="hidden" name="from" value={fromStr} />
-              <input type="hidden" name="to" value={toStr} />
-              <Input
-                name="q"
-                defaultValue={q}
-                placeholder="Search…"
-                className="h-9 min-w-0 flex-1"
-                aria-label="Search employees"
-              />
-              <Button type="submit" size="sm" variant="secondary" className="h-9 shrink-0 px-3">
-                Go
-              </Button>
-            </form>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Link
-              href={href({})}
-              className={cn(
-                "block border-b border-border px-3 py-2 text-sm",
-                !employeeId ? "bg-muted font-medium" : "hover:bg-muted/50",
-              )}
-            >
-              All employees
-            </Link>
-            <ScrollArea className="h-[min(50vh,28rem)]">
-              <ul className="py-1">
-                {employees
-                  .filter(
-                    (e) =>
-                      !q ||
-                      e.name.toLowerCase().includes(q.toLowerCase()) ||
-                      e.employeeId.toLowerCase().includes(q.toLowerCase()) ||
-                      (e.exportCode ?? "").toLowerCase().includes(q.toLowerCase()) ||
-                      (e.tcpNumber ?? "").includes(q),
-                  )
-                  .map((e) => (
-                    <li key={e.id}>
-                      <Link
-                        href={href({ employee: e.id })}
-                        className={cn(
-                          "block px-3 py-2 text-sm",
-                          employeeId === e.id
-                            ? "bg-muted font-medium"
-                            : "hover:bg-muted/50",
-                        )}
-                      >
-                        <span className="block truncate leading-snug">{e.name}</span>
-                        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                          {e.exportCode ?? e.employeeId}
-                          {e.tcpNumber ? ` · TCP ${e.tcpNumber}` : ""}
-                          {e.employmentStatus === "TERMINATED" ? " · former" : e.employmentStatus === "INACTIVE" ? " · inactive" : ""}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-              </ul>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+        <HoursPeopleList
+          title="Employees"
+          allLabel="All employees"
+          action="/admin/hours"
+          query={q}
+          filters={{ from: fromStr, to: toStr }}
+          selectedId={employeeId}
+          hrefFor={(id) => href(id ? { employee: id } : {})}
+          items={employees.filter((e) => !q || e.name.toLowerCase().includes(q.toLowerCase()) || e.employeeId.toLowerCase().includes(q.toLowerCase()) || (e.exportCode ?? "").toLowerCase().includes(q.toLowerCase()) || (e.tcpNumber ?? "").includes(q)).map((e) => ({
+            id: e.id,
+            name: e.name,
+            detail: `${e.exportCode ?? e.employeeId}${e.tcpNumber ? ` · TCP ${e.tcpNumber}` : ""}${e.employmentStatus === "TERMINATED" ? " · former" : e.employmentStatus === "INACTIVE" ? " · inactive" : ""}`,
+          }))}
+        />
 
         <div className="min-w-0 space-y-4">
           <HoursToolbarCard>
@@ -283,6 +233,9 @@ export default async function IndividualHoursPage({
                   fixedEmployeeId={employeeId || undefined}
                 />
               </div>
+              <Button asChild size="sm" variant="secondary" className="min-h-11 sm:min-h-9">
+                <Link href="/admin/hours/mass">Bulk entry</Link>
+              </Button>
             </div>
             <HoursPresetChips
               presets={presets}

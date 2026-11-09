@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { HoursSubnav } from "@/components/hours-subnav";
 import { PageHeader } from "@/components/page-header";
 import { listContractWorkers } from "@/server/queries/contract-workers";
 import { MassContractHoursWizard } from "./mass-contract-hours-wizard";
@@ -20,10 +21,11 @@ export default async function ContractMassHoursPage() {
   return (
     <>
       <PageHeader
-        back={{ href: "/admin/contract-workers?tab=hours", label: "Contract hours" }}
-        title="Contract mass hours"
+        back={{ href: "/admin/hours/contract-workers", label: "Contract hours" }}
+        title="Contract worker bulk entry"
         description="Create the same closed shift for many agency workers at once. Active, inactive, and ended workers are allowed. Preview before commit."
       />
+      <HoursSubnav />
       <MassContractHoursWizard
         workers={workers.map((w) => ({
           id: w.id,
