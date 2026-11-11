@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { fail, failFromUnknown, ok, type ActionResult } from "@/lib/action-result";
-import { parseDateOnly } from "@/lib/time-rules";
+import { dateOnlyToString, parseDateOnly } from "@/lib/time-rules";
+import { isoWeekStart } from "@/lib/payroll-overtime";
 import { buildEmployeeHoursWorkbook } from "@/lib/employee-hours-workbook";
 
 const schema = z.object({
@@ -25,24 +26,33 @@ export async function exportIndividualEmployeeHours(
     if (!from || !to || from > to) return fail("Choose a valid date range.");
     const employee = await db.employee.findUnique({
       where: { id: data.employeeId },
-      select: { employeeId: true, name: true },
+      select: { employeeId: true, name: true, compensationType: true },
     });
     if (!employee) return fail("That employee no longer exists.");
+    // From the Monday of the first week, so weekly overtime counts earlier days.
+    const weekStart = parseDateOnly(isoWeekStart(data.from))!;
     const entries = await db.timeEntry.findMany({
-      where: { employeeId: data.employeeId, date: { gte: from, lte: to } },
+      where: { employeeId: data.employeeId, date: { gte: weekStart, lte: to } },
       orderBy: [{ date: "asc" }, { clockIn: "asc" }],
-      select: {
-        date: true,
-        clockIn: true,
-        clockOut: true,
-        totalWorkMin: true,
-        totalBreakMin: true,
-        jobCode: true,
-        approvalStatus: true,
-      },
+      select: { id: true, date: true, clockIn: true, totalWorkMin: true, jobCode: true, approvalStatus: true },
     });
-    const workbook = entries.length
-      ? buildEmployeeHoursWorkbook(employee, entries, data.from, data.to)
+    const inRange = entries.filter((e) => e.date >= from).length;
+    const workbook = inRange
+      ? buildEmployeeHoursWorkbook(
+          { name: employee.name, salaried: employee.compensationType !== "HOURLY_RATE" },
+          entries.map((e) => ({
+            id: e.id,
+            employeeId: data.employeeId,
+            employeeName: employee.name,
+            date: dateOnlyToString(e.date),
+            clockIn: e.clockIn.getTime(),
+            totalWorkMin: e.totalWorkMin,
+            jobCode: e.jobCode,
+            approvalStatus: e.approvalStatus,
+          })),
+          data.from,
+          data.to,
+        )
       : null;
     if (workbook)
       await audit({
@@ -52,7 +62,7 @@ export async function exportIndividualEmployeeHours(
         diff: {
           from: data.from,
           to: data.to,
-          entryCount: entries.length,
+          entryCount: inRange,
           bytes: workbook.length,
         },
       });

@@ -12,7 +12,7 @@ import { db } from "@/lib/db";
 import { businessDateOnly, formatBusinessTime } from "@/lib/format";
 import { isEndingSoon } from "@/lib/contract-workers";
 import { buildContractHoursWorkbook } from "@/lib/contract-hours-workbook";
-import { csvRow } from "@/lib/payroll-overtime";
+import { csvRow, isoWeekStart } from "@/lib/payroll-overtime";
 import { dateOnlyToString, isStaleShift } from "@/lib/time-rules";
 
 export type ContractLiveStatus = "ACTIVE" | "ON_BREAK" | "OUT";
@@ -268,14 +268,18 @@ export async function contractHoursCsv(args: { from: Date; to: Date; agencyId?: 
 }
 
 export async function contractHoursWorkbook(args: { from: Date; to: Date; agencyId?: string; workerId?: string }) {
-  const groups = await contractHoursGroups(args);
-  if (!groups.length) return null;
-  return buildContractHoursWorkbook(groups.map((g) => ({
-    agency: g.agency, workerId: g.workerId, name: g.name,
-    date: dateOnlyToString(g.date), clockIn: formatBusinessTime(g.first),
-    clockOut: g.last ? formatBusinessTime(g.last) : "",
-    breakMin: g.breakMin, workMin: g.workMin,
-    jobCode: [...g.jobCodes].join(" / "),
-    approval: g.approvals.size === 1 ? [...g.approvals][0]! : "MIXED",
-  })), dateOnlyToString(args.from), dateOnlyToString(args.to));
+  const from = dateOnlyToString(args.from);
+  // From the Monday of the first week, so weekly overtime counts earlier days.
+  const entries = await listContractTimeEntries({ ...args, from: new Date(`${isoWeekStart(from)}T00:00:00.000Z`) });
+  if (!entries.some((e) => e.date >= args.from)) return null;
+  return buildContractHoursWorkbook(entries.map((e) => ({
+    id: e.id,
+    employeeId: e.contractWorkerId,
+    employeeName: e.contractWorker.name,
+    date: dateOnlyToString(e.date),
+    clockIn: e.clockIn.getTime(),
+    totalWorkMin: e.totalWorkMin,
+    jobCode: e.jobCode,
+    approvalStatus: e.approvalStatus,
+  })), from, dateOnlyToString(args.to));
 }

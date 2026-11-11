@@ -1,10 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { readFile } from "node:fs/promises";
 import { db } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { PERIOD_A, PERIOD_B, PERIOD_C, PT, clearEntries, makeEntry } from "./support/payroll-time";
 import { ADMIN_STATE, EMPLOYEE, PIN_EMPLOYEE } from "./support/test-data";
 import { NETWORK_ERROR } from "./support/action-errors";
+import { personRows, readPeriodWorkbook } from "./support/xlsx";
 
 test.use({ storageState: ADMIN_STATE });
 
@@ -109,7 +109,7 @@ test.describe("admin payroll slip: hours and overtime", () => {
   test("an unknown period id shows not-found, not a crash", async ({ page }) => {
     await page.goto("/admin/payroll/no-such-period");
     await expect(page.getByText(/not found|404/i).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /download csv/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /download excel/i })).toHaveCount(0);
     await expectNoCrash(page);
   });
 });
@@ -146,7 +146,7 @@ test.describe("admin payroll slip: readiness blockers", () => {
   test("a blocked period needs an override; the audit record keeps reason and counts", async ({ page }) => {
     const p = await openPeriod(page, PERIOD_C.title);
     const before = await db.auditLog.count({ where: { action: "payroll.export_override", resource: `PayrollCalendar:${p.id}` } });
-    await page.getByRole("button", { name: /download csv/i }).click();
+    await page.getByRole("button", { name: /download excel/i }).click();
     const dialog = page.getByRole("dialog", { name: /override payroll readiness/i });
     const exportBtn = dialog.getByRole("button", { name: /export with override/i });
     await dialog.getByLabel(/override reason/i).fill("123456789"); // 9 characters
@@ -175,7 +175,7 @@ test.describe("admin payroll slip: readiness blockers", () => {
     const before = await db.auditLog.count({ where: { action: "payroll.export_override", resource: `PayrollCalendar:${p.id}` } });
     let downloaded = false;
     page.on("download", () => (downloaded = true));
-    await page.getByRole("button", { name: /download csv/i }).click();
+    await page.getByRole("button", { name: /download excel/i }).click();
     const dialog = page.getByRole("dialog", { name: /override payroll readiness/i });
     await dialog.getByLabel(/override reason/i).fill("Some long reason here");
     await dialog.getByRole("button", { name: /cancel/i }).click();
@@ -189,7 +189,7 @@ test.describe("admin payroll slip: readiness blockers", () => {
     const before = await db.auditLog.count({ where: { action: "payroll.export_override", resource: `PayrollCalendar:${p.id}` } });
     let downloaded = false;
     page.on("download", () => (downloaded = true));
-    await page.getByRole("button", { name: /download csv/i }).click();
+    await page.getByRole("button", { name: /download excel/i }).click();
     const dialog = page.getByRole("dialog", { name: /override payroll readiness/i });
     await dialog.getByLabel(/override reason/i).fill("Finance approved late hours");
     await failServerActions(page, "abort");
@@ -205,7 +205,7 @@ test.describe("admin payroll slip: readiness blockers", () => {
   test("double-clicking 'Export with override' exports and audits once", async ({ page }) => {
     const p = await openPeriod(page, PERIOD_C.title);
     const before = await db.auditLog.count({ where: { action: "payroll.export_override", resource: `PayrollCalendar:${p.id}` } });
-    await page.getByRole("button", { name: /download csv/i }).click();
+    await page.getByRole("button", { name: /download excel/i }).click();
     const dialog = page.getByRole("dialog", { name: /override payroll readiness/i });
     await dialog.getByLabel(/override reason/i).fill("Finance approved late hours");
     const calls = await delayServerActions(page, 1200);
@@ -219,35 +219,34 @@ test.describe("admin payroll slip: readiness blockers", () => {
   });
 });
 
-test.describe("admin payroll slip: CSV content", () => {
-  async function downloadCsv(page: Page, title: string) {
+test.describe("admin payroll slip: Excel content", () => {
+  async function downloadWorkbook(page: Page, title: string) {
     await openPeriod(page, title);
-    await page.getByRole("button", { name: /download csv/i }).click();
-    const dialog = page.getByRole("dialog", { name: /override payroll readiness/i });
-    await dialog.getByLabel(/override reason/i).fill("Checking CSV contents in test");
+    await page.getByRole("button", { name: /download excel/i }).click();
+    await page.getByLabel(/override reason/i).fill("Checking Excel contents in test");
     const download = page.waitForEvent("download");
-    await dialog.getByRole("button", { name: /export with override/i }).click();
-    const file = await download;
-    expect(file.suggestedFilename()).toBe(`payroll-slip-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`);
-    return (await readFile((await file.path())!, "utf8")).split("\r\n");
+    await page.getByRole("button", { name: /export with override/i }).click();
+    return readPeriodWorkbook(await download);
   }
+  const totals = (rows: string[][], name: string) => personRows(rows, name).at(-1)?.slice(0, 5);
 
-  test("period A CSV: title line, header, and the overtime split per employee", async ({ page }) => {
-    const lines = await downloadCsv(page, PERIOD_A.title);
-    expect(lines[0]).toBe(`"${PERIOD_A.title}"`);
-    expect(lines[1]).toBe(
-      '"Employee ID","Name","Department","Pay Period Start","Pay Period End","Days Worked","Regular Hours","Overtime Hours","Total Hours"',
-    );
-    expect(lines).toContain('"EMP-2026-0001","Erin Employee","","2025-03-01","2025-03-14","6","44","5","49"');
-    expect(lines).toContain('"EMP-2026-0003","Pia Pinless","","2025-03-01","2025-03-14","5","40","8","48"');
-    expect(lines.join("\n")).not.toContain(PT.rex.name); // pending/rejected only
+  test("period A: Period (Detail) layout and the overtime split per employee", async ({ page }) => {
+    const { filename, sheets, rows } = await downloadWorkbook(page, PERIOD_A.title);
+    expect(filename).toBe(`payroll-${PERIOD_A.end}.xlsx`);
+    expect(sheets).toEqual(["03.01.25 to 03.14.25"]);
+    expect(rows[0]).toEqual(["Period (Detail)"]);
+    expect(rows[1]).toEqual(["For the period of 3/1/2025 to 3/14/2025"]);
+    expect(totals(rows, "Erin Employee")).toEqual(["Totals for Erin Employee:", "", "49:00", "44:00", "5:00"]);
+    expect(totals(rows, "Pia Pinless")).toEqual(["Totals for Pia Pinless:", "", "48:00", "40:00", "8:00"]);
+    expect(personRows(rows, PT.rex.name)).toHaveLength(0); // pending/rejected only
+    expect(rows.at(-1)![0]).toBe("Control Totals:");
   });
 
-  test("period B CSV: the straddling week's remainder is pure overtime, once", async ({ page }) => {
-    const lines = await downloadCsv(page, PERIOD_B.title);
-    expect(lines).toContain('"EMP-2026-0003","Pia Pinless","","2025-03-15","2025-03-28","1","0","5","5"');
-    expect(lines.filter((l) => l.includes("Pia Pinless"))).toHaveLength(1);
-    expect(lines.join("\n")).not.toContain("Erin Employee");
+  test("period B: the straddling week's remainder is pure overtime, once", async ({ page }) => {
+    const { rows } = await downloadWorkbook(page, PERIOD_B.title);
+    expect(totals(rows, "Pia Pinless")).toEqual(["Totals for Pia Pinless:", "", "5:00", "0:00", "5:00"]);
+    expect(rows.filter((r) => r[0] === "Totals for Pia Pinless:")).toHaveLength(1);
+    expect(personRows(rows, "Erin Employee")).toHaveLength(0);
   });
 });
 
@@ -256,7 +255,7 @@ test.describe("admin payroll slip: print view", () => {
     await openPeriod(page, PERIOD_A.title);
     await page.emulateMedia({ media: "print" });
     await expect(page.getByText("ACT — Payroll Slip")).toBeVisible();
-    await expect(page.getByRole("button", { name: /download csv/i })).toBeHidden();
+    await expect(page.getByRole("button", { name: /download excel/i })).toBeHidden();
     await expect(page.getByText(/payroll readiness/i)).toBeHidden();
     await expect(slipRow(page, EMPLOYEE.name)).toBeVisible();
     await page.emulateMedia({ media: "screen" });

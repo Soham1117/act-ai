@@ -12,8 +12,8 @@ Seed: `e2e/seed-parts/40-payroll-time.ts`. Helpers: `e2e/support/payroll-time.ts
 | `updatePayrollPeriod` | rename, change dates, mark completed | covered | payroll-periods.spec.ts |
 | `updatePayrollPeriod` | overlap, invalid dates, deleted meanwhile, failure | covered | payroll-periods.spec.ts |
 | `deletePayrollPeriod` | confirm/cancel, delete + audit, already deleted, failure, documents untouched | covered | payroll-periods.spec.ts |
-| `generatePayrollSlipCsv` | CSV content for periods A and B, override audit, 9/10 char reason, cancel, failure, double click | covered | payroll-slip.spec.ts, payroll-csv.spec.ts |
-| `generatePayrollSlipCsv` | period deleted meanwhile | covered | payroll-csv.spec.ts |
+| `generatePayrollSlipWorkbook` | Period (Detail) workbook content for periods A and B, override audit, 9/10 char reason, cancel, failure, double click | covered | payroll-slip.spec.ts, payroll-csv.spec.ts |
+| `generatePayrollSlipWorkbook` | period deleted meanwhile | covered | payroll-csv.spec.ts |
 | `uploadPayrollDocument` | happy path (DB row, sha256, stored file, audit, notification) | covered | payroll-documents.spec.ts |
 | `uploadPayrollDocument` | duplicate sha256, duplicate category+period, Replace, batch duplicate | covered | payroll-documents.spec.ts |
 | `uploadPayrollDocument` | non-PDF, fake PDF, empty file, W-2 consent, pending-review employee | covered | payroll-documents.spec.ts |

@@ -1,24 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import AdmZip from "adm-zip";
 import { test, expect, type Page } from "@playwright/test";
 import { businessYmd, db } from "./support/db";
 import { chicago, makeAgency, makeEntry, makeWorker } from "./support/contract";
 import { toast } from "./support/helpers";
 import { ADMIN_STATE, JOB_CODE } from "./support/test-data";
+import { personRows, readPeriodWorkbook, weekStartCell } from "./support/xlsx";
 
 test.use({ storageState: ADMIN_STATE });
 
 async function download(page: Page) {
   const pending = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download Excel", exact: true }).click();
-  const file = await pending;
-  const zip = new AdmZip(await readFile((await file.path())!));
-  return {
-    filename: file.suggestedFilename(),
-    summary: zip.readAsText("xl/worksheets/sheet1.xml"),
-    daily: zip.readAsText("xl/worksheets/sheet2.xml"),
-  };
+  return readPeriodWorkbook(await pending);
 }
 
 async function employee(name: string) {
@@ -71,10 +64,11 @@ test("employee export contains only that person's hours and uses the dates curre
   expect(bothDays.filename).toBe(
     `employee-hours-${selected.employeeId}-${businessYmd(2)}-to-${businessYmd(1)}.xlsx`,
   );
-  expect(bothDays.summary).toContain('<c r="C4" s="0"><v>9</v></c>');
-  expect(bothDays.summary).toContain(selected.name);
-  expect(bothDays.summary).not.toContain(other.name);
-  expect(bothDays.daily).not.toContain(businessYmd(3));
+  // Day 3 is outside the range; days 1 and 2 total 9:00 (split by week when they straddle one).
+  expect(bothDays.rows[2]).toEqual(["Name", "Week Start", "Hours", "Regular", "Overtime 1"]);
+  expect(bothDays.rows.at(-1)!.slice(0, 3)).toEqual(["Control Totals:", "", "9:00"]);
+  expect(personRows(bothDays.rows, selected.name).at(-1)!.slice(0, 3)).toEqual([`Totals for ${selected.name}:`, "", "9:00"]);
+  expect(personRows(bothDays.rows, other.name)).toHaveLength(0);
 
   // Change the date picker without pressing Update. The download must use it.
   await page.getByRole("button", { name: "From date", exact: true }).click();
@@ -82,8 +76,10 @@ test("employee export contains only that person's hours and uses the dates curre
   await page.locator(`button[data-day="${day}"]`).click();
   const oneDay = await download(page);
   expect(oneDay.filename).toContain(`${businessYmd(1)}-to-${businessYmd(1)}`);
-  expect(oneDay.summary).toContain('<c r="C4" s="0"><v>5</v></c>');
-  expect(oneDay.daily).not.toContain(businessYmd(2));
+  expect(personRows(oneDay.rows, selected.name)).toEqual([
+    [selected.name, weekStartCell(businessYmd(1)), "5:00", "5:00", "0:00"],
+    [`Totals for ${selected.name}:`, "", "5:00", "5:00", "0:00"],
+  ]);
   const beforePreset = page.url();
   await page.getByRole("link", { name: "Open week", exact: true }).click();
   await page.waitForURL((url) => url.href !== beforePreset);
@@ -140,17 +136,16 @@ test("contract worker export is scoped from the profile and follows worker/date 
   expect(first.filename).toBe(
     `contract-hours-${selected.workerId}-${businessYmd(2)}-to-${businessYmd(1)}.xlsx`,
   );
-  expect(first.summary).toContain('<c r="D4" s="0"><v>15</v></c>');
-  expect(first.summary).not.toContain(other.name);
-  expect(first.daily).not.toContain(businessYmd(3));
+  expect(first.rows.at(-1)!.slice(0, 3)).toEqual(["Control Totals:", "", "15:00"]);
+  expect(personRows(first.rows, other.name)).toHaveLength(0);
   await page.getByRole("combobox", { name: "Worker", exact: true }).click();
   await page
     .getByRole("option", { name: `${other.name} (${other.workerId})`, exact: true })
     .click();
   const second = await download(page);
   expect(second.filename).toContain(other.workerId);
-  expect(second.summary).toContain('<c r="D4" s="0"><v>4</v></c>');
-  expect(second.summary).not.toContain(selected.name);
+  expect(second.rows.at(-1)!.slice(0, 3)).toEqual(["Control Totals:", "", "4:00"]);
+  expect(personRows(second.rows, selected.name)).toHaveLength(0);
 });
 
 test("empty employee ranges download nothing, and reversed contract dates are rejected", async ({

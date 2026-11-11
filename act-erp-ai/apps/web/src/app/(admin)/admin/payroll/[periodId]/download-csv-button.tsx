@@ -15,15 +15,13 @@ import {
   InlinePanelTitle,
 } from "@/components/inline-panel";
 import { runAction, toastAction } from "@/lib/toast-action";
-import { generatePayrollSlipCsv } from "./actions";
+import { generatePayrollSlipWorkbook } from "./actions";
 
 export function DownloadCsvButton({
   periodId,
-  title,
   blockingExceptions,
 }: {
   periodId: string;
-  title: string;
   blockingExceptions: boolean;
 }) {
   const [pending, startTransition] = useTransition();
@@ -32,18 +30,20 @@ export function DownloadCsvButton({
 
   function download(reason?: string) {
     startTransition(async () => {
-      const res = await runAction(() => generatePayrollSlipCsv(periodId, reason));
+      const res = await runAction(() => generatePayrollSlipWorkbook(periodId, reason));
       if (!toastAction(res)) return;
-      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+      const blob = new Blob([Uint8Array.from(atob(res.xlsx), (c) => c.charCodeAt(0))], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `payroll-slip-${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
+      a.download = res.filename;
       a.click();
       URL.revokeObjectURL(url);
       setOverrideOpen(false);
       setOverrideReason("");
-      toast.success(reason ? "CSV downloaded with audited override" : "CSV downloaded");
+      toast.success(reason ? "Excel downloaded with audited override" : "Excel downloaded");
     });
   }
 
@@ -60,7 +60,7 @@ export function DownloadCsvButton({
         ) : (
           <Download className="mr-1.5 h-3.5 w-3.5" />
         )}
-        Download CSV
+        Download Excel
       </Button>
       <InlinePanel open={overrideOpen} onOpenChange={setOverrideOpen}>
         <InlinePanelContent>

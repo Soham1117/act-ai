@@ -1,63 +1,58 @@
 import AdmZip from "adm-zip";
 import { describe, expect, it } from "vitest";
+import { readSheetRows } from "@/test-utils/read-xlsx";
 import { buildEmployeeHoursWorkbook } from "./employee-hours-workbook";
 
-const entry = (date: string, work: number, approvalStatus = "APPROVED") => ({
-  date: new Date(`${date}T00:00:00Z`),
-  clockIn: new Date(`${date}T14:00:00Z`),
-  clockOut: new Date(`${date}T18:00:00Z`),
+let n = 0;
+const entry = (date: string, work: number, approvalStatus = "APPROVED", jobCode = "7") => ({
+  id: `e${n++}`,
+  employeeId: "emp",
+  employeeName: "Ann & Lee",
+  date,
+  clockIn: Date.parse(`${date}T14:00:00Z`),
   totalWorkMin: work,
-  totalBreakMin: 0,
-  jobCode: "7",
+  jobCode,
   approvalStatus,
 });
 
 describe("individual employee hours workbook", () => {
-  it("merges days, excludes rejected hours, and writes only the inclusive date range", () => {
-    const zip = new AdmZip(
-      buildEmployeeHoursWorkbook(
-        { employeeId: "EMP-1", name: "Ann & Lee" },
-        [
-          entry("2026-10-31", 600),
-          entry("2026-11-01", 240),
-          entry("2026-11-01", 270, "PENDING"),
-          entry("2026-11-02", 480, "REJECTED"),
-          entry("2026-11-03", 600),
-        ],
-        "2026-11-01",
-        "2026-11-02",
-      ),
+  it("uses the Period (Detail) layout for the inclusive range, excluding rejected hours", () => {
+    const xlsx = buildEmployeeHoursWorkbook(
+      { name: "Ann & Lee", salaried: false },
+      [
+        entry("2026-10-26", 35 * 60), // same week, before the range: counts toward overtime
+        entry("2026-11-01", 240),
+        entry("2026-11-01", 270, "PENDING"),
+        entry("2026-11-02", 480, "REJECTED"),
+        entry("2026-11-03", 480, "APPROVED", "100"),
+        entry("2026-11-10", 600), // after the range
+      ],
+      "2026-11-01",
+      "2026-11-03",
     );
-    const summary = zip.readAsText("xl/worksheets/sheet1.xml");
-    const daily = zip.readAsText("xl/worksheets/sheet2.xml");
-    expect(zip.readAsText("xl/workbook.xml")).toMatch(
-      /name="Employee totals".*name="Daily hours"/,
-    );
-    expect(summary).toContain("Ann &amp; Lee");
-    expect(summary).toContain('<c r="C4" s="0"><v>8.5</v></c>');
-    expect(daily).toContain("MIXED");
-    expect(daily).toContain("REJECTED");
-    expect(daily).toContain('<c r="E5" s="0"><v>0</v></c>');
-    expect(daily).toContain('<c r="E6" s="1"><v>8.5</v></c>');
-    expect(daily).not.toContain("2026-10-31");
-    expect(daily).not.toContain("2026-11-03");
+    expect(new AdmZip(xlsx).readAsText("xl/workbook.xml")).toContain('name="11.01.26 to 11.03.26"');
+    expect(readSheetRows(xlsx)).toEqual([
+      ["Period (Detail)"],
+      ["For the period of 11/1/2026 to 11/3/2026"],
+      ["Name", "Week Start", "Hours", "Regular", "Overtime 1", "PTO"],
+      ["Ann & Lee", "10/26/2026", "8:30", "5:00", "3:30", "0:00"],
+      ["", "11/2/2026", "8:00", "0:00", "0:00", "8:00"],
+      ["Totals for Ann & Lee:", "", "16:30", "5:00", "3:30", "8:00"],
+      [],
+      ["Control Totals:", "", "16:30", "5:00", "3:30", "8:00"],
+    ]);
   });
 
-  it("keeps names that look like formulas as text and leaves a running day's clock-out empty", () => {
-    const zip = new AdmZip(
-      buildEmployeeHoursWorkbook(
-        { employeeId: "EMP-1", name: '=HYPERLINK("x")' },
-        [
-          entry("2026-11-01", 240),
-          { ...entry("2026-11-01", 0, "PENDING"), clockOut: null },
-        ],
-        "2026-11-01",
-        "2026-11-01",
-      ),
+  it("keeps names that look like formulas as text and lists a salaried employee with no hours", () => {
+    const xlsx = buildEmployeeHoursWorkbook(
+      { name: '=HYPERLINK("x")', salaried: true },
+      [{ ...entry("2026-11-01", 0, "REJECTED"), employeeName: '=HYPERLINK("x")' }],
+      "2026-11-01",
+      "2026-11-01",
     );
-    const summary = zip.readAsText("xl/worksheets/sheet1.xml");
-    expect(summary).toContain("=HYPERLINK(&quot;x&quot;)");
-    expect(summary).not.toContain("<f>");
-    expect(zip.readAsText("xl/worksheets/sheet2.xml")).not.toContain('<c r="C4"');
+    const sheet = new AdmZip(xlsx).readAsText("xl/worksheets/sheet1.xml");
+    expect(sheet).toContain("=HYPERLINK(&quot;x&quot;)");
+    expect(sheet).not.toContain("<f>");
+    expect(readSheetRows(xlsx).slice(3)).toEqual([['=HYPERLINK("x")', "Salary"], [], ["Control Totals:", "", "0:00", "0:00", "0:00"]]);
   });
 });

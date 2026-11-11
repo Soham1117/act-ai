@@ -6,6 +6,7 @@ import {
   periodSheetName,
   type WorkbookEntry,
 } from "@/lib/payroll-workbook";
+import { readSheetRows } from "@/test-utils/read-xlsx";
 
 let n = 0;
 const entry = (employeeId: string, name: string, date: string, minutes: number, jobCode = "2"): WorkbookEntry => ({
@@ -33,11 +34,40 @@ describe("buildPeriodSheet", () => {
       salariedNames: [],
       notes: new Map(),
     });
-    expect(sheet.rows[2]!.cells).toEqual(["Name", "Week Start", "Hours", "Regular", "Overtime 1", "PTO", "Notes"]);
+    expect(sheet.rows[2]!.cells).toEqual(["Name", "Week Start", "Hours", "Regular", "Overtime 1", "PTO"]);
     expect(sheet.rows[3]!.cells.slice(0, 6)).toEqual(["Steve Prcin", "9/14/2026", 2325, 2325, 0, 0]);
     // 29:30 worked + 8:00 PTO = 37:30 hours; regular excludes PTO
     expect(sheet.rows[4]!.cells.slice(0, 6)).toEqual(["", "9/21/2026", 2250, 1770, 0, 480]);
-    expect(sheet.rows[5]!.cells.slice(0, 6)).toEqual(["Totals for Steve Prcin:", "", 4575, 4095, 0, 480]);
+    expect(sheet.rows[5]!.cells).toEqual(["Totals for Steve Prcin:", "", 4575, 4095, 0, 480]);
+    expect(sheet.rows.at(-2)!.cells).toEqual([]);
+    expect(sheet.rows.at(-1)!.cells).toEqual(["Control Totals:", "", 4575, 4095, 0, 480]);
+  });
+
+  it("keeps a week with only a 0:00 punch and sums everyone in the control totals", () => {
+    const sheet = buildPeriodSheet({
+      period,
+      entries: [
+        entry("m", "Miguel Estrada", "2026-09-15", 0),
+        entry("m", "Miguel Estrada", "2026-09-22", 40 * 60 + 45),
+        entry("w", "William Martin", "2026-09-14", 9 * 60 + 45),
+      ],
+      salariedNames: ["Ken Stokley"],
+      notes: new Map(),
+    });
+    expect(sheet.rows.map((r) => r.cells.slice(0, 5))).toEqual([
+      ["Period (Detail)"],
+      ["For the period of 9/14/2026 to 9/27/2026"],
+      ["Name", "Week Start", "Hours", "Regular", "Overtime 1"],
+      ["Miguel Estrada", "9/14/2026", 0, 0, 0],
+      ["", "9/21/2026", 2445, 2400, 45],
+      ["Totals for Miguel Estrada:", "", 2445, 2400, 45],
+      ["William Martin", "9/14/2026", 585, 585, 0],
+      ["Totals for William Martin:", "", 585, 585, 0],
+      ["Ken Stokley", "Salary"],
+      [],
+      ["Control Totals:", "", 3030, 2985, 45],
+    ]);
+    expect(sheet.merges).toEqual(["A1:E1", "A2:E2", "A6:B6", "A8:B8", "A11:B11"]);
   });
 
   it("splits weekly overtime past 40 hours and ignores rejected entries", () => {
@@ -76,7 +106,7 @@ describe("buildPeriodSheet", () => {
       240,
       "Additional 114.39 for 2nd 401K loan",
     ]);
-    expect(sheet.rows.at(-1)!.cells).toEqual(["Ken Stokley", "Salary"]);
+    expect(sheet.rows.at(-3)!.cells).toEqual(["Ken Stokley", "Salary"]);
     expect(sheet.rows.some((r) => r.cells[0] === "Kayla Jimenez" && r.cells[1] === "Salary")).toBe(false);
   });
 });
@@ -94,5 +124,30 @@ describe("buildWorkbookXlsx", () => {
     const sheet = new AdmZip(buf).readAsText("xl/worksheets/sheet1.xml");
     expect(sheet).toContain("A &amp; B &lt;Test&gt;");
     expect(new AdmZip(buf).readAsText("xl/workbook.xml")).toContain('name="09.14.26 to 09.27.26"');
+    expect(readSheetRows(buf)).toEqual([
+      ["Period (Detail)"],
+      ["For the period of 9/14/2026 to 9/27/2026"],
+      ["Name", "Week Start", "Hours", "Regular", "Overtime 1"],
+      ["A & B <Test>", "9/14/2026", "1:00", "1:00", "0:00"],
+      ["Totals for A & B <Test>:", "", "1:00", "1:00", "0:00"],
+      [],
+      ["Control Totals:", "", "1:00", "1:00", "0:00"],
+    ]);
+  });
+
+  it("styles the sheet like the Timeclock Plus export", () => {
+    const buf = buildWorkbookXlsx([
+      buildPeriodSheet({ period, entries: [entry("a", "Ann", "2026-09-14", 60)], salariedNames: [], notes: new Map() }),
+    ]);
+    const zip = new AdmZip(buf);
+    const styles = zip.readAsText("xl/styles.xml");
+    expect(styles).toContain('<font><sz val="8"/><name val="Tahoma"/></font>');
+    expect(styles).toContain('<font><b/><sz val="12"/><name val="Tahoma"/></font>');
+    expect(styles).toContain('formatCode="[h]:mm"');
+    const xml = zip.readAsText("xl/worksheets/sheet1.xml");
+    expect(xml).toContain('<mergeCell ref="A1:E1"/>');
+    expect(xml).toContain('<mergeCell ref="A5:B5"/>');
+    expect(xml).toContain('<mergeCell ref="A7:B7"/>');
+    expect(xml).not.toContain("<pane");
   });
 });

@@ -1,44 +1,12 @@
-import AdmZip from "adm-zip";
-import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import { businessYmd } from "./support/db";
 import { delayServerActions, expectNoCrash, failServerActions, toast } from "./support/helpers";
 import { ADMIN_STATE } from "./support/test-data";
-import {
-  hoursUrl,
-  makeAgency,
-  makeEntry,
-  makeWorker,
-  parseCsv,
-  tamperActions,
-} from "./support/contract";
+import { hoursUrl, makeAgency, makeEntry, makeWorker, tamperActions } from "./support/contract";
+import { personRows, readPeriodWorkbook, weekStartCell } from "./support/xlsx";
 import { SERVER_ERROR } from "./support/action-errors";
 
 test.use({ storageState: ADMIN_STATE });
-
-const HEADER = [
-  "Agency",
-  "Worker ID",
-  "Name",
-  "Date",
-  "Clock in",
-  "Clock out",
-  "Break min",
-  "Work hours",
-  "Job code",
-  "Approval",
-];
-
-/** Drop the period title and TOTALS footer; return detail rows only. */
-function detailRows(text: string): string[][] {
-  const rows = parseCsv(text);
-  const start = rows.findIndex((r) => r[0] === "Agency" && r[1] === "Worker ID");
-  expect(start).toBeGreaterThanOrEqual(0);
-  expect(rows[start]).toEqual(HEADER);
-  const body = rows.slice(start + 1);
-  if (body.length && body[body.length - 1]![0] === "TOTALS") return body.slice(0, -1);
-  return body;
-}
 
 async function openHours(page: Page, agencyId: string, extra = "", from = businessYmd(6), to = businessYmd(0)) {
   await page.goto(hoursUrl(`&hagency=${agencyId}${extra}`, from, to));
@@ -47,54 +15,44 @@ async function openHours(page: Page, agencyId: string, extra = "", from = busine
 async function download(page: Page) {
   const pending = page.waitForEvent("download");
   await page.getByRole("button", { name: /download excel/i }).click();
-  const file = await pending;
-  const zip = new AdmZip(await readFile((await file.path())!));
-  const workbook = zip.readAsText("xl/workbook.xml");
-  expect(workbook.indexOf('name="Worker totals"')).toBeLessThan(workbook.indexOf('name="Daily hours"'));
-  const xml = zip.readAsText("xl/worksheets/sheet2.xml");
-  const decode = (value: string) => value.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
-  const rows = [...xml.matchAll(/<row[^>]*>(.*?)<\/row>/g)].map((match) => {
-    const cells: string[] = Array(10).fill("");
-    for (const cell of match[1]!.matchAll(/<c r="([A-J])\d+"[^>]*?(?:\/>|>(.*?)<\/c>)/g)) {
-      const col = cell[1]!.charCodeAt(0) - 65;
-      const value = /<t[^>]*>(.*?)<\/t>/.exec(cell[2] ?? "")?.[1];
-      const number = /<v>(.*?)<\/v>/.exec(cell[2] ?? "")?.[1];
-      cells[col] = value !== undefined ? decode(value) : number !== undefined ? col === 7 ? Number(number).toFixed(2) : number : "";
-    }
-    return cells;
-  }).filter((row) => row.some(Boolean));
-  return { filename: file.suggestedFilename(), text: rows.map((row) => row.map((value) => `"${value.replace(/"/g, '\"\"')}"`).join(",")).join("\r\n") };
+  return readPeriodWorkbook(await pending);
 }
+const mdy = (ymd: string) => {
+  const [y, m, d] = ymd.split("-").map(Number) as [number, number, number];
+  return `${m}/${d}/${y}`;
+};
 
 test.describe("admin hours: Excel export", () => {
-  test("exports one row per worker per day with merged punches, rejected hours excluded", async ({ page }) => {
+  test("uses the Period (Detail) layout, one row per worker per week, rejected hours excluded", async ({ page }) => {
     const agency = await makeAgency();
     const w1 = await makeWorker({ agencyId: agency.id, name: "Csv Alpha" });
     const w2 = await makeWorker({ agencyId: agency.id, name: "Csv Beta" });
-    // Two punches on one day: merged into one row, 4h + 4.5h = 8.50, mixed approval.
+    // Two punches on one day (approved + pending): 4h + 4.5h = 8:30.
     await makeEntry(w1.id, { daysAgo: 2, in: "08:00", out: "12:00", approval: "APPROVED" });
     await makeEntry(w1.id, { daysAgo: 2, in: "13:00", out: "17:30" });
     // A rejected day adds no hours.
     await makeEntry(w1.id, { daysAgo: 3, in: "09:00", out: "17:00", approval: "REJECTED", notes: "dup" });
     await makeEntry(w2.id, { daysAgo: 2, in: "06:00", out: "14:15", approval: "APPROVED" });
     await openHours(page, agency.id);
-    const { filename, text } = await download(page);
+    const { filename, sheets, rows } = await download(page);
     await expect(toast(page, /excel downloaded/i)).toBeVisible();
     expect(filename).toBe(`contract-hours-${businessYmd(6)}-to-${businessYmd(0)}.xlsx`);
-    const rows = parseCsv(text);
-    expect(rows[0]![0]).toBe(`Contract hours ${businessYmd(6)} to ${businessYmd(0)}`);
-    expect(rows[1]).toEqual(HEADER);
-    expect(rows[rows.length - 1]).toEqual(["TOTALS", "", "", "", "", "", "0", "16.75", "", ""]);
-    const key = (r: string[]) => `${r[1]}|${r[3]}`; // order across workers follows the random worker id
-    const sorted = (rs: string[][]) => [...rs].sort((a, b) => key(a).localeCompare(key(b)));
-    expect(sorted(detailRows(text))).toEqual(sorted([
-      [agency.name, w1.workerId, "Csv Alpha", businessYmd(3), "9:00 AM", "5:00 PM", "0", "0.00", "E2E100", "REJECTED"],
-      [agency.name, w1.workerId, "Csv Alpha", businessYmd(2), "8:00 AM", "5:30 PM", "0", "8.50", "E2E100", "MIXED"],
-      [agency.name, w2.workerId, "Csv Beta", businessYmd(2), "6:00 AM", "2:15 PM", "0", "8.25", "E2E100", "APPROVED"],
-    ]));
-    // RFC 4180 line endings and every field quoted.
-    expect(text).toContain("\r\n");
-    expect(text.split("\r\n")[1]).toBe(HEADER.map((h) => `"${h}"`).join(","));
+    expect(sheets).toHaveLength(1);
+    expect(rows.slice(0, 3)).toEqual([
+      ["Period (Detail)"],
+      [`For the period of ${mdy(businessYmd(6))} to ${mdy(businessYmd(0))}`],
+      ["Name", "Week Start", "Hours", "Regular", "Overtime 1"],
+    ]);
+    const week = weekStartCell(businessYmd(2));
+    expect(personRows(rows, "Csv Alpha")).toEqual([
+      ["Csv Alpha", week, "8:30", "8:30", "0:00"],
+      ["Totals for Csv Alpha:", "", "8:30", "8:30", "0:00"],
+    ]);
+    expect(personRows(rows, "Csv Beta")).toEqual([
+      ["Csv Beta", week, "8:15", "8:15", "0:00"],
+      ["Totals for Csv Beta:", "", "8:15", "8:15", "0:00"],
+    ]);
+    expect(rows.at(-1)).toEqual(["Control Totals:", "", "16:45", "16:45", "0:00"]);
   });
 
   test("respects the date range and the agency filter, but not the approval filter", async ({ page }) => {
@@ -107,22 +65,20 @@ test.describe("admin hours: Excel export", () => {
     await makeEntry(wb.id, { daysAgo: 1 });
 
     await openHours(page, a.id, "&approval=APPROVED");
-    const onlyA = detailRows((await download(page)).text);
-    expect(onlyA).toHaveLength(1);
-    expect(onlyA[0]![2]).toBe("Csv InRange");
-    expect(onlyA[0]![9]).toBe("PENDING"); // approval filter does not apply to the export
+    const onlyA = (await download(page)).rows;
+    // The pending day is exported: the approval filter does not apply to the export.
+    expect(personRows(onlyA, "Csv InRange")).toHaveLength(2);
+    expect(personRows(onlyA, "Csv OtherAgency")).toHaveLength(0);
 
-    // No agency filter: both agencies appear (sorted by agency name).
+    // No agency filter: both agencies appear.
     await page.goto(hoursUrl("", businessYmd(2), businessYmd(0)));
-    const all = detailRows((await download(page)).text);
-    const names = all.map((r) => r[2]);
-    expect(names).toContain("Csv InRange");
-    expect(names).toContain("Csv OtherAgency");
-    expect(names).not.toContain("never");
+    const all = (await download(page)).rows;
+    expect(personRows(all, "Csv InRange")).toHaveLength(2);
+    expect(personRows(all, "Csv OtherAgency")).toHaveLength(2);
 
-    // Widening the range brings the old entry in.
+    // Widening the range brings the old entry in (a second week row).
     await openHours(page, a.id, "", businessYmd(25), businessYmd(0));
-    expect(detailRows((await download(page)).text)).toHaveLength(2);
+    expect(personRows((await download(page)).rows, "Csv InRange")).toHaveLength(3);
   });
 
   test("an empty range shows a message and downloads nothing", async ({ page }) => {
@@ -140,15 +96,15 @@ test.describe("admin hours: Excel export", () => {
     await expect(toast(page, /excel downloaded/i)).toHaveCount(0);
   });
 
-  test("spreadsheet formulas in names are neutralised and quotes are escaped", async ({ page }) => {
+  test("spreadsheet formulas in names stay plain text", async ({ page }) => {
     const agency = await makeAgency();
-    const w = await makeWorker({ agencyId: agency.id, name: '=HYPERLINK("http://evil.test","x")' });
+    const name = '=HYPERLINK("http://evil.test","x")';
+    const w = await makeWorker({ agencyId: agency.id, name });
     await makeEntry(w.id, { daysAgo: 1 });
     await openHours(page, agency.id);
-    const { text } = await download(page);
-    const [row] = detailRows(text);
-    expect(row![2]).toBe(`=HYPERLINK("http://evil.test","x")`);
-    expect(text).toContain(`"=HYPERLINK(""http://evil.test"",""x"")"`);
+    const { rows, xml } = await download(page);
+    expect(personRows(rows, name)[0]![0]).toBe(name);
+    expect(xml).not.toContain("<f>");
   });
 
   test("the server refuses an invalid date range", async ({ page }) => {

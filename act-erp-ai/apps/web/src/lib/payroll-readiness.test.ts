@@ -82,7 +82,7 @@ describe("payroll readiness", () => {
     expect(source).toContain("exceptionSummary: result.readiness.summary");
     expect(source).toContain('isolationLevel: "RepeatableRead"');
     expect(source.indexOf("if (readiness.blocking && reason.length < 10)")).toBeLessThan(
-      source.indexOf("payrollSlipsToCsv("),
+      source.indexOf("loadPayrollWorkbook("),
     );
   });
 });

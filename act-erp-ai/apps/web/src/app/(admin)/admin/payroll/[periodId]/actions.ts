@@ -3,18 +3,15 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import {
-  getPayrollReadinessForPeriod,
-  getPayrollSlipsForPeriod,
-  payrollSlipsToCsv,
-} from "@/server/queries/payroll-slip";
+import { getPayrollReadinessForPeriod } from "@/server/queries/payroll-slip";
+import { loadPayrollWorkbook } from "@/server/payroll-workbook-data";
 import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-result";
 
-/** Builds the payroll-slip CSV for download. */
-export async function generatePayrollSlipCsv(
+/** Builds the period's approved hours as a Period (Detail) workbook for download. */
+export async function generatePayrollSlipWorkbook(
   periodId: string,
   overrideReason?: string,
-): Promise<ActionResult<{ csv: string }>> {
+): Promise<ActionResult<{ xlsx: string; filename: string }>> {
   await requireAdmin();
   try {
     const period = await db.payrollCalendar.findUnique({ where: { id: periodId } });
@@ -29,27 +26,20 @@ export async function generatePayrollSlipCsv(
           period.payPeriodEnd,
           tx,
         );
-        if (readiness.blocking && reason.length < 10) return { readiness, slips: null };
-        const slips = await getPayrollSlipsForPeriod(
-          period.payPeriodStart,
-          period.payPeriodEnd,
-          tx,
-        );
-        return { readiness, slips };
+        if (readiness.blocking && reason.length < 10) return { readiness, allowed: false };
+        return { readiness, allowed: true };
       },
       { isolationLevel: "RepeatableRead" },
     );
-    if (!result.slips) {
+    if (!result.allowed) {
       return fail(
         "Payroll has unresolved time exceptions. Review the readiness list, or enter an override reason of at least 10 characters.",
       );
     }
-    const csv = payrollSlipsToCsv(
-      period.title,
-      period.payPeriodStart,
-      period.payPeriodEnd,
-      result.slips,
-    );
+    const workbook = await loadPayrollWorkbook(period.id, 1, { approvedOnly: true });
+    if (!workbook) {
+      return fail("That pay period no longer exists. Go back to payroll and pick another period.");
+    }
     if (result.readiness.blocking) {
       await audit({
         action: "payroll.export_override",
@@ -66,7 +56,7 @@ export async function generatePayrollSlipCsv(
         },
       });
     }
-    return ok({ csv });
+    return ok({ xlsx: workbook.xlsx.toString("base64"), filename: workbook.filename });
   } catch (err) {
     return failFromUnknown(err);
   }

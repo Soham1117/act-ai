@@ -1,7 +1,8 @@
 /**
  * The payroll hand-off workbook HR sends to the accountants: one sheet per pay
  * period in the Timeclock Plus "Period (Detail)" layout (per employee, one row
- * per week, a totals row, then the salaried staff). Pure: no database access.
+ * per week, a totals row, the salaried staff, then control totals). Every
+ * payroll/hours Excel export uses this layout. Pure: no database access.
  */
 import AdmZip from "adm-zip";
 import { isoWeekStart, splitEntryOvertime } from "@/lib/payroll-overtime";
@@ -34,11 +35,20 @@ const LEAVE_COLUMNS: Array<{ code: string; label: string }> = [
 export type SheetCell = string | number | null;
 export type SheetRowModel = {
   cells: SheetCell[];
-  style?: "title" | "header" | "total" | "note";
+  /** title/subtitle: centered banner; header: underlined; total: underlined person total; grand: bold control totals; plain: no column alignment. */
+  style?: "title" | "subtitle" | "header" | "total" | "grand" | "plain";
   /** Cell indexes that hold minutes, written as Excel durations. */
   durationCols?: number[];
 };
-export type SheetModel = { name: string; widths: number[]; rows: SheetRowModel[] };
+export type SheetModel = {
+  name: string;
+  widths: number[];
+  rows: SheetRowModel[];
+  /** Horizontal alignment per column. */
+  align?: Align[];
+  /** Cell ranges to merge, e.g. "A1:F1". */
+  merges?: string[];
+};
 
 const mdy = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
@@ -54,6 +64,8 @@ export function periodSheetName(p: WorkbookPeriod): string {
 }
 
 type WeekBucket = { work: number; regular: number; overtime: number; leave: Map<string, number> };
+type Sums = { hours: number; regular: number; overtime: number; leave: Map<string, number> };
+const emptySums = (): Sums => ({ hours: 0, regular: 0, overtime: 0, leave: new Map() });
 
 export function buildPeriodSheet(input: {
   period: WorkbookPeriod;
@@ -64,9 +76,8 @@ export function buildPeriodSheet(input: {
   notes: Map<string, string>;
 }): SheetModel {
   const { period } = input;
-  const paid = input.entries.filter(
-    (e) => e.totalWorkMin > 0 && e.approvalStatus !== "REJECTED",
-  );
+  // Any non-rejected punch puts its week on the sheet, even at 0:00, as Timeclock Plus does.
+  const paid = input.entries.filter((e) => e.approvalStatus !== "REJECTED");
   const leaveCodes = new Set(LEAVE_COLUMNS.map((c) => c.code));
 
   // Weekly overtime counts worked time only (leave never makes overtime).
@@ -104,61 +115,64 @@ export function buildPeriodSheet(input: {
   people.sort((a, b) => a.name.localeCompare(b.name));
 
   const leaveCols = LEAVE_COLUMNS.filter((c) => usedLeave.has(c.code));
-  const header = ["Name", "Week Start", "Hours", "Regular", "Overtime 1", ...leaveCols.map((c) => c.label), "Notes"];
   const hoursCols = [2, 3, 4, ...leaveCols.map((_, i) => 5 + i)];
+  const lastHours = colName(hoursCols.at(-1)!);
+  const sumCells = (s: Sums) => [
+    s.hours,
+    s.regular,
+    s.overtime,
+    ...leaveCols.map((c) => s.leave.get(c.code) ?? 0),
+  ];
   const rows: SheetRowModel[] = [
     { cells: ["Period (Detail)"], style: "title" },
-    { cells: [`For the period of ${mdy(period.start)} to ${mdy(period.end)}`] },
-    { cells: header, style: "header" },
+    { cells: [`For the period of ${mdy(period.start)} to ${mdy(period.end)}`], style: "subtitle" },
+    // The notes column has no heading, like the HR file.
+    { cells: ["Name", "Week Start", "Hours", "Regular", "Overtime 1", ...leaveCols.map((c) => c.label)], style: "header" },
   ];
+  const merges = [`A1:${lastHours}1`, `A2:${lastHours}2`];
 
+  const grand = emptySums();
   for (const p of people) {
-    const total = { hours: 0, regular: 0, overtime: 0, leave: new Map<string, number>() };
+    const total = emptySums();
     let first = true;
     for (const [wk, b] of [...p.weeks.entries()].sort((a, c) => (a[0] < c[0] ? -1 : 1))) {
-      const leaveMin = [...b.leave.values()].reduce((s, v) => s + v, 0);
-      total.hours += b.work + leaveMin;
-      total.regular += b.regular;
-      total.overtime += b.overtime;
-      for (const [code, min] of b.leave) total.leave.set(code, (total.leave.get(code) ?? 0) + min);
+      const week: Sums = {
+        hours: b.work + [...b.leave.values()].reduce((s, v) => s + v, 0),
+        regular: b.regular,
+        overtime: b.overtime,
+        leave: b.leave,
+      };
+      for (const s of [total, grand]) {
+        s.hours += week.hours;
+        s.regular += week.regular;
+        s.overtime += week.overtime;
+        for (const [code, min] of b.leave) s.leave.set(code, (s.leave.get(code) ?? 0) + min);
+      }
       rows.push({
-        cells: [
-          first ? p.name : "",
-          mdy(wk),
-          b.work + leaveMin,
-          b.regular,
-          b.overtime,
-          ...leaveCols.map((c) => b.leave.get(c.code) ?? 0),
-          first ? (input.notes.get(p.id) ?? "") : "",
-        ],
+        cells: [first ? p.name : "", mdy(wk), ...sumCells(week), first ? (input.notes.get(p.id) ?? "") : ""],
         durationCols: hoursCols,
       });
       first = false;
     }
-    rows.push({
-      cells: [
-        `Totals for ${p.name}:`,
-        "",
-        total.hours,
-        total.regular,
-        total.overtime,
-        ...leaveCols.map((c) => total.leave.get(c.code) ?? 0),
-        "",
-      ],
-      style: "total",
-      durationCols: hoursCols,
-    });
+    rows.push({ cells: [`Totals for ${p.name}:`, "", ...sumCells(total)], style: "total", durationCols: hoursCols });
+    merges.push(`A${rows.length}:B${rows.length}`);
   }
 
   const hourlyNames = new Set(people.map((p) => p.name));
   for (const name of [...input.salariedNames].sort((a, b) => a.localeCompare(b))) {
     if (hourlyNames.has(name)) continue;
-    rows.push({ cells: [name, "Salary"] });
+    rows.push({ cells: [name, "Salary"], style: "plain" });
   }
+
+  rows.push({ cells: [] });
+  rows.push({ cells: ["Control Totals:", "", ...sumCells(grand)], style: "grand", durationCols: hoursCols });
+  merges.push(`A${rows.length}:B${rows.length}`);
 
   return {
     name: periodSheetName(period),
-    widths: [34, 14, 10, 10, 12, ...leaveCols.map(() => 12), 60],
+    widths: [25, 11, 10, 10, 11.29, ...leaveCols.map(() => 9), 56.29],
+    align: ["left", "center", ...hoursCols.map(() => "right" as const), "left"],
+    merges,
     rows,
   };
 }
@@ -181,31 +195,82 @@ function colName(i: number): string {
   return s;
 }
 
-// style ids: 0 default, 1 bold, 2 duration, 3 bold duration
-function cellXml(value: SheetCell, ref: string, bold: boolean, duration: boolean): string {
-  if (value === null || value === "") return bold ? `<c r="${ref}" s="1"/>` : "";
-  if (typeof value === "number") {
-    // minutes -> fraction of a day, shown as [h]:mm
-    const v = duration ? value / 1440 : value;
-    return `<c r="${ref}" s="${duration ? (bold ? 3 : 2) : bold ? 1 : 0}"><v>${v}</v></c>`;
+type Align = "left" | "center" | "right";
+type CellStyle = { font: 0 | 1 | 2 | 3; align?: Align; bottom?: boolean; duration?: boolean };
+// fonts: 0 Tahoma 8 (default), 1 Tahoma 8 bold, 2 Tahoma 12 bold, 3 Tahoma 10 bold
+const FONTS =
+  `<font><sz val="8"/><name val="Tahoma"/></font><font><b/><sz val="8"/><name val="Tahoma"/></font>` +
+  `<font><b/><sz val="12"/><name val="Tahoma"/></font><font><b/><sz val="10"/><name val="Tahoma"/></font>`;
+
+/** The distinct cell formats a workbook uses; index 0 is the plain default. */
+class StyleTable {
+  private ids = new Map<string, number>([["0||0|0", 0]]);
+  private xfs = [`<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>`];
+  id(s: CellStyle): number {
+    const key = `${s.font}|${s.align ?? ""}|${s.bottom ? 1 : 0}|${s.duration ? 1 : 0}`;
+    let id = this.ids.get(key);
+    if (id === undefined) {
+      id = this.xfs.length;
+      this.ids.set(key, id);
+      const base = `numFmtId="${s.duration ? 164 : 0}" fontId="${s.font}" fillId="0" borderId="${s.bottom ? 1 : 0}" xfId="0" applyFont="1" applyBorder="1" applyNumberFormat="1"`;
+      this.xfs.push(
+        s.align ? `<xf ${base} applyAlignment="1"><alignment horizontal="${s.align}"/></xf>` : `<xf ${base}/>`,
+      );
+    }
+    return id;
   }
-  return `<c r="${ref}"${bold ? ' s="1"' : ""} t="inlineStr"><is><t xml:space="preserve">${esc(value)}</t></is></c>`;
+  xml(): string {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="[h]:mm"/></numFmts><fonts count="4">${FONTS}</fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${this.xfs.length}">${this.xfs.join("")}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  }
 }
 
-function sheetXml(sheet: SheetModel): string {
+function cellStyle(row: SheetRowModel, ci: number, sheet: SheetModel, duration: boolean): CellStyle {
+  const align = sheet.align?.[ci];
+  switch (row.style) {
+    case "title":
+      return { font: 2, align: "center" };
+    case "subtitle":
+      return { font: 3, align: "center" };
+    case "header":
+      return { font: 0, align, bottom: true };
+    case "total":
+      return { font: 0, align: ci === 0 ? "right" : align, bottom: true, duration };
+    case "grand":
+      return { font: 1, align: ci === 0 ? "right" : align, duration };
+    case "plain":
+      return { font: 0 };
+    default:
+      return { font: 0, align, duration };
+  }
+}
+
+function cellXml(value: SheetCell, ref: string, s: number, duration: boolean): string {
+  const attr = s ? ` s="${s}"` : "";
+  if (value === null || value === "") return s ? `<c r="${ref}"${attr}/>` : "";
+  if (typeof value === "number") {
+    // minutes -> fraction of a day, shown as [h]:mm
+    return `<c r="${ref}"${attr}><v>${duration ? value / 1440 : value}</v></c>`;
+  }
+  return `<c r="${ref}"${attr} t="inlineStr"><is><t xml:space="preserve">${esc(value)}</t></is></c>`;
+}
+
+function sheetXml(sheet: SheetModel, styles: StyleTable): string {
   const cols = sheet.widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("");
   const rows = sheet.rows
     .map((r, ri) => {
-      const bold = r.style === "title" || r.style === "header" || r.style === "total";
       const cells = r.cells
-        .map((v, ci) =>
-          cellXml(v, `${colName(ci)}${ri + 1}`, bold, !!r.durationCols?.includes(ci) && typeof v === "number"),
-        )
+        .map((v, ci) => {
+          const duration = !!r.durationCols?.includes(ci) && typeof v === "number";
+          return cellXml(v, `${colName(ci)}${ri + 1}`, styles.id(cellStyle(r, ci, sheet, duration)), duration);
+        })
         .join("");
       return `<row r="${ri + 1}">${cells}</row>`;
     })
     .join("");
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${rows}</sheetData></worksheet>`;
+  const merges = sheet.merges?.length
+    ? `<mergeCells count="${sheet.merges.length}">${sheet.merges.map((m) => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>`
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetFormatPr defaultRowHeight="12" customHeight="1"/><cols>${cols}</cols><sheetData>${rows}</sheetData>${merges}</worksheet>`;
 }
 
 function safeSheetName(name: string, used: Set<string>): string {
@@ -250,12 +315,8 @@ export function buildWorkbookXlsx(sheets: SheetModel[]): Buffer {
         .join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
     ),
   );
-  zip.addFile(
-    "xl/styles.xml",
-    Buffer.from(
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="[h]:mm"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/></cellXfs></styleSheet>`,
-    ),
-  );
-  sheets.forEach((s, i) => zip.addFile(`xl/worksheets/sheet${i + 1}.xml`, Buffer.from(sheetXml(s))));
+  const styles = new StyleTable();
+  sheets.forEach((s, i) => zip.addFile(`xl/worksheets/sheet${i + 1}.xml`, Buffer.from(sheetXml(s, styles))));
+  zip.addFile("xl/styles.xml", Buffer.from(styles.xml()));
   return zip.toBuffer();
 }

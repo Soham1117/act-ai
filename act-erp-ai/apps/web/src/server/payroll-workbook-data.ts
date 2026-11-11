@@ -8,8 +8,11 @@ import {
   type WorkbookEntry,
 } from "@/lib/payroll-workbook";
 
-/** The selected pay period plus up to `count - 1` earlier ones, newest first. */
-export async function loadPayrollWorkbook(periodId: string, count: number) {
+/**
+ * The selected pay period plus up to `count - 1` earlier ones, newest first.
+ * `approvedOnly` drops pending hours (the payroll slip download).
+ */
+export async function loadPayrollWorkbook(periodId: string, count: number, opts: { approvedOnly?: boolean } = {}) {
   const selected = await db.payrollCalendar.findUnique({ where: { id: periodId } });
   if (!selected) return null;
   const periods = await db.payrollCalendar.findMany({
@@ -29,7 +32,9 @@ export async function loadPayrollWorkbook(periodId: string, count: number) {
   for (const p of periods) {
     const start = dateOnlyToString(p.payPeriodStart);
     const end = dateOnlyToString(p.payPeriodEnd);
-    const raw = await loadHoursExportEntries(start, end);
+    const raw = (await loadHoursExportEntries(start, end)).filter(
+      (e) => !opts.approvedOnly || e.approvalStatus === "APPROVED",
+    );
     const entries: WorkbookEntry[] = raw.map((e) => ({
       id: e.id,
       employeeId: e.employeeId,

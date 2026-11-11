@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import {
   allocateWeeklyOvertime,
-  csvRow,
   isoWeekEnd,
   isoWeekStart,
   type SlipEntry,
@@ -235,38 +234,4 @@ export async function getPayrollSlipsForPeriod(
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
-}
-
-/** CSV serialiser (RFC 4180, every field quoted, formula-injection safe). */
-export function payrollSlipsToCsv(
-  periodTitle: string,
-  start: Date,
-  end: Date,
-  rows: PayrollSlipRow[],
-): string {
-  const header = csvRow([
-    "Employee ID",
-    "Name",
-    "Department",
-    "Pay Period Start",
-    "Pay Period End",
-    "Days Worked",
-    "Regular Hours",
-    "Overtime Hours",
-    "Total Hours",
-  ]);
-  const lines = rows.map((r) =>
-    csvRow([
-      r.employeeId,
-      r.name,
-      r.department ?? "",
-      dayStr(start),
-      dayStr(end),
-      r.daysWorked,
-      r.regularHours,
-      r.overtimeHours,
-      r.totalHours,
-    ]),
-  );
-  return [csvRow([periodTitle]), header, ...lines].join("\r\n");
 }

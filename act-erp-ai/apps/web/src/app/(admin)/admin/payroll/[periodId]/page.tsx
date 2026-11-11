@@ -69,7 +69,6 @@ export default async function PayrollPeriodPage({
       <div className="mb-4 flex flex-wrap gap-2 print:hidden">
             <DownloadCsvButton
               periodId={period.id}
-              title={period.title}
               blockingExceptions={readiness.blocking}
             />
             <Button asChild variant="outline" size="sm">

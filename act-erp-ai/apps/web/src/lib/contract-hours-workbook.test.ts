@@ -1,32 +1,43 @@
-import AdmZip from "adm-zip";
 import { describe, expect, it } from "vitest";
-import { buildContractHoursWorkbook, type ContractHoursDay } from "./contract-hours-workbook";
+import { readSheetRows } from "@/test-utils/read-xlsx";
+import { buildContractHoursWorkbook } from "./contract-hours-workbook";
 
-const day = (workerId: string, date: string, workMin: number): ContractHoursDay => ({
-  agency: "Agency & Co", workerId, name: "Same name", date,
-  clockIn: "8:00 AM", clockOut: "4:00 PM", breakMin: 30, workMin,
-  jobCode: "7", approval: "APPROVED",
+let n = 0;
+const entry = (workerId: string, name: string, date: string, totalWorkMin: number) => ({
+  id: `c${n++}`,
+  employeeId: workerId,
+  employeeName: name,
+  date,
+  clockIn: Date.parse(`${date}T13:00:00Z`),
+  totalWorkMin,
+  jobCode: "7",
+  approvalStatus: "APPROVED",
 });
 
 describe("contract hours workbook", () => {
-  it("puts totals first, sums days by worker ID, and preserves daily detail", () => {
-    const zip = new AdmZip(buildContractHoursWorkbook([
-      day("CW-0001", "2026-11-01", 480),
-      day("CW-0001", "2026-11-02", 450),
-      day("CW-0002", "2026-11-02", 60),
-    ], "2026-11-01", "2026-11-02"));
-    const workbook = zip.readAsText("xl/workbook.xml");
-    expect(workbook.indexOf('name="Worker totals"')).toBeLessThan(workbook.indexOf('name="Daily hours"'));
-    const totals = zip.readAsText("xl/worksheets/sheet1.xml");
-    const daily = zip.readAsText("xl/worksheets/sheet2.xml");
-    expect(totals).toContain('<c r="D4" s="0"><v>15.5</v></c>');
-    expect(totals).toContain('<c r="D5" s="0"><v>1</v></c>');
-    expect(totals).toContain('<c r="D6" s="1"><v>16.5</v></c>');
-    expect(totals).toContain("Agency &amp; Co");
-    expect(daily).toContain("2026-11-01");
-    expect(daily).toContain("2026-11-02");
-    expect(daily).toContain('<c r="H4" s="0"><v>8</v></c>');
-    expect(daily).toContain('<c r="H5" s="0"><v>7.5</v></c>');
-    expect(daily).toContain('<c r="H7" s="1"><v>16.5</v></c>');
+  it("uses the Period (Detail) layout with weekly overtime and control totals", () => {
+    const xlsx = buildContractHoursWorkbook(
+      [
+        entry("w1", "Agency & Co Worker", "2026-11-02", 600),
+        entry("w1", "Agency & Co Worker", "2026-11-03", 600),
+        entry("w1", "Agency & Co Worker", "2026-11-04", 600),
+        entry("w1", "Agency & Co Worker", "2026-11-05", 600),
+        entry("w1", "Agency & Co Worker", "2026-11-06", 120),
+        entry("w2", "Bo Lee", "2026-11-06", 60),
+      ],
+      "2026-11-02",
+      "2026-11-08",
+    );
+    expect(readSheetRows(xlsx)).toEqual([
+      ["Period (Detail)"],
+      ["For the period of 11/2/2026 to 11/8/2026"],
+      ["Name", "Week Start", "Hours", "Regular", "Overtime 1"],
+      ["Agency & Co Worker", "11/2/2026", "42:00", "40:00", "2:00"],
+      ["Totals for Agency & Co Worker:", "", "42:00", "40:00", "2:00"],
+      ["Bo Lee", "11/2/2026", "1:00", "1:00", "0:00"],
+      ["Totals for Bo Lee:", "", "1:00", "1:00", "0:00"],
+      [],
+      ["Control Totals:", "", "43:00", "41:00", "2:00"],
+    ]);
   });
 });
