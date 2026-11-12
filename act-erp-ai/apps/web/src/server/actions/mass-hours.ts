@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { applyDailyLunch } from "@/server/lunch";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
@@ -207,6 +208,7 @@ export async function commitMassHours(
           },
           select: { id: true },
         });
+        await applyDailyLunch(tx, "employee", employeeId, businessDateOnly(clockIn));
         return { skipped: false as const, id: entry.id };
       });
       if (result.skipped) {

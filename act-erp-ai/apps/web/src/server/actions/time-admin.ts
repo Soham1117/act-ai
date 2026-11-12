@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { applyDailyLunch } from "@/server/lunch";
 import type { TimeBreak, TimeEntry } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
@@ -321,7 +322,9 @@ export async function adminUpdateTimeEntry(
         },
         include: { breaks: true },
       });
-      return { entry, updated, before, after: snapshot(updated), reapprovalRequired };
+      await applyDailyLunch(tx, "employee", entry.employeeId, entry.date, updated.date);
+      const fresh = await tx.timeEntry.findUniqueOrThrow({ where: { id: entry.id }, include: { breaks: true } });
+      return { entry, updated: fresh, before, after: snapshot(fresh), reapprovalRequired };
     });
     if ("error" in result) return fail(result.error!);
 
@@ -450,7 +453,10 @@ export async function adminCreateManualTimeEntry(
         },
         include: { breaks: true },
       });
-      return { created };
+      await applyDailyLunch(tx, "employee", employee.id, created.date);
+      return {
+        created: await tx.timeEntry.findUniqueOrThrow({ where: { id: created.id }, include: { breaks: true } }),
+      };
     });
     if ("error" in result) return fail(result.error!);
 
@@ -469,6 +475,103 @@ export async function adminCreateManualTimeEntry(
       employee.id,
       result.created.date,
       "An admin added a time entry for you",
+      data.reason,
+    );
+    revalidateTimePages();
+    return ok({ id: result.created.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Missed clock-in
+// ──────────────────────────────────────────────────────────────────────
+
+const missedClockInSchema = z.object({
+  employeeId: z.string().min(1, "Choose an employee."),
+  clockIn: localTime,
+  jobCode: jobCodeSchema,
+  notes: notesSchema,
+  reason: reasonSchema,
+});
+
+/**
+ * For an employee who forgot to clock in and is still working: opens a shift
+ * at the given time. The employee then clocks out as usual (kiosk or web).
+ */
+export async function adminAddMissedClockIn(
+  input: z.infer<typeof missedClockInSchema>,
+): Promise<ActionResult<{ id: string }>> {
+  const admin = await requireAdmin();
+  try {
+    const data = missedClockInSchema.parse(input);
+    const ci = parseLocal(data.clockIn, "Clock-in");
+    if ("error" in ci) return fail(ci.error);
+    const now = new Date();
+    if (ci.date > now) return fail("The clock-in time can't be in the future.");
+    if (isStaleShift(ci.date, now)) {
+      return fail(
+        `That clock-in is more than ${MAX_SHIFT_MINUTES / 60} hours ago. Add the whole shift with a clock-out time instead.`,
+      );
+    }
+    const employee = await db.employee.findUnique({
+      where: { id: data.employeeId },
+      select: { id: true, name: true, employmentStatus: true },
+    });
+    if (!employee) return fail("That employee no longer exists.");
+    if (employee.employmentStatus !== "ACTIVE") {
+      return fail("This employee isn't active, so they can't clock out. Add the whole shift with a clock-out time instead.");
+    }
+    const closedMsg = await closedPeriodMessage(businessDateOnly(ci.date));
+    if (closedMsg) return fail(closedMsg);
+    const jcErr = await assertJobCode(data.jobCode);
+    if (jcErr) return fail(jcErr);
+
+    const result = await withEmployeeLock(employee.id, async (tx) => {
+      const open = await tx.timeEntry.findFirst({
+        where: { employeeId: employee.id, status: { in: ["ACTIVE", "ON_BREAK"] } },
+        select: { clockIn: true },
+      });
+      if (open) {
+        return { error: `${employee.name} is already clocked in (since ${formatBusinessTime(open.clockIn)}). Edit that entry instead.` };
+      }
+      const overlap = await findOverlap(tx, employee.id, null, ci.date, now);
+      if (overlap) return { error: overlapMessage(overlap) };
+      const created = await tx.timeEntry.create({
+        data: {
+          employeeId: employee.id,
+          date: businessDateOnly(ci.date),
+          clockIn: ci.date,
+          jobCode: data.jobCode,
+          rate: await resolveHourlyRate(tx, employee.id, data.jobCode),
+          source: "MANUAL",
+          status: "ACTIVE",
+          approvalStatus: "PENDING",
+          timesheetNotes: data.notes?.trim() ? data.notes.trim() : null,
+          lastEditedById: admin.id,
+          editReason: `Missed clock-in: ${data.reason}`,
+        },
+        include: { breaks: true },
+      });
+      return { created };
+    });
+    if ("error" in result) return fail(result.error!);
+
+    await audit({
+      action: "time.missed_clock_in",
+      resource: `TimeEntry:${result.created.id}`,
+      diff: {
+        employeeId: employee.id,
+        employeeName: employee.name,
+        reason: data.reason,
+        after: snapshot(result.created),
+      },
+    });
+    await notifyCorrection(
+      employee.id,
+      result.created.date,
+      `An admin clocked you in at ${formatBusinessTime(result.created.clockIn)}. Remember to clock out`,
       data.reason,
     );
     revalidateTimePages();
@@ -592,6 +695,7 @@ export async function adminDeleteTimeEntry(
       });
       if (!entry) return null;
       await tx.timeEntry.delete({ where: { id: entry.id } });
+      await applyDailyLunch(tx, "employee", entry.employeeId, entry.date);
       return entry;
     });
     if (!result) return fail("That time entry was already deleted. Refresh the page.");
@@ -673,11 +777,14 @@ export async function adminReopenTimeEntry(
           approvalNotes: null,
           autoClosed: false,
           totalWorkMin: 0,
+          totalBreakMin: entry.totalBreakMin - entry.lunchMin,
+          lunchMin: 0,
           lastEditedById: admin.id,
           editReason: `Reopened: ${data.reason}`,
         },
         include: { breaks: true },
       });
+      await applyDailyLunch(tx, "employee", entry.employeeId, entry.date);
       return { entry, updated, before, after: snapshot(updated) };
     });
     if ("error" in result) return fail(result.error!);

@@ -10,6 +10,7 @@
  * has already authenticated the caller (active kiosk session, or an admin).
  */
 import { revalidatePath } from "next/cache";
+import { applyDailyLunch } from "@/server/lunch";
 import { NO_JOB_CODE_MESSAGE } from "@/server/time-core";
 import type {
   ContractTimeBreak,
@@ -126,7 +127,9 @@ export async function closeOpenContractEntry(
         : {}),
     },
   });
-  return { entry: updated, capped: totals.capped };
+  await applyDailyLunch(tx, "contract", updated.contractWorkerId, updated.date);
+  const fresh = await tx.contractTimeEntry.findUniqueOrThrow({ where: { id: updated.id } });
+  return { entry: fresh, capped: totals.capped };
 }
 
 /** Audit + notify admins (only; contract workers have no portal) about auto-closed shifts. */

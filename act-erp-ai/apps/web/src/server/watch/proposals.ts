@@ -1,3 +1,4 @@
+import { applyDailyLunch } from "@/server/lunch";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { accessLevelFor } from "@/lib/access";
@@ -140,10 +141,11 @@ export async function decideProposal(actor: Actor, input: { id: string; action: 
           approvedById: original.approvedById as string | null,
           approvalDate: original.approvalDate ? new Date(String(original.approvalDate)) : null,
           approvalNotes: original.approvalNotes as string | null,
-          totalWorkMin: Number(original.totalWorkMin), totalBreakMin: Number(original.totalBreakMin),
+          totalWorkMin: Number(original.totalWorkMin), totalBreakMin: Number(original.totalBreakMin), lunchMin: 0,
           autoClosed: Boolean(original.autoClosed), lastEditedById: original.lastEditedById as string | null,
           editReason: original.editReason as string | null,
         } });
+        await applyDailyLunch(tx, "employee", entry.employeeId, entry.date);
       }
       const after = proposalEntrySnapshot(await tx.timeEntry.findUniqueOrThrow({ where: { id: entry.id }, include: { breaks: true } }));
       const status = input.action === "APPROVE" ? "APPLIED" : "UNDONE";

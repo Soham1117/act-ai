@@ -235,7 +235,7 @@ export function MassHoursWizard({
                   htmlFor="mh-break"
                   className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
                 >
-                  Unpaid break (minutes)
+                  Personal break (minutes)
                 </Label>
                 <Input
                   id="mh-break"
@@ -249,6 +249,9 @@ export function MassHoursWizard({
                     setBreakMin(Math.max(0, Math.min(240, Math.round(Number(e.target.value) || 0))))
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  Lunch is separate: 30 minutes come off automatically when the day is over 6 hours.
+                </p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="mh-job">Job code</Label>

@@ -31,6 +31,7 @@ import { runAction, toastAction } from "@/lib/toast-action";
 import { formatBusinessTime, formatDateOnly, formatHours } from "@/lib/format";
 import { ADMIN_MAX_SHIFT_MS, dateToBusinessLocal } from "@/lib/time-rules";
 import {
+  adminAddMissedClockIn,
   adminCreateManualTimeEntry,
   adminDeleteTimeEntry,
   adminForceClockOut,
@@ -527,8 +528,32 @@ export function ManualEntryButton({
       toast.error("Choose an employee.");
       return;
     }
-    if (!clockIn || !clockOut) {
-      toast.error("Enter clock-in and clock-out times.");
+    if (!clockIn) {
+      toast.error("Enter the clock-in time.");
+      return;
+    }
+    if (!clockOut) {
+      // Forgot to clock in and still working: open the shift; they clock out themselves.
+      if (breaks.length) {
+        toast.error("Remove the breaks, or enter a clock-out time. A shift that is still open can't have breaks added here.");
+        return;
+      }
+      startTransition(async () => {
+        const res = await runAction(() => adminAddMissedClockIn({
+          employeeId: id,
+          clockIn,
+          jobCode,
+          notes: notes.trim() ? notes : null,
+          reason: reason.trim(),
+        }));
+        if (!toastAction(res)) return;
+        toast.success("Clocked in. The employee clocks out as usual.");
+        closeForm();
+        setClockIn("");
+        setReason("");
+        setNotes("");
+        router.refresh();
+      });
       return;
     }
     startTransition(async () => {
@@ -575,7 +600,9 @@ export function ManualEntryButton({
               Add manual time entry
             </h2>
             <p className="text-sm text-muted-foreground">
-              For missed punches. The entry is marked Manual. Times are Central.
+              For missed punches. The entry is marked Manual. Times are Central. If they forgot to
+              clock in and are still working, leave clock-out empty: the shift stays open and they
+              clock out as usual.
             </p>
           </div>
           <form onSubmit={submit} className="space-y-4">
@@ -628,7 +655,7 @@ export function ManualEntryButton({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs" htmlFor={`${formId}-out`}>
-                  Clock out
+                  Clock out (empty if still working)
                 </Label>
                 <Input
                   id={`${formId}-out`}
@@ -636,7 +663,6 @@ export function ManualEntryButton({
                   className="min-h-11 md:min-h-9"
                   value={clockOut}
                   onChange={(e) => setClockOut(e.target.value)}
-                  required
                 />
               </div>
             </div>
@@ -650,8 +676,9 @@ export function ManualEntryButton({
               <Textarea rows={2} value={notes} maxLength={1000} onChange={(e) => setNotes(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Reason (required)</Label>
+              <Label className="text-xs" htmlFor={`${formId}-reason`}>Reason (required)</Label>
               <Input
+                id={`${formId}-reason`}
                 className="min-h-11 md:min-h-9"
                 value={reason}
                 maxLength={500}
@@ -659,17 +686,19 @@ export function ManualEntryButton({
                 placeholder="e.g. Kiosk was offline; hours confirmed by supervisor"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={approve} onCheckedChange={(v) => setApprove(v === true)} />
-              Approve immediately
-            </label>
+            {clockOut && (
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox checked={approve} onCheckedChange={(v) => setApprove(v === true)} />
+                Approve immediately
+              </label>
+            )}
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&_button]:min-h-11 md:[&_button]:min-h-9">
               <Button type="button" variant="outline" disabled={pending} onClick={closeForm}>
                 Cancel
               </Button>
               <Button type="submit" disabled={pending}>
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Add entry
+                {clockOut ? "Add entry" : "Clock in"}
               </Button>
             </div>
           </form>

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { applyDailyLunch } from "@/server/lunch";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -10,7 +11,6 @@ import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-resul
 import { businessDateOnly, formatBusinessTime, formatDateOnly } from "@/lib/format";
 import {
   applyContractAssignmentOffers,
-  middleShiftBreak,
   nextContractWorkerIdFrom,
   type ContractAssignmentOffers,
 } from "@/lib/contract-workers";
@@ -20,6 +20,8 @@ import {
   breakMinutes,
   businessLocalToDate,
   computeEntryTotals,
+  isStaleShift,
+  MAX_SHIFT_MINUTES,
   parseDateOnly,
   validateEntryTimes,
 } from "@/lib/time-rules";
@@ -678,11 +680,6 @@ async function findOverlap(
 }
 
 const localTime = z.string().min(1, "Enter a date and time.");
-const breakSchema = z.object({
-  id: z.string().optional(),
-  start: localTime,
-  end: localTime.nullable().optional(),
-});
 const notesSchema = z
   .string()
   .trim()
@@ -696,24 +693,6 @@ const offersSchema = z
     reactivate: z.boolean().optional(),
   })
   .optional();
-
-function parseBreaks(
-  raw: Array<{ start: string; end?: string | null }>,
-): { breaks: { startTime: Date; endTime: Date | null }[] } | { error: string } {
-  const breaks: { startTime: Date; endTime: Date | null }[] = [];
-  for (const b of raw) {
-    const start = parseLocal(b.start, "Break start");
-    if ("error" in start) return start;
-    let endTime: Date | null = null;
-    if (b.end) {
-      const end = parseLocal(b.end, "Break end");
-      if ("error" in end) return end;
-      endTime = end.date;
-    }
-    breaks.push({ startTime: start.date, endTime });
-  }
-  return { breaks };
-}
 
 function acceptedOffers(raw: ContractAssignmentOffers | undefined): ContractAssignmentOffers {
   if (!raw) return {};
@@ -865,7 +844,9 @@ export async function adminEditContractTimeEntry(
         },
         include: { breaks: true },
       });
-      return { entry, before, after: snapshot(updated), closed: open };
+      await applyDailyLunch(tx, "contract", entry.contractWorkerId, entry.date, updated.date);
+      const fresh = await tx.contractTimeEntry.findUniqueOrThrow({ where: { id: entry.id }, include: { breaks: true } });
+      return { entry, before, after: snapshot(fresh), closed: open };
     });
     if ("error" in result) return fail(result.error!);
 
@@ -897,9 +878,6 @@ const manualSchema = z.object({
   clockOut: localTime,
   jobCode: z.string().trim().max(40).optional(),
   notes: notesSchema,
-  breaks: z.array(breakSchema).max(20).optional(),
-  /** Alternate to `breaks`: one unpaid mid-shift break in minutes. */
-  breakMin: z.number().int().min(0).max(240).optional(),
   reason: reasonSchema,
   approve: z.boolean().optional(),
   offers: offersSchema,
@@ -920,15 +898,8 @@ export async function adminCreateManualContractTimeEntry(
     if ("error" in ci) return fail(ci.error);
     const co = parseLocal(data.clockOut, "Clock-out");
     if ("error" in co) return fail(co.error);
-    let breaks: { startTime: Date; endTime: Date | null }[];
-    if (data.breaks && data.breaks.length > 0) {
-      const pb = parseBreaks(data.breaks);
-      if ("error" in pb) return fail(pb.error);
-      breaks = pb.breaks;
-    } else {
-      const mid = middleShiftBreak(ci.date, co.date, data.breakMin ?? 0);
-      breaks = mid ? [{ startTime: mid.startTime, endTime: mid.endTime }] : [];
-    }
+    // Contract workers cannot take personal breaks; the automatic lunch is applied after saving.
+    const breaks: { startTime: Date; endTime: Date | null }[] = [];
 
     const timeErr = validateEntryTimes({
       clockIn: ci.date,
@@ -1043,9 +1014,10 @@ export async function adminCreateManualContractTimeEntry(
         },
         include: { breaks: true },
       });
+      await applyDailyLunch(tx, "contract", worker.id, created.date);
 
       return {
-        created,
+        created: await tx.contractTimeEntry.findUniqueOrThrow({ where: { id: created.id }, include: { breaks: true } }),
         worker,
         assignmentBefore: {
           startDate: worker.startDate.toISOString(),
@@ -1074,6 +1046,106 @@ export async function adminCreateManualContractTimeEntry(
         approved: !!data.approve,
         assignmentBefore: result.assignmentBefore,
         assignmentAfter: result.assignmentAfter,
+        after: snapshot(result.created),
+      },
+    });
+    revalidateAll();
+    return ok({ id: result.created.id });
+  } catch (err) {
+    return failFromUnknown(err);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Missed clock-in
+// ──────────────────────────────────────────────────────────────────────
+
+const missedClockInSchema = z.object({
+  contractWorkerId: z.string().min(1, "Choose a contract worker."),
+  clockIn: localTime,
+  jobCode: z.string().trim().max(40).optional(),
+  notes: notesSchema,
+  reason: reasonSchema,
+});
+
+/**
+ * For a contract worker who forgot to clock in and is still working: opens a
+ * shift at the given time. The worker then clocks out at the kiosk as usual.
+ */
+export async function adminAddMissedContractClockIn(
+  input: z.infer<typeof missedClockInSchema>,
+): Promise<ActionResult<{ id: string }>> {
+  const admin = await requireAdmin();
+  try {
+    const data = missedClockInSchema.parse(input);
+    const ci = parseLocal(data.clockIn, "Clock-in");
+    if ("error" in ci) return fail(ci.error);
+    const now = new Date();
+    if (ci.date > now) return fail("The clock-in time can't be in the future.");
+    if (isStaleShift(ci.date, now)) {
+      return fail(
+        `That clock-in is more than ${MAX_SHIFT_MINUTES / 60} hours ago. Add the whole shift with a clock-out time instead.`,
+      );
+    }
+
+    const result = await withContractWorkerLock(data.contractWorkerId, async (tx) => {
+      const worker = await tx.contractWorker.findUnique({
+        where: { id: data.contractWorkerId },
+        select: { id: true, name: true, workerId: true, jobCode: true, status: true },
+      });
+      if (!worker) return { error: "That contract worker no longer exists." };
+      if (worker.status !== "ACTIVE") {
+        return { error: "This worker isn't active. Add the whole shift with a clock-out time instead." };
+      }
+      const open = await tx.contractTimeEntry.findFirst({
+        where: { contractWorkerId: worker.id, status: { in: ["ACTIVE", "ON_BREAK"] } },
+        select: { clockIn: true },
+      });
+      if (open) {
+        return { error: `${worker.name} is already clocked in (since ${formatBusinessTime(open.clockIn)}). Edit that entry instead.` };
+      }
+      const overlap = await findOverlap(tx, worker.id, null, ci.date, now);
+      if (overlap) {
+        return {
+          error: `That time overlaps another entry (${formatDateOnly(businessDateOnly(overlap.clockIn))} ${formatBusinessTime(overlap.clockIn)} to ${overlap.clockOut ? formatBusinessTime(overlap.clockOut) : "still open"}). Adjust the time or fix the other entry first.`,
+        };
+      }
+      const requestedCode = data.jobCode?.trim() || null;
+      if (requestedCode) {
+        const jc = await tx.jobCode.findUnique({ where: { code: requestedCode } });
+        if (!jc) return { error: `Job code ${requestedCode} doesn't exist.` };
+        if (!jc.isActive) return { error: `Job code ${requestedCode} is inactive. Choose an active job code.` };
+      }
+      const jobCode = requestedCode ?? (await resolveContractJobCode(tx, worker.jobCode));
+      if (!jobCode) {
+        return { error: "No active job code is available for this worker. Set one on the worker or choose a job code." };
+      }
+      const created = await tx.contractTimeEntry.create({
+        data: {
+          contractWorkerId: worker.id,
+          date: businessDateOnly(ci.date),
+          clockIn: ci.date,
+          jobCode,
+          status: "ACTIVE",
+          approvalStatus: "PENDING",
+          timesheetNotes: data.notes?.trim() ? data.notes.trim() : null,
+          lastEditedById: admin.id,
+          editReason: `Missed clock-in: ${data.reason}`,
+        },
+        include: { breaks: true },
+      });
+      return { created, worker };
+    });
+    if ("error" in result) return fail(result.error!);
+
+    await audit({
+      action: "contract.time.missed_clock_in",
+      resource: `ContractTimeEntry:${result.created.id}`,
+      diff: {
+        contractWorkerId: result.worker.id,
+        workerId: result.worker.workerId,
+        workerName: result.worker.name,
+        reason: data.reason,
         after: snapshot(result.created),
       },
     });
@@ -1116,6 +1188,7 @@ export async function adminDeleteContractTimeEntry(
       });
       if (!entry) return null;
       await tx.contractTimeEntry.delete({ where: { id: entry.id } });
+      await applyDailyLunch(tx, "contract", entry.contractWorkerId, entry.date);
       return entry;
     });
     if (!result) return fail("That time entry was already deleted. Refresh the page.");

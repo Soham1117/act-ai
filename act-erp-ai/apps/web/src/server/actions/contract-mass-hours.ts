@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { applyDailyLunch } from "@/server/lunch";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
@@ -8,7 +9,6 @@ import { ok, fail, failFromUnknown, type ActionResult } from "@/lib/action-resul
 import { businessDateOnly } from "@/lib/format";
 import {
   applyContractAssignmentOffers,
-  middleShiftBreak,
   proposeContractAssignmentOffers,
   type ContractAssignmentOffers,
 } from "@/lib/contract-workers";
@@ -31,8 +31,6 @@ const schema = z.object({
   clockInTime: z.string().regex(/^\d{2}:\d{2}$/),
   clockOutTime: z.string().regex(/^\d{2}:\d{2}$/),
   jobCode: z.string().trim().min(1).max(40),
-  /** Unpaid break in minutes, taken as one break at the middle of the shift. */
-  breakMin: z.number().int().min(0).max(240).default(0),
   reason: z
     .string()
     .trim()
@@ -61,11 +59,10 @@ function localStamp(date: string, hm: string): Date {
 function plan(data: z.infer<typeof schema>) {
   const clockIn = localStamp(data.date, data.clockInTime);
   const clockOut = localStamp(data.date, data.clockOutTime);
-  const brk = middleShiftBreak(clockIn, clockOut, data.breakMin);
-  const breaks = brk ? [{ id: undefined, ...brk }] : [];
-  const timeErr = validateEntryTimes({ clockIn, clockOut, breaks });
-  const totals = timeErr ? null : computeEntryTotals({ clockIn, clockOut, breaks });
-  return { clockIn, clockOut, brk, timeErr, totals };
+  // Contract workers cannot take personal breaks; the automatic lunch is applied after saving.
+  const timeErr = validateEntryTimes({ clockIn, clockOut, breaks: [] });
+  const totals = timeErr ? null : computeEntryTotals({ clockIn, clockOut, breaks: [] });
+  return { clockIn, clockOut, timeErr, totals };
 }
 
 function acceptedOffers(raw: ContractAssignmentOffers | undefined): ContractAssignmentOffers {
@@ -163,7 +160,7 @@ export async function commitMassContractHours(
   try {
     data = commitSchema.parse(input);
     const req = data;
-    const { clockIn, clockOut, brk, timeErr, totals } = plan(req);
+    const { clockIn, clockOut, timeErr, totals } = plan(req);
     if (timeErr || !totals) return fail(timeErr ?? "Invalid shift.");
     const now = new Date();
     const entryDate = businessDateOnly(clockIn);
@@ -266,21 +263,10 @@ export async function commitMassContractHours(
               totalWorkMin: totals.totalWorkMin,
               lastEditedById: admin.id,
               editReason: `Mass hours: ${req.reason}`,
-              ...(brk
-                ? {
-                    breaks: {
-                      create: {
-                        startTime: brk.startTime,
-                        endTime: brk.endTime,
-                        durationMin: totals.totalBreakMin,
-                        type: "BREAK" as const,
-                      },
-                    },
-                  }
-                : {}),
             },
             select: { id: true },
           });
+          await applyDailyLunch(tx, "contract", contractWorkerId, entryDate);
           return {
             kind: "ok" as const,
             id: entry.id,
@@ -340,7 +326,6 @@ export async function commitMassContractHours(
         skipped,
         failed: failed.length,
         jobCode: req.jobCode,
-        breakMin: req.breakMin,
         reason: req.reason,
         approve: !!req.approve,
         tz: BUSINESS_TZ,

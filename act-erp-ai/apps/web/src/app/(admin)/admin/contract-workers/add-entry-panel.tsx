@@ -23,7 +23,10 @@ import {
 import { parseDateOnly } from "@/lib/time-rules";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { cn } from "@/lib/utils";
-import { adminCreateManualContractTimeEntry } from "@/server/actions/contract-workers";
+import {
+  adminAddMissedContractClockIn,
+  adminCreateManualContractTimeEntry,
+} from "@/server/actions/contract-workers";
 
 export type ContractEntryWorkerOption = {
   id: string;
@@ -77,7 +80,6 @@ export function AddContractEntryButton({
   const [jobCode, setJobCode] = useState(
     () => workers.find((w) => w.id === (fixedWorkerId ?? workers[0]?.id))?.jobCode ?? "",
   );
-  const [breakMin, setBreakMin] = useState(0);
   const [notes, setNotes] = useState("");
   const [reason, setReason] = useState("");
   const [approve, setApprove] = useState(false);
@@ -122,7 +124,6 @@ export function AddContractEntryButton({
     setClockIn("");
     setClockOut("");
     setJobCode(worker?.jobCode ?? "");
-    setBreakMin(0);
     setNotes("");
     setReason("");
     setApprove(false);
@@ -134,12 +135,32 @@ export function AddContractEntryButton({
       toast.error("Choose a contract worker.");
       return;
     }
-    if (!clockIn || !clockOut) {
-      toast.error("Enter clock-in and clock-out.");
+    if (!clockIn) {
+      toast.error("Enter the clock-in time.");
       return;
     }
     if (reason.trim().length < 3) {
       toast.error("Enter a reason (at least 3 characters).");
+      return;
+    }
+    if (!clockOut) {
+      // Forgot to clock in and still working: open the shift; they clock out at the kiosk.
+      startTransition(async () => {
+        const res = await runAction(() =>
+          adminAddMissedContractClockIn({
+            contractWorkerId: worker.id,
+            clockIn,
+            jobCode: jobCode || undefined,
+            notes: notes.trim() || null,
+            reason: reason.trim(),
+          }),
+        );
+        if (!toastAction(res)) return;
+        toast.success("Clocked in. The worker clocks out at the kiosk as usual.");
+        reset();
+        closeForm();
+        router.refresh();
+      });
       return;
     }
 
@@ -151,7 +172,6 @@ export function AddContractEntryButton({
           clockOut,
           jobCode: jobCode || undefined,
           notes: notes.trim() || null,
-          breakMin,
           reason: reason.trim(),
           approve,
           offers: buildOffers({ shiftStart, extendEnd, reactivate }, proposal.offers),
@@ -201,7 +221,9 @@ export function AddContractEntryButton({
               Add contract hours
             </h2>
             <p className="text-sm text-muted-foreground">
-              Closed shift for history or a missed punch. Times are America/Chicago.
+              Closed shift for history or a missed punch. Times are America/Chicago. If they forgot
+              to clock in and are still working, leave clock-out empty: the shift stays open and
+              they clock out at the kiosk.
             </p>
           </div>
 
@@ -243,7 +265,7 @@ export function AddContractEntryButton({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor={`${formId}-out`} className={hoursLabelClass}>
-                  Clock out
+                  Clock out (empty if still working)
                 </Label>
                 <Input
                   id={`${formId}-out`}
@@ -251,7 +273,6 @@ export function AddContractEntryButton({
                   className={hoursControlClass}
                   value={clockOut}
                   onChange={(e) => setClockOut(e.target.value)}
-                  required
                 />
               </div>
             </div>
@@ -275,20 +296,7 @@ export function AddContractEntryButton({
                   placeholder="Job code"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={`${formId}-break`} className={hoursLabelClass}>
-                  Break (min)
-                </Label>
-                <Input
-                  id={`${formId}-break`}
-                  type="number"
-                  min={0}
-                  max={240}
-                  className={hoursControlClass}
-                  value={breakMin}
-                  onChange={(e) => setBreakMin(Number(e.target.value) || 0)}
-                />
-              </div>
+              <p className="text-xs text-muted-foreground self-end">No personal breaks for contract workers. 30 minutes lunch comes off automatically when the day is over 6 hours.</p>
             </div>
 
             <div className="space-y-1.5">
@@ -365,10 +373,12 @@ export function AddContractEntryButton({
               </div>
             )}
 
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={approve} onCheckedChange={(v) => setApprove(v === true)} />
-              Approve immediately
-            </label>
+            {clockOut && (
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox checked={approve} onCheckedChange={(v) => setApprove(v === true)} />
+                Approve immediately
+              </label>
+            )}
 
             <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end [&_button]:min-h-11 md:[&_button]:min-h-9">
               <Button type="button" variant="outline" disabled={pending} onClick={closeForm}>
@@ -376,7 +386,7 @@ export function AddContractEntryButton({
               </Button>
               <Button type="submit" disabled={pending}>
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Add entry
+                {clockOut ? "Add entry" : "Clock in"}
               </Button>
             </div>
           </form>

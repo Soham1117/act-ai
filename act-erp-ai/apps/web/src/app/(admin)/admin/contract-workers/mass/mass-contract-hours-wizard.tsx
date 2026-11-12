@@ -58,7 +58,6 @@ export function MassContractHoursWizard({
   const [clockInTime, setClockInTime] = useState("07:00");
   const [clockOutTime, setClockOutTime] = useState("15:30");
   const [jobCode, setJobCode] = useState(jobCodes[0]?.code ?? "");
-  const [breakMin, setBreakMin] = useState(0);
   const [reason, setReason] = useState("");
   const [approve, setApprove] = useState(false);
   const [preview, setPreview] = useState<MassContractPreviewRow[] | null>(null);
@@ -82,7 +81,6 @@ export function MassContractHoursWizard({
     clockInTime,
     clockOutTime,
     jobCode,
-    breakMin,
     reason: reason.trim(),
     approve,
   });
@@ -240,23 +238,7 @@ export function MassContractHoursWizard({
                   />
                 </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cmh-break" className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Unpaid break (minutes)
-                </Label>
-                <Input
-                  id="cmh-break"
-                  type="number"
-                  min={0}
-                  max={240}
-                  step={5}
-                  className="h-9"
-                  value={breakMin}
-                  onChange={(e) =>
-                    setBreakMin(Math.max(0, Math.min(240, Math.round(Number(e.target.value) || 0))))
-                  }
-                />
-              </div>
+              <p className="text-xs text-muted-foreground self-end">No personal breaks for contract workers. 30 minutes lunch comes off automatically when the day is over 6 hours.</p>
               <div className="space-y-1">
                 <Label htmlFor="cmh-job">Job code</Label>
                 <SimpleSelect

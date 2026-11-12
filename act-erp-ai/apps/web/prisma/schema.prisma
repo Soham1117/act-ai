@@ -357,6 +357,8 @@ model TimeEntry {
   clockOut        DateTime?
   totalBreakMin   Int             @default(0)
   totalWorkMin    Int             @default(0)
+  /// Automatic unpaid lunch included in totalBreakMin (see src/lib/lunch.ts).
+  lunchMin        Int             @default(0)
   status          TimeEntryStatus @default(ACTIVE)
   jobCode         String          // always set by the code that creates the entry; no made-up default
   rate            Decimal?        @db.Decimal(10, 2)
@@ -1653,6 +1655,8 @@ model ContractTimeEntry {
   clockOut         DateTime?
   totalBreakMin    Int                 @default(0)
   totalWorkMin     Int                 @default(0)
+  /// Automatic unpaid lunch included in totalBreakMin (see src/lib/lunch.ts).
+  lunchMin         Int                 @default(0)
   status           TimeEntryStatus     @default(ACTIVE)
   jobCode          String              // always set on creation; no made-up default
   timesheetNotes   String?             @db.Text

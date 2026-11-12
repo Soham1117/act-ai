@@ -7,6 +7,7 @@
  * already authenticated the caller (kiosk session + PIN, or an admin).
  */
 import { revalidatePath } from "next/cache";
+import { applyDailyLunch } from "@/server/lunch";
 import type { Prisma, TimeBreak, TimeEntry, TimeEntryStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
@@ -134,7 +135,9 @@ export async function closeOpenEntry(
       ...extra,
     },
   });
-  return { entry: updated, capped: totals.capped };
+  await applyDailyLunch(tx, "employee", updated.employeeId, updated.date);
+  const fresh = await tx.timeEntry.findUniqueOrThrow({ where: { id: updated.id } });
+  return { entry: fresh, capped: totals.capped };
 }
 
 async function reportAutoClosed(employeeId: string, entryIds: string[], trigger: string) {

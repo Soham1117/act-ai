@@ -28,6 +28,8 @@ Seed: `e2e/seed-parts/40-payroll-time.ts`. Helpers: `e2e/support/payroll-time.ts
 | `adminCreateManualTimeEntry` | DST: spring-forward 7h, fall-back 9h, repeated 01:30, nonexistent 02:30 | covered | time-manual-entry.spec.ts |
 | `adminCreateManualTimeEntry` | approve immediately: admin with and without an employee profile; ended employee | covered | time-manual-entry.spec.ts |
 | `adminCreateManualTimeEntry` | failure / double click | covered | time-manual-entry.spec.ts |
+| `adminAddMissedClockIn` | open shift with empty clock-out, future time refused | covered | missed-clock-in.spec.ts |
+| `adminAddMissedContractClockIn` | open shift, duplicate refused, worker clocks out at kiosk | covered | missed-clock-in.spec.ts |
 | `adminUpdateTimeEntry` | reapproval on payable change, notes-only keeps approval, add break, overlap, future, deleted meanwhile | covered | time-corrections.spec.ts, time-entry-edit.spec.ts |
 | `adminUpdateTimeEntry` | open-entry rules ("still open", "close first") | not-testable | the dialog hides clock-out and breaks for open entries |
 | `adminDeleteTimeEntry` | reason required, confirm/cancel, breaks removed, audit, failure, double click | covered | time-corrections.spec.ts |
