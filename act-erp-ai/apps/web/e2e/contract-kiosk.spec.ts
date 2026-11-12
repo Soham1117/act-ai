@@ -16,6 +16,7 @@ import {
   pickKioskWorker,
   replay,
   tamperActions,
+  typeCrewPin,
 } from "./support/contract";
 import { SERVER_ERROR, STALE_ERROR } from "./support/action-errors";
 
@@ -76,6 +77,7 @@ test.describe("kiosk contract crew: eligibility at punch time", () => {
     await db.contractWorker.update({ where: { id: w.id }, data: { startDate: future } });
     await clockIn(page).click();
     await expect(toast(page, /this contract has not started yet/i)).toBeVisible();
+    await typeCrewPin(page); // a refused punch clears the PIN
     await db.contractWorker.update({
       where: { id: w.id },
       data: { startDate: new Date(Date.now() - 9 * 86_400_000), endDate: new Date(Date.now() - 2 * 86_400_000) },
@@ -96,7 +98,7 @@ test.describe("kiosk contract crew: eligibility at punch time", () => {
       data: { status: "ENDED", endDate: new Date(Date.now() - 2 * 86_400_000) },
     });
     await clockOut(page).click();
-    await expect(toast(page, /clocked out at/i)).toBeVisible();
+    await expect(toast(page, /clocked out ·/i)).toBeVisible();
     const done = await db.contractTimeEntry.findUniqueOrThrow({ where: { id: open.id } });
     expect(done.status).toBe("COMPLETED");
     expect(done.clockOut).not.toBeNull();
@@ -135,7 +137,7 @@ test.describe("kiosk contract crew: punch rules", () => {
     const slow = await delayServerActions(page, 1500);
     await clockIn(page).click();
     await clockIn(page).click({ force: true, timeout: 1000 }).catch(() => undefined);
-    await expect(toast(page, /clocked in at/i)).toBeVisible();
+    await expect(toast(page, /clocked in ·/i)).toBeVisible();
     expect(slow.count()).toBeLessThanOrEqual(2); // 1 punch (+ roster reload after)
     expect(await entriesOf(w.id)).toHaveLength(1);
     await page.context().close();
@@ -163,7 +165,7 @@ test.describe("kiosk contract crew: punch rules", () => {
     await expect(kioskList(page, w.name)).toContainText("Out");
     await pickKioskWorker(page, w.name);
     await clockIn(page).click();
-    await expect(toast(page, /clocked in at/i)).toBeVisible();
+    await expect(toast(page, /clocked in ·/i)).toBeVisible();
     await expect(toast(page, /left open more than 16 hours/i)).toBeVisible();
     const [old, fresh] = await entriesOf(w.id);
     expect(old!.id).toBe(stale.id);
@@ -201,7 +203,7 @@ test.describe("kiosk contract crew: punch rules", () => {
     await pickKioskWorker(page, w.name);
     await expect(page.getByRole("button", { name: /break|lunch/i })).toHaveCount(0);
     await clockOut(page).click();
-    await expect(toast(page, /clocked out at/i)).toBeVisible();
+    await expect(toast(page, /clocked out ·/i)).toBeVisible();
     await page.context().close();
   });
 
@@ -212,9 +214,10 @@ test.describe("kiosk contract crew: punch rules", () => {
     for (const action of ["START_BREAK", "END_BREAK", "BREAK"]) {
       await page.unroute("**/*").catch(() => undefined);
       await tamperActions(page, (b) => b.replace('"CLOCK_IN"', `"${action}"`));
+      await typeCrewPin(page); // a refused punch clears the PIN
       await clockIn(page).click();
       await expect(toast(page, /check action/i).last()).toBeVisible();
-      await expect(clockIn(page)).toBeEnabled();
+      await expect(page.getByPlaceholder("••••")).toBeEnabled();
     }
     expect(await entriesOf(w.id)).toHaveLength(0);
     expect(await db.contractTimeBreak.count({ where: { timeEntry: { contractWorkerId: w.id } } })).toBe(0);
@@ -230,6 +233,7 @@ test.describe("kiosk contract crew: punch rules", () => {
     await expect(toast(page, /kiosk session is not active on this device/i)).toBeVisible();
     await page.unroute("**/*");
     await tamperActions(page, (b) => b.replace(w.id, "no-such-worker"));
+    await typeCrewPin(page);
     await clockIn(page).click();
     await expect(toast(page, /unknown contract worker/i)).toBeVisible();
     expect(await entriesOf(w.id)).toHaveLength(0);
@@ -299,11 +303,11 @@ test.describe("kiosk contract crew: photos", () => {
     const page = await openCrewKiosk(browser, 20);
     await pickKioskWorker(page, w.name);
     await clockIn(page).click();
-    await expect(toast(page, /clocked in at/i)).toBeVisible();
+    await expect(toast(page, /clocked in ·/i)).toBeVisible();
     await expect.poll(async () => (await entriesOf(w.id))[0]?.clockInPhotoKey).toBeTruthy();
     await pickKioskWorker(page, w.name);
     await clockOut(page).click();
-    await expect(toast(page, /clocked out at/i)).toBeVisible();
+    await expect(toast(page, /clocked out ·/i)).toBeVisible();
     await expect.poll(async () => (await entriesOf(w.id))[0]?.clockOutPhotoKey).toBeTruthy();
     const [e] = await entriesOf(w.id);
     const keys = await fakeS3Keys();
@@ -316,7 +320,7 @@ test.describe("kiosk contract crew: photos", () => {
     await pickKioskWorker(page2, w2.name);
     await tamperActions(page2, (b) => b.replace(/"photo":"data:image\/jpeg;base64,[^"]*"/, '"photo":"data:text/html;base64,PGI+"'));
     await clockIn(page2).click();
-    await expect(toast(page2, /clocked in at/i)).toBeVisible();
+    await expect(toast(page2, /clocked in ·/i)).toBeVisible();
     const [e2] = await entriesOf(w2.id);
     expect(e2!.clockInPhotoKey).toBeNull();
     await page2.context().close();
@@ -328,7 +332,7 @@ test.describe("kiosk contract crew: photos", () => {
     await pickKioskWorker(page, w.name);
     await expect(page.getByText("Camera off")).toBeVisible();
     await clockIn(page).click();
-    await expect(toast(page, /clocked in at/i)).toBeVisible();
+    await expect(toast(page, /clocked in ·/i)).toBeVisible();
     const [e] = await entriesOf(w.id);
     expect(e).toMatchObject({ status: "ACTIVE", clockInPhotoKey: null });
     await page.context().close();
@@ -356,7 +360,7 @@ test.describe("kiosk contract crew: job code on the entry", () => {
     const page = await openCrewKiosk(browser, 23);
     await pickKioskWorker(page, w.name);
     await clockIn(page).click();
-    await expect(toast(page, /clocked in at/i)).toBeVisible();
+    await expect(toast(page, /clocked in ·/i)).toBeVisible();
     expect((await entriesOf(w.id))[0]!.jobCode).toBe(CW_JOB.second.code);
     await page.context().close();
   });
@@ -436,8 +440,9 @@ test.describe("kiosk contract crew: failures", () => {
     await expect(toast(page, SERVER_ERROR)).toBeVisible();
     expect(await entriesOf(w.id)).toHaveLength(0);
     // The kiosk stays on the same screen: punch again.
+    await typeCrewPin(page);
     await clockIn(page).click();
-    await expect(toast(page, /clocked in at/i)).toBeVisible();
+    await expect(toast(page, /clocked in ·/i)).toBeVisible();
     expect(await entriesOf(w.id)).toHaveLength(1);
     await page.context().close();
   });

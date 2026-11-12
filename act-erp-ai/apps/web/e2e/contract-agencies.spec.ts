@@ -314,7 +314,7 @@ test.describe("admin: agencies - deactivate / activate", () => {
     const page = await openCrewKiosk(browser, 1);
     await pickKioskWorker(page, w.name);
     await page.getByRole("button", { name: /^clock in$/i }).click();
-    await expect(toast(page, /clocked in at/i)).toBeVisible();
+    await expect(toast(page, /clocked in ·/i)).toBeVisible();
     expect(await db.contractTimeEntry.count({ where: { contractWorkerId: w.id, status: "ACTIVE" } })).toBe(1);
     await page.context().close();
   });

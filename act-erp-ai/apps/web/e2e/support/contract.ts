@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import type { ApprovalStatus, TimeEntryStatus } from "@prisma/client";
 import { businessDateOnly } from "../../src/lib/format";
@@ -8,6 +9,10 @@ import { isServerAction } from "./helpers";
 import { BASE_URL, IP_INSIDE, JOB_CODE, env } from "./test-data";
 import { CW_AGENCY, cwKioskSlug, cwKioskSuffix } from "./contract-data";
 import { routeFaceCheck } from "./kiosk";
+
+/** Kiosk PIN of every worker made by `makeWorker` (already changed, so no temporary-PIN step). */
+export const CW_PIN = "5826";
+export const CW_PIN_HASH = bcrypt.hashSync(CW_PIN, 4);
 
 export const uniq = (prefix: string) => `${prefix} ${randomBytes(3).toString("hex")}`;
 
@@ -54,6 +59,7 @@ export async function makeWorker(
       startDate: day(startDaysAgo),
       endDate: opts.endDaysAgo === undefined || opts.endDaysAgo === null ? null : day(opts.endDaysAgo),
       project: opts.project === undefined ? "E2E Project" : opts.project,
+      kioskPinHash: CW_PIN_HASH,
     },
   });
 }
@@ -199,12 +205,16 @@ export async function openCrewKiosk(
   return page;
 }
 
-/** Click a worker row in the kiosk list; waits for the confirm card. */
-export async function pickKioskWorker(page: Page, name: string) {
+/** Click a worker row in the kiosk list; waits for the confirm card and types the PIN. */
+export async function pickKioskWorker(page: Page, name: string, pin = CW_PIN) {
   await page.getByPlaceholder(/search by name or cw id/i).fill(name);
   await page.getByRole("button", { name: new RegExp(name) }).first().click();
   await expect(page.getByText("Agency staff", { exact: true })).toBeVisible();
+  await typeCrewPin(page, pin);
 }
+
+/** The PIN box on the contract-crew confirm card. A failed punch clears it, so retype before retrying. */
+export const typeCrewPin = (page: Page, pin = CW_PIN) => page.getByPlaceholder("••••").fill(pin);
 
 export const kioskList = (page: Page, name: string) =>
   page.getByRole("button", { name: new RegExp(name) });

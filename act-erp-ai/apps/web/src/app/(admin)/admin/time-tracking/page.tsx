@@ -325,7 +325,7 @@ export default async function AdminTimeTrackingPage({
               ) : (
                 <ul className="divide-y">
                   {staleRows.map((e) => (
-                    <li key={e.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:gap-3">
+                    <li key={e.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-3">
                       <div className="flex min-w-0 flex-1 items-start gap-3">
                         <Avatar src={e.avatar} name={e.employeeName} />
                         <div className="min-w-0 flex-1">

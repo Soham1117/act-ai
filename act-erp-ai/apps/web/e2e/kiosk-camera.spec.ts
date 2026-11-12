@@ -279,7 +279,7 @@ test.describe("kiosk camera: photos", () => {
     await expect.poll(() => camLive(page)).toBe(0);
     await page.context().close();
 
-    // Admin: thumbnails on the time-tracking page, large photos in the dialog.
+    // Admin: thumbnails on the time-tracking page, large photos in the inline panel.
     const { context, page: admin } = await adminTimeTracking(browser, EMP.flow);
     const thumbIn = admin.getByRole("img", { name: "Clock in", exact: true }).first();
     const thumbOut = admin.getByRole("img", { name: "Clock out", exact: true }).first();
@@ -289,7 +289,7 @@ test.describe("kiosk camera: photos", () => {
       .poll(() => thumbIn.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0))
       .toBe(true);
     await admin.getByTitle("Clock in photo").click();
-    const dialog = admin.getByRole("dialog", { name: /punch photos/i });
+    const dialog = admin.getByRole("region", { name: /punch photos/i });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("img")).toHaveCount(2);
     await expect

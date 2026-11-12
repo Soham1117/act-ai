@@ -55,11 +55,11 @@ test.describe("kiosk: forced PIN change on the temporary PIN", () => {
     await expect(clockInBtn(page)).toBeHidden(); // punch buttons are hidden on this step
     await expect(saveBtn(page)).toBeDisabled();
 
-    // Digits only, at most 6; fewer than 4 keeps the button off.
+    // Digits only, at most 4; fewer than 4 keeps the button off.
     await newPinInput(page).pressSequentially("a1b2");
     await expect(newPinInput(page)).toHaveValue("12");
     await newPinInput(page).fill("12345678");
-    await expect(newPinInput(page)).toHaveValue("123456");
+    await expect(newPinInput(page)).toHaveValue("1234");
     await fillNew(page, "739", "739");
     await expect(saveBtn(page)).toBeDisabled();
 
@@ -89,11 +89,11 @@ test.describe("kiosk: forced PIN change on the temporary PIN", () => {
   const weak: [string, RegExp][] = [
     ["1234", /simple sequence/i],
     ["4321", /simple sequence/i],
-    ["456789", /simple sequence/i],
+    ["6789", /simple sequence/i],
     ["1111", /repeated digit/i],
-    ["000000", /repeated digit/i],
+    ["0000", /repeated digit/i],
     ["1212", /repeating pattern/i],
-    ["123123", /repeating pattern/i],
+    ["3434", /repeating pattern/i],
     ["3214", /different from the temporary one/i],
   ];
   test("weak new PINs are refused with a reason; the temporary PIN stays and nothing is punched", async ({

@@ -3,6 +3,7 @@ import { db } from "./support/db";
 import { expectNoCrash, failServerActions, openKiosk, toast } from "./support/helpers";
 import { fakeS3Keys } from "./support/fake-s3";
 import { CONTRACT_WORKER, JOB_CODE, KIOSK_CREW_SLUG } from "./support/test-data";
+import { CW_PIN_HASH, typeCrewPin } from "./support/contract";
 
 async function openCrew(browser: import("@playwright/test").Browser) {
   const page = await openKiosk(browser, KIOSK_CREW_SLUG, { cookieSuffix: "-crew" });
@@ -11,8 +12,11 @@ async function openCrew(browser: import("@playwright/test").Browser) {
   return page;
 }
 
-const pickWorker = (page: Page, name = CONTRACT_WORKER.name) =>
-  page.getByRole("button", { name: new RegExp(name) }).first().click();
+/** Pick the worker and type their PIN on the confirm card. */
+async function pickWorker(page: Page, name = CONTRACT_WORKER.name) {
+  await page.getByRole("button", { name: new RegExp(name) }).first().click();
+  await typeCrewPin(page);
+}
 
 const entries = () =>
   db.contractTimeEntry.findMany({
@@ -20,6 +24,14 @@ const entries = () =>
   });
 
 test.describe("kiosk: contract crew clock in/out", () => {
+  // The seeded worker starts on the temporary PIN; give them a known, already-changed one.
+  test.beforeEach(async () => {
+    await db.contractWorker.update({
+      where: { workerId: CONTRACT_WORKER.workerId },
+      data: { kioskPinHash: CW_PIN_HASH },
+    });
+  });
+
   test("worker clocks in and out with no break buttons; photos are sent", async ({ browser }) => {
     const page = await openCrew(browser);
 
@@ -33,7 +45,7 @@ test.describe("kiosk: contract crew clock in/out", () => {
     );
     await page.getByRole("button", { name: /^clock in$/i }).click();
     await photoRequest;
-    await expect(toast(page, /clocked in at/i)).toBeVisible();
+    await expect(toast(page, /clocked in ·/i)).toBeVisible();
     const [open] = await entries();
     expect(open?.status).toBe("ACTIVE");
     expect(open?.jobCode).toBe(JOB_CODE.code);
@@ -45,7 +57,7 @@ test.describe("kiosk: contract crew clock in/out", () => {
     await pickWorker(page);
     await expect(page.getByRole("button", { name: /break|lunch/i })).toHaveCount(0);
     await page.getByRole("button", { name: /^clock out$/i }).click();
-    await expect(toast(page, /clocked out at/i)).toBeVisible();
+    await expect(toast(page, /clocked out ·/i)).toBeVisible();
     const [done] = await entries();
     expect(done?.clockOut).not.toBeNull();
     expect(done?.status).not.toBe("ACTIVE");
