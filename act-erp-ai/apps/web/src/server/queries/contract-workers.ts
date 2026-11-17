@@ -278,6 +278,7 @@ export async function contractHoursWorkbook(args: { from: Date; to: Date; agency
     employeeName: e.contractWorker.name,
     date: dateOnlyToString(e.date),
     clockIn: e.clockIn.getTime(),
+    clockOut: e.clockOut?.getTime() ?? null,
     totalWorkMin: e.totalWorkMin,
     jobCode: e.jobCode,
     approvalStatus: e.approvalStatus,

@@ -34,7 +34,7 @@ export async function exportIndividualEmployeeHours(
     const entries = await db.timeEntry.findMany({
       where: { employeeId: data.employeeId, date: { gte: weekStart, lte: to } },
       orderBy: [{ date: "asc" }, { clockIn: "asc" }],
-      select: { id: true, date: true, clockIn: true, totalWorkMin: true, jobCode: true, approvalStatus: true },
+      select: { id: true, date: true, clockIn: true, clockOut: true, totalWorkMin: true, jobCode: true, approvalStatus: true },
     });
     const inRange = entries.filter((e) => e.date >= from).length;
     const workbook = inRange
@@ -46,6 +46,7 @@ export async function exportIndividualEmployeeHours(
             employeeName: employee.name,
             date: dateOnlyToString(e.date),
             clockIn: e.clockIn.getTime(),
+            clockOut: e.clockOut?.getTime() ?? null,
             totalWorkMin: e.totalWorkMin,
             jobCode: e.jobCode,
             approvalStatus: e.approvalStatus,

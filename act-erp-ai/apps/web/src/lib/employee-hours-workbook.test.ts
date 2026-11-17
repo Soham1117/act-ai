@@ -43,10 +43,14 @@ describe("individual employee hours workbook", () => {
     ]);
   });
 
-  it("adds a Daily Times sheet with one row per day", () => {
+  it("adds a Daily Times sheet with one row per day and clock in/out", () => {
     const xlsx = buildEmployeeHoursWorkbook(
       { name: "Ann & Lee", salaried: false },
-      [entry("2026-11-01", 240), entry("2026-11-01", 60), entry("2026-11-03", 480, "APPROVED", "100")],
+      [
+        { ...entry("2026-11-01", 240), clockOut: Date.parse("2026-11-01T18:00:00Z") },
+        { ...entry("2026-11-01", 60), clockIn: Date.parse("2026-11-01T19:00:00Z"), clockOut: Date.parse("2026-11-01T20:00:00Z") },
+        entry("2026-11-03", 480, "APPROVED", "100"),
+      ],
       "2026-11-01",
       "2026-11-03",
     );
@@ -55,7 +59,9 @@ describe("individual employee hours workbook", () => {
     const sheet = zip.readAsText("xl/worksheets/sheet2.xml");
     expect(sheet).toContain("Sun");
     expect(sheet).toContain("11/3/2026");
-    expect(sheet).toContain("Totals:");
+    expect(sheet).toContain("Totals for Ann &amp; Lee:");
+    expect(sheet).toContain("8:00 AM"); // 14:00Z = 8:00 AM Chicago (CST)
+    expect(sheet).toContain("2:00 PM"); // last clock out 20:00Z
   });
 
   it("keeps names that look like formulas as text and lists a salaried employee with no hours", () => {

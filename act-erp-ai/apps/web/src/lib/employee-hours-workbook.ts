@@ -6,6 +6,7 @@ import {
   type SheetRowModel,
   type WorkbookEntry,
 } from "@/lib/payroll-workbook";
+import { BUSINESS_TZ } from "@/lib/time-rules";
 import { splitEntryOvertime } from "@/lib/payroll-overtime";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -13,6 +14,8 @@ const mdy = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
   return `${m}/${d}/${y}`;
 };
+const clockTime = (ms: number) =>
+  new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TZ, hour: "numeric", minute: "2-digit" }).format(ms);
 const weekday = (iso: string) => DAYS[new Date(`${iso}T12:00:00Z`).getUTCDay()]!;
 
 /**
@@ -28,11 +31,11 @@ export function buildDailySheet(entries: WorkbookEntry[], from: string, to: stri
   }
   const people = [...byPerson.values()].sort((a, b) => a[0]!.employeeName.localeCompare(b[0]!.employeeName));
 
-  const D = [3, 4, 5, 6, 7];
+  const D = [5, 6, 7, 8, 9];
   const rows: SheetRowModel[] = [
     { cells: ["Daily Times"], style: "title" },
     { cells: [`${mdy(from)} to ${mdy(to)}`], style: "subtitle" },
-    { cells: ["Name", "Date", "Day", "Worked", "Regular", "Overtime 1", "Leave", "Total"], style: "header" },
+    { cells: ["Name", "Date", "Day", "Clock In", "Clock Out", "Worked", "Regular", "Overtime 1", "Leave", "Total"], style: "header" },
   ];
   const grand = { work: 0, regular: 0, overtime: 0, leave: 0 };
   for (const list of people) {
@@ -43,10 +46,13 @@ export function buildDailySheet(entries: WorkbookEntry[], from: string, to: stri
       from,
       to,
     );
-    const days = new Map<string, { work: number; regular: number; overtime: number; leave: number }>();
+    const days = new Map<string, { work: number; regular: number; overtime: number; leave: number } & { first: number; last: number | null }>();
     for (const e of list) {
       if (e.date < from || e.date > to) continue;
-      const d = days.get(e.date) ?? { work: 0, regular: 0, overtime: 0, leave: 0 };
+      const d = days.get(e.date) ?? { work: 0, regular: 0, overtime: 0, leave: 0, first: e.clockIn, last: e.clockOut ?? null };
+      d.first = Math.min(d.first, e.clockIn);
+      // A day with any open shift has no clock out yet.
+      d.last = e.clockOut == null || d.last === null ? null : Math.max(d.last, e.clockOut);
       if (leaveCodes.has(e.jobCode)) d.leave += e.totalWorkMin;
       else {
         const s = split.get(e.id) ?? { regularMin: e.totalWorkMin, overtimeMin: 0 };
@@ -67,28 +73,28 @@ export function buildDailySheet(entries: WorkbookEntry[], from: string, to: stri
         t.leave += d.leave;
       }
       rows.push({
-        cells: [first ? list[0]!.employeeName : "", mdy(date), weekday(date), d.work, d.regular, d.overtime, d.leave, d.work + d.leave],
-        durationCols: D.concat(8),
+        cells: [first ? list[0]!.employeeName : "", mdy(date), weekday(date), clockTime(d.first), d.last === null ? "" : clockTime(d.last), d.work, d.regular, d.overtime, d.leave, d.work + d.leave],
+        durationCols: D,
       });
       first = false;
     }
     rows.push({
       cells: [`Totals for ${list[0]!.employeeName}:`, "", "", tot.work, tot.regular, tot.overtime, tot.leave, tot.work + tot.leave],
       style: "total",
-      durationCols: D.concat(8),
+      durationCols: D,
     });
   }
   rows.push({ cells: [] });
   rows.push({
     cells: ["Control Totals:", "", "", grand.work, grand.regular, grand.overtime, grand.leave, grand.work + grand.leave],
     style: "grand",
-    durationCols: D.concat(8),
+    durationCols: D,
   });
   return {
     name: "Daily Times",
-    widths: [25, 11, 8, 10, 10, 11.29, 10, 10],
-    align: ["left", "center", "center", "right", "right", "right", "right", "right"],
-    merges: ["A1:H1", "A2:H2"],
+    widths: [25, 11, 8, 10, 10, 10, 10, 11.29, 10, 10],
+    align: ["left", "center", "center", "center", "center", "right", "right", "right", "right", "right"],
+    merges: ["A1:J1", "A2:J2"],
     rows,
   };
 }

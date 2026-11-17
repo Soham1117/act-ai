@@ -13,6 +13,8 @@ export type WorkbookEntry = {
   /** Business calendar day, YYYY-MM-DD. */
   date: string;
   clockIn: number;
+  /** Epoch ms; null/absent while the shift is open. */
+  clockOut?: number | null;
   totalWorkMin: number;
   jobCode: string;
   approvalStatus: string;
