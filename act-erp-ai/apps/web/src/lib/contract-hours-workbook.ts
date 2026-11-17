@@ -1,3 +1,4 @@
+import { buildDailySheet } from "@/lib/employee-hours-workbook";
 import { buildPeriodSheet, buildWorkbookXlsx, type WorkbookEntry } from "@/lib/payroll-workbook";
 
 /**
@@ -8,5 +9,6 @@ import { buildPeriodSheet, buildWorkbookXlsx, type WorkbookEntry } from "@/lib/p
 export function buildContractHoursWorkbook(entries: WorkbookEntry[], from: string, to: string): Buffer {
   return buildWorkbookXlsx([
     buildPeriodSheet({ period: { start: from, end: to }, entries, salariedNames: [], notes: new Map() }),
+    buildDailySheet(entries, from, to),
   ]);
 }

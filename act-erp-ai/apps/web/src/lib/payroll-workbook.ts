@@ -26,7 +26,7 @@ export type WorkbookPeriod = {
 };
 
 /** Leave job codes get their own column; everything else is worked time. */
-const LEAVE_COLUMNS: Array<{ code: string; label: string }> = [
+export const LEAVE_COLUMNS: Array<{ code: string; label: string }> = [
   { code: "102", label: "HOLIDAY" },
   { code: "100", label: "PTO" },
   { code: "101", label: "BEREAVEMENT" },

@@ -43,6 +43,21 @@ describe("individual employee hours workbook", () => {
     ]);
   });
 
+  it("adds a Daily Times sheet with one row per day", () => {
+    const xlsx = buildEmployeeHoursWorkbook(
+      { name: "Ann & Lee", salaried: false },
+      [entry("2026-11-01", 240), entry("2026-11-01", 60), entry("2026-11-03", 480, "APPROVED", "100")],
+      "2026-11-01",
+      "2026-11-03",
+    );
+    const zip = new AdmZip(xlsx);
+    expect(zip.readAsText("xl/workbook.xml")).toContain('name="Daily Times"');
+    const sheet = zip.readAsText("xl/worksheets/sheet2.xml");
+    expect(sheet).toContain("Sun");
+    expect(sheet).toContain("11/3/2026");
+    expect(sheet).toContain("Totals:");
+  });
+
   it("keeps names that look like formulas as text and lists a salaried employee with no hours", () => {
     const xlsx = buildEmployeeHoursWorkbook(
       { name: '=HYPERLINK("x")', salaried: true },
