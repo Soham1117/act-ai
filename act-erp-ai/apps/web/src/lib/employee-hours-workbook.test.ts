@@ -60,6 +60,8 @@ describe("individual employee hours workbook", () => {
     expect(sheet).toContain("Sun");
     expect(sheet).toContain("11/3/2026");
     expect(sheet).toContain("Totals for Ann &amp; Lee:");
+    const rows = readSheetRows(xlsx, 2);
+    expect(rows.at(-1)).toEqual(["Control Totals:", "", "", "", "", "5:00", "5:00", "0:00", "8:00", "13:00"]);
     expect(sheet).toContain("8:00 AM"); // 14:00Z = 8:00 AM Chicago (CST)
     expect(sheet).toContain("2:00 PM"); // last clock out 20:00Z
   });

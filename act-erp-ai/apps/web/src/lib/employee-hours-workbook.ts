@@ -79,14 +79,14 @@ export function buildDailySheet(entries: WorkbookEntry[], from: string, to: stri
       first = false;
     }
     rows.push({
-      cells: [`Totals for ${list[0]!.employeeName}:`, "", "", tot.work, tot.regular, tot.overtime, tot.leave, tot.work + tot.leave],
+      cells: [`Totals for ${list[0]!.employeeName}:`, "", "", "", "", tot.work, tot.regular, tot.overtime, tot.leave, tot.work + tot.leave],
       style: "total",
       durationCols: D,
     });
   }
   rows.push({ cells: [] });
   rows.push({
-    cells: ["Control Totals:", "", "", grand.work, grand.regular, grand.overtime, grand.leave, grand.work + grand.leave],
+    cells: ["Control Totals:", "", "", "", "", grand.work, grand.regular, grand.overtime, grand.leave, grand.work + grand.leave],
     style: "grand",
     durationCols: D,
   });
