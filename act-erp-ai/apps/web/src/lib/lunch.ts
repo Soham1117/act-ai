@@ -1,16 +1,16 @@
 /**
  * Automatic unpaid lunch. When a worker's time on the clock for a business
- * day (all punches added up) is over 6 hours, 30 minutes come off that day,
+ * day (all punches added up) is over 4 hours, 30 minutes come off that day,
  * once. Employees' personal breaks are deducted on top; contract workers
  * cannot take personal breaks. Leave (PTO, holiday, bereavement) never gets a
  * lunch. Applies to shifts dated on or after LUNCH_FROM; earlier entries keep
  * their hours. Pure: no database access.
  */
 export const LUNCH_MIN = 30;
-export const LUNCH_AFTER_MIN = 6 * 60;
+export const LUNCH_AFTER_MIN = 4 * 60;
 /** First business day the deduction applies to (YYYY-MM-DD). */
 export const LUNCH_FROM = "2026-11-12";
-/** Leave job codes: never a lunch, never counted toward the 6 hours. */
+/** Leave job codes: never a lunch, never counted toward the 4 hours. */
 export const LEAVE_JOB_CODES = new Set(["100", "101", "102"]);
 
 export type LunchShift = {
@@ -24,7 +24,7 @@ export type LunchShift = {
 
 /**
  * Lunch minutes per shift for one worker's day. The lunch goes on the shift
- * where the day passes 6 hours, so adding a later punch never moves a lunch
+ * where the day passes 4 hours, so adding a later punch never moves a lunch
  * already taken; if that shift is shorter than the lunch, the rest comes off
  * the shifts before it.
  */

@@ -250,7 +250,7 @@ export function MassHoursWizard({
                   }
                 />
                 <p className="text-xs text-muted-foreground">
-                  Lunch is separate: 30 minutes come off automatically when the day is over 6 hours.
+                  Lunch is separate: 30 minutes come off automatically when the day is over 4 hours.
                 </p>
               </div>
               <div className="space-y-1">

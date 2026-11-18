@@ -296,7 +296,7 @@ export function AddContractEntryButton({
                   placeholder="Job code"
                 />
               </div>
-              <p className="text-xs text-muted-foreground self-end">No personal breaks for contract workers. 30 minutes lunch comes off automatically when the day is over 6 hours.</p>
+              <p className="text-xs text-muted-foreground self-end">No personal breaks for contract workers. 30 minutes lunch comes off automatically when the day is over 4 hours.</p>
             </div>
 
             <div className="space-y-1.5">

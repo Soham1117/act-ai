@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { exportFilenameName } from "@/lib/export-filename";
 import { audit } from "@/lib/audit";
 import { fail, failFromUnknown, ok, type ActionResult } from "@/lib/action-result";
 import { dateOnlyToString, parseDateOnly } from "@/lib/time-rules";
@@ -69,7 +70,7 @@ export async function exportIndividualEmployeeHours(
       });
     return ok({
       xlsx: workbook?.toString("base64") ?? null,
-      filename: `employee-hours-${employee.employeeId}-${data.from}-to-${data.to}.xlsx`,
+      filename: `employee-hours-${exportFilenameName(employee.name, employee.employeeId)}-${data.from}-to-${data.to}.xlsx`,
     });
   } catch (error) {
     return failFromUnknown(error);
