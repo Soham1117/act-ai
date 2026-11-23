@@ -400,7 +400,9 @@ Changes:
 - [x] `30aaffc` (deployed Nov 23 with a schema push and backup): new `EXPIRED` proposal status. Each scheduled run expires pending drafts whose shift was closed or removed outside Watch, audited as `system:watch`, no punch changes. The first run expired the 77 stale drafts; 6 remain for shifts open since Nov 10. Missing-clock-out grace default 60 → 240 min (prod had no override). Contract shifts flag at `maxShiftHours` (16 h) instead of 12 h.
 - [x] `time.schedule-variance` skips weeks with zero worked minutes. Threshold stays 4 h.
 
-Open: nobody owns the Watch queue. Name an owner before adding more L3 actions. Re-measure in two weeks with the new thresholds; full back-test ends around January 4, 2027.
+- [x] The 6 drafts still pending were November 10 TCP manual imports (`tcpmanual20261110_*`). On the owner's instruction they were rejected and their findings dismissed (audited under the owner's account). The time entries were left open and unchanged.
+
+Owner: Soham owns the Watch queue (findings, drafts and the digest) from November 23, 2026. Re-measure in two weeks with the new thresholds; full back-test ends around January 4, 2027.
 
 Next: eight-week L1 back-test/noise tuning; then define a separately approved L3 action for reminder drafts or contractor corrections. L4 still needs explicit per-action opt-in and limits before implementation.
 
