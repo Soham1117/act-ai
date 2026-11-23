@@ -26,7 +26,8 @@ export function evaluateMissingClockOut(
     const pastSchedule =
       p.scheduledEnd !== null &&
       now.getTime() > p.scheduledEnd.getTime() + policy.missingClockOutGraceMin * MIN;
-    const tooLong = ageMs > 12 * HOUR;
+    // Contract shifts routinely run past 12h, so they use the long-shift threshold.
+    const tooLong = ageMs > (kind === "contract" ? policy.maxShiftHours : 12) * HOUR;
     if (!pastSchedule && !tooLong) continue;
     out.push({
       fingerprint: `${kind}.missing-clock-out:${p.entryId}`,

@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { mergePolicy, type FindingDraft, type WatchPolicy } from "@/lib/watch/types";
 import { sendDailyDigestIfDue } from "./digest";
 import { ALL_JOBS } from "./jobs";
-import { queueAutomaticClockOutProposals } from "./proposals";
+import { expireClosedEntryProposals, queueAutomaticClockOutProposals } from "./proposals";
 
 const POLICY_ID = "policy";
 const STALE_RUN_MS = 10 * 60_000;
@@ -74,6 +74,8 @@ export async function runWatch(opts: { trigger: "SCHEDULE" | "MANUAL"; shadow?: 
         updated += counts.updated;
         autoResolved += counts.autoResolved;
         if (job.id === "time.missing-clock-out" && opts.trigger === "SCHEDULE" && !run.shadow && !opts.ruleIds) {
+          const expired = await expireClosedEntryProposals(now);
+          errors.push(...expired.errors.map((message) => ({ ruleId: "proposal.expire", message: message.slice(0, 500) })));
           const queued = await queueAutomaticClockOutProposals(now);
           draftsCreated += queued.created;
           errors.push(...queued.errors.map((message) => ({ ruleId: "proposal.missing-clock-out", message: message.slice(0, 500) })));

@@ -2039,6 +2039,8 @@ enum WatchProposalStatus {
   APPLIED
   REJECTED
   UNDONE
+  /// System: the shift was closed outside Watch, so the draft can no longer apply.
+  EXPIRED
 }
 
 /// L3: an explicit admin decision is required before a draft changes an entry.

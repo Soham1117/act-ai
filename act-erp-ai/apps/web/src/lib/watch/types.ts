@@ -40,7 +40,8 @@ export const DEFAULT_POLICY: WatchPolicy = {
   lunchRequiredAfterHours: 6,
   lunchMinutes: 30,
   maxShiftHours: 16,
-  missingClockOutGraceMin: 60,
+  // Nov 2026 back-test: real ends ran ~3.7h past schedule; 60 min flagged live shifts.
+  missingClockOutGraceMin: 240,
   hoursVariancePct: 25,
   hoursVarianceMinHours: 4,
   earlyArrivalMinutes: 20,

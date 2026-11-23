@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(), lock: vi.fn(), running: vi.fn(), createRun: vi.fn(), finishRun: vi.fn(),
   config: vi.fn(), findFinding: vi.fn(), createFinding: vi.fn(), updateFinding: vi.fn(), resolveFindings: vi.fn(),
   firstRule: vi.fn(), secondRule: vi.fn(), digest: vi.fn(),
-  firstRuleId: "time.impossible-shift", queueDrafts: vi.fn(),
+  firstRuleId: "time.impossible-shift", queueDrafts: vi.fn(), expireDrafts: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ db: {
@@ -19,7 +19,7 @@ vi.mock("./jobs", () => ({ ALL_JOBS: [
   { id: "other.rule", run: mocks.secondRule },
 ] }));
 vi.mock("./digest", () => ({ sendDailyDigestIfDue: mocks.digest }));
-vi.mock("./proposals", () => ({ queueAutomaticClockOutProposals: mocks.queueDrafts }));
+vi.mock("./proposals", () => ({ queueAutomaticClockOutProposals: mocks.queueDrafts, expireClosedEntryProposals: mocks.expireDrafts }));
 
 import { runWatch } from "./runner";
 
@@ -32,6 +32,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.firstRuleId = "time.impossible-shift";
   mocks.queueDrafts.mockResolvedValue({ created: 1, skipped: 0, errors: [] });
+  mocks.expireDrafts.mockResolvedValue({ expired: 0, errors: [] });
   mocks.transaction.mockImplementation(async (callback) => callback({
     $executeRaw: mocks.lock,
     watchRun: { findFirst: mocks.running, create: mocks.createRun },
@@ -51,6 +52,8 @@ describe("Watch runner", () => {
     const now = new Date("2026-11-09T20:00:00Z");
     const result = await runWatch({ trigger: "SCHEDULE", shadow: false, now });
     expect(mocks.queueDrafts).toHaveBeenCalledExactlyOnceWith(now);
+    expect(mocks.expireDrafts).toHaveBeenCalledExactlyOnceWith(now);
+    expect(mocks.expireDrafts.mock.invocationCallOrder[0]).toBeLessThan(mocks.queueDrafts.mock.invocationCallOrder[0]!);
     expect(mocks.resolveFindings.mock.invocationCallOrder[0]).toBeLessThan(mocks.queueDrafts.mock.invocationCallOrder[0]!);
     expect(result.draftsCreated).toBe(1);
   });

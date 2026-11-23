@@ -92,6 +92,32 @@ export async function queueAutomaticClockOutProposals(now: Date): Promise<{ crea
   return counts;
 }
 
+/**
+ * Internal: retire pending drafts whose shift was closed (or removed) outside
+ * Watch. They can never apply, and the closed entry is the real end of work.
+ * Changes no punch. Each expiry is rechecked under the employee lock.
+ */
+export async function expireClosedEntryProposals(now: Date): Promise<{ expired: number; errors: string[] }> {
+  const pending = await db.watchProposal.findMany({ where: { status: "PENDING" }, select: { id: true, entryId: true, employeeId: true } });
+  const counts = { expired: 0, errors: [] as string[] };
+  for (const p of pending) {
+    try {
+      const done = await withEmployeeLock(p.employeeId, async (tx) => {
+        const entry = await tx.timeEntry.findUnique({ where: { id: p.entryId }, select: { clockOut: true, status: true } });
+        if (entry && !entry.clockOut && ["ACTIVE", "ON_BREAK"].includes(entry.status)) return false;
+        const res = await tx.watchProposal.updateMany({ where: { id: p.id, status: "PENDING" }, data: { status: "EXPIRED", decidedAt: now, lastError: null } });
+        if (res.count === 0) return false;
+        await log(tx, null, p.id, "expire", { reason: entry ? "Shift closed outside Watch" : "Time entry no longer exists", entryClockOut: entry?.clockOut?.toISOString() ?? null });
+        return true;
+      });
+      if (done) counts.expired++;
+    } catch (error) {
+      counts.errors.push(`${p.id}: ${failFromUnknown(error).error}`.slice(0, 500));
+    }
+  }
+  return counts;
+}
+
 export async function decideProposal(actor: Actor, input: { id: string; action: Decision; confirmedActualEnd?: boolean }): Promise<ActionResult<{ id: string; status: string }>> {
   let employeeId: string | null = null;
   try {

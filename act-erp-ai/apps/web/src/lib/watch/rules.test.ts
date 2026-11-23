@@ -25,7 +25,7 @@ describe("evaluateMissingClockOut", () => {
   const base = { entryId: "e1", employeeId: "p1", employeeName: "Ann Lee" };
   it("flags an entry past scheduled end plus grace", () => {
     const out = evaluateMissingClockOut(
-      [{ ...base, clockIn: new Date(now.getTime() - h(9)), scheduledEnd: new Date(now.getTime() - h(2)) }],
+      [{ ...base, clockIn: new Date(now.getTime() - h(9)), scheduledEnd: new Date(now.getTime() - h(5)) }],
       DEFAULT_POLICY,
       now,
       false,
@@ -51,6 +51,11 @@ describe("evaluateMissingClockOut", () => {
       true,
     );
     expect(out[0].severity).toBe("CRITICAL");
+  });
+  it("waits for the long-shift threshold on contract shifts", () => {
+    const at = (hours: number) => evaluateMissingClockOut([{ ...base, clockIn: new Date(now.getTime() - h(hours)), scheduledEnd: null }], DEFAULT_POLICY, now, false, "contract");
+    expect(at(13)).toHaveLength(0);
+    expect(at(DEFAULT_POLICY.maxShiftHours + 1)).toHaveLength(1);
   });
   it("leaves a normal active shift alone", () => {
     const out = evaluateMissingClockOut(

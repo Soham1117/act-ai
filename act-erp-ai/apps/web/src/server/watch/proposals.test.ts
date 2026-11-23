@@ -2,15 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   finding: vi.fn(), findings: vi.fn(), entry: vi.fn(), entryOrThrow: vi.fn(), entryOther: vi.fn(), entryUpdate: vi.fn(),
-  proposal: vi.fn(), proposalCreate: vi.fn(), proposalUpdate: vi.fn(), schedules: vi.fn(),
+  proposal: vi.fn(), proposals: vi.fn(), proposalUpdateMany: vi.fn(), proposalCreate: vi.fn(), proposalUpdate: vi.fn(), schedules: vi.fn(),
   user: vi.fn(), period: vi.fn(), query: vi.fn(), audit: vi.fn(), close: vi.fn(), lock: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
-  watchFinding: { findUnique: mocks.finding, findMany: mocks.findings }, timeEntry: { findUnique: mocks.entry }, watchProposal: { findUnique: mocks.proposal },
+  watchFinding: { findUnique: mocks.finding, findMany: mocks.findings }, timeEntry: { findUnique: mocks.entry }, watchProposal: { findUnique: mocks.proposal, findMany: mocks.proposals },
 } }));
 vi.mock("@/server/time-core", () => ({ withEmployeeLock: mocks.lock, closeOpenEntry: mocks.close }));
 
-import { createProposal, decideProposal, queueAutomaticClockOutProposals } from "./proposals";
+import { createProposal, decideProposal, expireClosedEntryProposals, queueAutomaticClockOutProposals } from "./proposals";
 import { proposalEntrySnapshot } from "@/lib/watch/proposals";
 
 const actor = { id: "admin", email: "admin@example.test" };
@@ -21,7 +21,7 @@ let proposal: Record<string, unknown>;
 const tx = {
   user: { findUnique: mocks.user }, watchFinding: { findUnique: mocks.finding },
   timeEntry: { findUnique: mocks.entry, findUniqueOrThrow: mocks.entryOrThrow, findFirst: mocks.entryOther, update: mocks.entryUpdate },
-  watchProposal: { findFirst: mocks.proposal, findUnique: mocks.proposal, findUniqueOrThrow: mocks.proposal, create: mocks.proposalCreate, update: mocks.proposalUpdate },
+  watchProposal: { findFirst: mocks.proposal, findUnique: mocks.proposal, findUniqueOrThrow: mocks.proposal, create: mocks.proposalCreate, update: mocks.proposalUpdate, updateMany: mocks.proposalUpdateMany },
   schedule: { findMany: mocks.schedules }, payrollCalendar: { findFirst: mocks.period },
   auditLog: { create: mocks.audit }, $queryRaw: mocks.query,
 };
@@ -195,5 +195,35 @@ describe("automatic missing-clock-out drafts", () => {
     mocks.audit.mockRejectedValue(new Error("Audit unavailable"));
     expect(await queueAutomaticClockOutProposals(now)).toEqual({ created: 0, skipped: 0, errors: ["finding: Audit unavailable"] });
     expect(mocks.close).not.toHaveBeenCalled();
+  });
+});
+
+describe("expiring drafts for shifts closed elsewhere", () => {
+  const now = new Date("2026-10-02T00:00:00Z");
+  beforeEach(() => {
+    mocks.proposals.mockResolvedValue([{ id: "proposal", entryId: "entry", employeeId: "employee" }]);
+    mocks.proposalUpdateMany.mockResolvedValue({ count: 1 });
+  });
+  it("expires a pending draft once its shift has a clock-out, without touching punches", async () => {
+    entry.clockOut = end; entry.status = "COMPLETED";
+    expect(await expireClosedEntryProposals(now)).toEqual({ expired: 1, errors: [] });
+    expect(mocks.proposalUpdateMany).toHaveBeenCalledWith({ where: { id: "proposal", status: "PENDING" }, data: expect.objectContaining({ status: "EXPIRED", decidedAt: now }) });
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "watch.proposal.expire", actorEmail: "system:watch" }) }));
+    expect(mocks.close).not.toHaveBeenCalled();
+    expect(mocks.entryUpdate).not.toHaveBeenCalled();
+  });
+  it("expires a draft whose entry was deleted", async () => {
+    mocks.entry.mockResolvedValue(null);
+    expect(await expireClosedEntryProposals(now)).toEqual({ expired: 1, errors: [] });
+  });
+  it("keeps a draft while the shift is still open", async () => {
+    expect(await expireClosedEntryProposals(now)).toEqual({ expired: 0, errors: [] });
+    expect(mocks.proposalUpdateMany).not.toHaveBeenCalled();
+  });
+  it("does not log when an admin decided the draft first", async () => {
+    entry.clockOut = end; entry.status = "COMPLETED";
+    mocks.proposalUpdateMany.mockResolvedValue({ count: 0 });
+    expect(await expireClosedEntryProposals(now)).toEqual({ expired: 0, errors: [] });
+    expect(mocks.audit).not.toHaveBeenCalled();
   });
 });

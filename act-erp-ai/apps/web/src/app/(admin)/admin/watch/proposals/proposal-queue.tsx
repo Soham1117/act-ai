@@ -11,7 +11,7 @@ import { decideClockOutProposal } from "@/server/actions/watch-proposals";
 import type { WatchProposalRow } from "@/server/queries/watch-proposals";
 import { formatHours } from "@/lib/format";
 
-const labels = { PENDING: "Awaiting review", APPLIED: "Applied", REJECTED: "Rejected", UNDONE: "Undone" } as const;
+const labels = { PENDING: "Awaiting review", APPLIED: "Applied", REJECTED: "Rejected", UNDONE: "Undone", EXPIRED: "Expired (shift closed elsewhere)" } as const;
 function dateTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 }
