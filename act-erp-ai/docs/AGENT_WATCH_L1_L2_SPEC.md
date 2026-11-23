@@ -385,6 +385,23 @@ Deployment: apply `apps/web/prisma/sql/20261109_watch_proposals.sql` (or the exi
 
 The normal 15-minute schedule will populate the queue only when eligible missing-clock-out findings exist. An empty queue is valid when no eligible issues exist. Automatic creation does not approve a correction: actual-end confirmation and the existing human-only execution checks still apply.
 
+### Interim back-test, weeks 1–2 (November 23, 2026)
+
+Read-only prod queries over findings first seen Nov 9–23:
+
+- 1,345 scheduled runs, no errors, no unfinished runs; 15 daily digests.
+- About 500 findings. Human handling was near zero: 0 resolved by hand, 1 acknowledged, 3 snoozed, 16 dismissed. The rest auto-resolved or are still open.
+- `time.missing-clock-out`: 86 findings, 44 auto-resolved within 2 h, median 90 min to resolve. `contract.missing-clock-out`: 104, 32 within 2 h, median 165 min. Most were live shifts, not forgotten punches.
+- L3 drafts: 83 pending, none decided. 77 pointed at shifts already closed elsewhere. On those, the real end averaged 3 h 43 m after the scheduled end, so a schedule-based draft would have under-paid.
+- `time.schedule-variance`: 158 INFO findings. 119 (75%) were weeks with zero Persona punches (41 people still on the old clock).
+
+Changes:
+
+- [x] `30aaffc` (deployed Nov 23 with a schema push and backup): new `EXPIRED` proposal status. Each scheduled run expires pending drafts whose shift was closed or removed outside Watch, audited as `system:watch`, no punch changes. The first run expired the 77 stale drafts; 6 remain for shifts open since Nov 10. Missing-clock-out grace default 60 → 240 min (prod had no override). Contract shifts flag at `maxShiftHours` (16 h) instead of 12 h.
+- [x] `time.schedule-variance` skips weeks with zero worked minutes. Threshold stays 4 h.
+
+Open: nobody owns the Watch queue. Name an owner before adding more L3 actions. Re-measure in two weeks with the new thresholds; full back-test ends around January 4, 2027.
+
 Next: eight-week L1 back-test/noise tuning; then define a separately approved L3 action for reminder drafts or contractor corrections. L4 still needs explicit per-action opt-in and limits before implementation.
 
 Before execution, the approval queue must show the original entry, proposed change, source evidence and reason. Approval must recheck permissions, entry version, overlaps and payroll-close state in the same transaction as the change. Repeated approvals must be idempotent. Log the proposal, approver, before/after values and result. Provide a reversible action where the period is still open; reject undo if intervening edits or a closed period make it unsafe. Notification drafts require separate approval to send.

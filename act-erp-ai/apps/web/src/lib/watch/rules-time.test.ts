@@ -174,6 +174,8 @@ describe("schedule variance", () => {
     expect(evaluateScheduleVariance([row], DEFAULT_POLICY)).toHaveLength(1);
     expect(evaluateScheduleVariance([{ ...row, workedMin: 38 * 60 }], DEFAULT_POLICY)).toHaveLength(0);
     expect(evaluateScheduleVariance([{ ...row, scheduledMin: 0 }], DEFAULT_POLICY)).toHaveLength(0);
+    // No Persona punches at all that week: not a variance.
+    expect(evaluateScheduleVariance([{ ...row, workedMin: 0 }], DEFAULT_POLICY)).toHaveLength(0);
   });
 });
 

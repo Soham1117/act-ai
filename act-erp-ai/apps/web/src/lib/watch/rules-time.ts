@@ -381,7 +381,9 @@ export function evaluateHolidayWork(entries: PunchRow[]): FindingDraft[] {
 export type WeekVariance = { employeeId: string; name: string; weekStart: string; scheduledMin: number; workedMin: number };
 export function evaluateScheduleVariance(rows: WeekVariance[], policy: WatchPolicy): FindingDraft[] {
   return rows
-    .filter((r) => r.scheduledMin > 0 && Math.abs(r.workedMin - r.scheduledMin) >= policy.scheduleVarianceHours * 60)
+    // Zero worked minutes means no Persona punches that week (crew still on the
+    // old clock), not a variance: 75% of findings in the Nov 2026 back-test.
+    .filter((r) => r.scheduledMin > 0 && r.workedMin > 0 && Math.abs(r.workedMin - r.scheduledMin) >= policy.scheduleVarianceHours * 60)
     .map((r) => ({
       fingerprint: `time.schedule-variance:${r.employeeId}:${r.weekStart}`,
       severity: "INFO" as const,
