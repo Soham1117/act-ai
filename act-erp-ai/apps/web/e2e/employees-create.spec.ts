@@ -24,7 +24,10 @@ const mail = (n: string) => `${NEW_PREFIX}-${n}@${NEW_EMAIL_DOMAIN}`;
 async function openAdd(page: Page) {
   await page.goto("/admin/employees");
   await page.getByRole("button", { name: /add employee/i }).click();
-  const dialog = page.getByRole("dialog", { name: /new employee/i });
+  // Inline panel (not a modal): the open <section> holding the "New employee" heading.
+  const dialog = page
+    .locator("section[data-panel-open]")
+    .filter({ has: page.getByRole("heading", { name: "New employee" }) });
   await expect(dialog).toBeVisible();
   return dialog;
 }

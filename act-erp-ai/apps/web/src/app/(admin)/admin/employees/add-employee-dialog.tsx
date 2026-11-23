@@ -28,9 +28,21 @@ import {
 import { createEmployee } from "@/server/actions/employees";
 import { runAction, toastAction } from "@/lib/toast-action";
 import { formatMoneyInput, parseMoneyInput } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { AdminPasswordField } from "./password-field";
 
 const NONE = "__none__";
+
+const COMP_PLACEHOLDER = {
+  HOURLY_RATE: "25.00",
+  MONTHLY_SALARY: "5,000",
+  TOTAL_COMPENSATION: "60,000",
+} as const;
+const COMP_SUFFIX = {
+  HOURLY_RATE: "/ hr",
+  MONTHLY_SALARY: "/ month",
+  TOTAL_COMPENSATION: "",
+} as const;
 
 const optionalEmail = z
   .string()
@@ -130,6 +142,10 @@ export function AddEmployeePanel({
     });
   }
 
+  const errors = form.formState.errors;
+  const compensationType = form.watch("compensationType");
+  const compSuffix = COMP_SUFFIX[compensationType];
+
   return (
     <InlinePanel disabled={pending}
       open={open}
@@ -143,59 +159,72 @@ export function AddEmployeePanel({
           <Plus className="mr-2 h-4 w-4" /> Add employee
         </Button>
       </InlinePanelTrigger>
-      <InlinePanelContent panelSlot="add-employee" className="max-w-lg">
+      <InlinePanelContent panelSlot="add-employee" className="max-w-2xl">
         <InlinePanelHeader>
           <InlinePanelTitle>New employee</InlinePanelTitle>
           <InlinePanelDescription>
-            Creates the login and the employee record with a temporary password the
-            employee must change at first sign-in. To let the hire fill in their own
-            details, send an onboarding invite instead. Emails and usernames are
-            saved in lowercase.
+            Creates a login with a temporary password the employee changes at first
+            sign-in. To let the hire fill in their own details, send an onboarding
+            invite instead.
           </InlinePanelDescription>
         </InlinePanelHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Full name" error={form.formState.errors.name?.message}>
-              <Input {...form.register("name")} />
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+          <Section title="Sign-in" first>
+            <Field
+              id="ae-name"
+              label="Full name"
+              required
+              className="sm:col-span-2"
+              error={errors.name?.message}
+            >
+              <Input id="ae-name" {...form.register("name")} />
             </Field>
             <Field
+              id="ae-email"
               label="Company email (optional)"
-              error={form.formState.errors.email?.message}
+              hint="Emails and usernames are saved in lowercase."
+              error={errors.email?.message}
             >
-              <Input type="email" {...form.register("email")} />
+              <Input id="ae-email" type="email" {...form.register("email")} />
             </Field>
             <Field
+              id="ae-username"
               label="Username (only if no company email)"
-              error={form.formState.errors.username?.message}
+              hint="Required if no company email."
+              error={errors.username?.message}
             >
-              <Input {...form.register("username")} placeholder="jsmith" />
+              <Input id="ae-username" {...form.register("username")} placeholder="jsmith" />
             </Field>
             <Field
-              label="Personal email (optional)"
-              error={form.formState.errors.personalEmail?.message}
-            >
-              <Input type="email" {...form.register("personalEmail")} />
-            </Field>
-            <Field
-              label="SSN — last 4 only"
-              error={form.formState.errors.ssnLast4?.message}
-            >
-              <Input
-                {...form.register("ssnLast4")}
-                inputMode="numeric"
-                maxLength={4}
-                placeholder="6789"
-              />
-            </Field>
-            <Field
+              id="ae-password"
               label="Temporary password"
-              error={form.formState.errors.password?.message}
+              required
+              className="sm:col-span-2"
+              error={errors.password?.message}
             >
               <AdminPasswordField
+                id="ae-password"
                 value={form.watch("password")}
                 onChange={(v) =>
                   form.setValue("password", v, { shouldDirty: true, shouldValidate: true })
                 }
+              />
+            </Field>
+          </Section>
+
+          <Section title="Personal">
+            <Field
+              id="ae-personal-email"
+              label="Personal email"
+              error={errors.personalEmail?.message}
+            >
+              <Input id="ae-personal-email" type="email" {...form.register("personalEmail")} />
+            </Field>
+            <Field id="ae-phone" label="Phone">
+              <Input
+                id="ae-phone"
+                {...form.register("phoneNumber")}
+                placeholder="(281) 555-0142"
               />
             </Field>
             <Field label="Gender">
@@ -213,24 +242,40 @@ export function AddEmployeePanel({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Phone">
-              <Input {...form.register("phoneNumber")} placeholder="(281) 555-0142" />
+            <Field id="ae-ssn" label="SSN — last 4 only" error={errors.ssnLast4?.message}>
+              <Input
+                id="ae-ssn"
+                {...form.register("ssnLast4")}
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="6789"
+              />
             </Field>
-            <Field label="Address line 1">
-              <Input {...form.register("address")} autoComplete="address-line1" />
+          </Section>
+
+          <Section title="Address" gridClassName="sm:grid-cols-[2fr_1fr_1fr]">
+            <Field id="ae-address" label="Address line 1" className="sm:col-span-3">
+              <Input id="ae-address" {...form.register("address")} autoComplete="address-line1" />
             </Field>
-            <Field label="Address line 2">
-              <Input {...form.register("address2")} autoComplete="address-line2" />
+            <Field id="ae-address2" label="Address line 2" className="sm:col-span-3">
+              <Input
+                id="ae-address2"
+                {...form.register("address2")}
+                autoComplete="address-line2"
+              />
             </Field>
-            <Field label="City">
-              <Input {...form.register("city")} autoComplete="address-level2" />
+            <Field id="ae-city" label="City">
+              <Input id="ae-city" {...form.register("city")} autoComplete="address-level2" />
             </Field>
-            <Field label="State">
-              <Input {...form.register("state")} autoComplete="address-level1" />
+            <Field id="ae-state" label="State">
+              <Input id="ae-state" {...form.register("state")} autoComplete="address-level1" />
             </Field>
-            <Field label="ZIP code">
-              <Input {...form.register("zipCode")} autoComplete="postal-code" />
+            <Field id="ae-zip" label="ZIP code">
+              <Input id="ae-zip" {...form.register("zipCode")} autoComplete="postal-code" />
             </Field>
+          </Section>
+
+          <Section title="Job & pay">
             <Field label="Department">
               <Select
                 value={form.watch("departmentId")}
@@ -249,8 +294,8 @@ export function AddEmployeePanel({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Job title">
-              <Input {...form.register("jobTitle")} />
+            <Field id="ae-job-title" label="Job title">
+              <Input id="ae-job-title" {...form.register("jobTitle")} />
             </Field>
             <Field label="Employment type">
               <Select
@@ -270,7 +315,7 @@ export function AddEmployeePanel({
             </Field>
             <Field label="Compensation type">
               <Select
-                value={form.watch("compensationType")}
+                value={compensationType}
                 onValueChange={(v) =>
                   form.setValue("compensationType", v as Values["compensationType"])
                 }
@@ -286,23 +331,37 @@ export function AddEmployeePanel({
               </Select>
             </Field>
             <Field
-              label="Compensation value ($)"
-              error={form.formState.errors.compensationValue?.message}
+              id="ae-comp-value"
+              label="Compensation value"
+              error={errors.compensationValue?.message}
             >
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="60,000"
-                value={form.watch("compensationValue") ?? ""}
-                onChange={(e) =>
-                  form.setValue("compensationValue", formatMoneyInput(e.target.value), {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-              />
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  $
+                </span>
+                <Input
+                  id="ae-comp-value"
+                  type="text"
+                  inputMode="decimal"
+                  className={compSuffix ? "pl-6 pr-16" : "pl-6"}
+                  placeholder={COMP_PLACEHOLDER[compensationType]}
+                  value={form.watch("compensationValue") ?? ""}
+                  onChange={(e) =>
+                    form.setValue("compensationValue", formatMoneyInput(e.target.value), {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
+                {compSuffix && (
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                    {compSuffix}
+                  </span>
+                )}
+              </div>
             </Field>
-          </div>
+          </Section>
+
           <InlinePanelFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
@@ -318,20 +377,60 @@ export function AddEmployeePanel({
   );
 }
 
+function Section({
+  title,
+  first,
+  gridClassName = "sm:grid-cols-2",
+  children,
+}: {
+  title: string;
+  first?: boolean;
+  gridClassName?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={cn("space-y-3", !first && "border-t pt-4")}>
+      <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h3>
+      <div className={cn("grid grid-cols-1 gap-3", gridClassName)}>{children}</div>
+    </section>
+  );
+}
+
 function Field({
   label,
+  id,
+  hint,
+  required,
+  className,
   error,
   children,
 }: {
   label: string;
+  id?: string;
+  hint?: string;
+  required?: boolean;
+  className?: string;
   error?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
+    <div className={cn("space-y-1.5", className)}>
+      {/* CSS star with empty alt text: label text and accessible name stay exact
+          (e2e textField() matches label text verbatim). */}
+      <Label
+        htmlFor={id}
+        className={cn(
+          "text-xs",
+          required && "after:ml-0.5 after:text-destructive after:[content:'*'_/_'']",
+        )}
+      >
+        {label}
+      </Label>
       {children}
-      {error && <p className="text-[10px] text-destructive">{error}</p>}
+      {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
