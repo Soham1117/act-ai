@@ -159,7 +159,7 @@ export function AddEmployeePanel({
           <Plus className="mr-2 h-4 w-4" /> Add employee
         </Button>
       </InlinePanelTrigger>
-      <InlinePanelContent panelSlot="add-employee" className="max-w-2xl">
+      <InlinePanelContent panelSlot="add-employee">
         <InlinePanelHeader>
           <InlinePanelTitle>New employee</InlinePanelTitle>
           <InlinePanelDescription>
@@ -168,8 +168,12 @@ export function AddEmployeePanel({
             invite instead.
           </InlinePanelDescription>
         </InlinePanelHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-          <Section title="Sign-in" first>
+        {/* Full width: sections sit 2×2 on large screens, stacked below that. */}
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-x-10 lg:gap-y-6"
+        >
+          <Section title="Sign-in">
             <Field
               id="ae-name"
               label="Full name"
@@ -362,7 +366,7 @@ export function AddEmployeePanel({
             </Field>
           </Section>
 
-          <InlinePanelFooter className="pt-2">
+          <InlinePanelFooter className="pt-2 lg:col-span-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
@@ -379,17 +383,15 @@ export function AddEmployeePanel({
 
 function Section({
   title,
-  first,
   gridClassName = "sm:grid-cols-2",
   children,
 }: {
   title: string;
-  first?: boolean;
   gridClassName?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className={cn("space-y-3", !first && "border-t pt-4")}>
+    <section className="space-y-3 border-t pt-4">
       <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
         {title}
       </h3>
